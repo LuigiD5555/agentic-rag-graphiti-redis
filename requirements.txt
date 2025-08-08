@@ -1,0 +1,12 @@
+langchain
+langchain-community
+qdrant-client
+redis
+neo4j
+unstructured
+python-docx
+pypdf
+python-pptx
+python-dotenv
+pytest
+requests
