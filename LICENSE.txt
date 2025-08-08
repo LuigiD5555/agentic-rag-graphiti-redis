@@ -1,0 +1,13 @@
+Copyright © 2025 José Luis López López Prieto  
+All rights reserved.
+
+This software and associated files are proprietary to the author.  
+Unauthorized copying, distribution, modification, or use of this software, in whole or in part, is strictly prohibited without the prior written consent of the copyright holder.
+
+You may not:
+- Copy or redistribute the software or any part of it
+- Modify, adapt, or create derivative works
+- Use the software for commercial or non-commercial purposes without written permission
+
+For inquiries about licensing or usage rights, contact:
+ing.jlllopezp@gmail.com
