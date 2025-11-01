@@ -2,7 +2,7 @@
 Test the EmbeddingService class.
 """
 from src.embeddings import EmbeddingService
-from src.config import Config
+from src.config.settings import Config
 
 
 def test_embeddings_fallback(monkeypatch):

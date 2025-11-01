@@ -1,4 +1,4 @@
-from src.ner_extraction import NERExtractor
+from src.ner.ner_extraction import NERExtractor
 
 
 class DummyLLM:

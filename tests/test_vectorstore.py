@@ -1,5 +1,5 @@
 from src.vectorstore import VectorStoreService
-from src.config import Config
+from src.config.settings import Config
 
 
 def test_vectorstore_upsert(monkeypatch):
