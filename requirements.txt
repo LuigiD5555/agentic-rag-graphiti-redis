@@ -1,6 +1,8 @@
 langchain
+langchain-core
 langchain-community
-qdrant-client
+langchain-text-splitters
+langchain-experimental
 redis
 neo4j
 unstructured
@@ -10,3 +12,4 @@ python-pptx
 python-dotenv
 pytest
 requests
+weaviate-client
