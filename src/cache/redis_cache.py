@@ -1,16 +1,9 @@
-import redis
+"""Module for Redis-based caching."""
+from typing import Optional, cast
 import json
-from typing import Optional, Protocol, cast
+import redis
 from src import logger
-
-
-class CacheServiceProtocol(Protocol):
-    """Protocol defining expected cache service behavior."""
-    def get(self, key: str) -> Optional[str]:
-        ...
-
-    def set(self, key: str, value: object, ttl: int = 3600) -> None:
-        ...
+from src.interfaces.cache_interface import CacheServiceProtocol
 
 
 class CacheService(CacheServiceProtocol):
@@ -27,7 +20,11 @@ class CacheService(CacheServiceProtocol):
             port=config.REDIS_PORT,
             decode_responses=True
         )
-        logger.info("CacheService initialized with Redis at %s:%s", config.REDIS_HOST, config.REDIS_PORT)
+        logger.info(
+            "CacheService initialized with Redis at %s:%s",
+            config.REDIS_HOST,
+            config.REDIS_PORT
+        )
 
     def get(self, key: str) -> Optional[str]:
         """
@@ -36,7 +33,7 @@ class CacheService(CacheServiceProtocol):
         """
         result = self.client.get(key)
 
-        # Forzar a Optional[str] porque decode_responses=True asegura string
+        # Force an Optional[str], because decode_responses=True ensures string
         result_str = cast(Optional[str], result)
 
         if result_str is None:
