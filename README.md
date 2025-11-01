@@ -1,6 +1,6 @@
 # RAG Agentic Graphiti
 
-**RAG Agentic Graphiti** is a hybrid Retrieval-Augmented Generation (RAG) engine combining **vector search** (Qdrant) and **graph search** (Neo4j), with **Redis caching** for faster responses. It is designed to integrate seamlessly with local Large Language Models (LLMs) via **LM Studio** using an OpenAI-compatible API.
+**RAG Agentic Graphiti** is a hybrid Retrieval-Augmented Generation (RAG) engine combining **vector search** (Weaviate) and **graph search** (Neo4j), with **Redis caching** for faster responses. It is designed to integrate seamlessly with local Large Language Models (LLMs) via **LM Studio** using an OpenAI-compatible API.
 
 This system is built for scenarios that require **document ingestion**, **code indexing**, and **semantic relationship mapping** between entities — enabling detailed, context-rich answers.
 
@@ -23,7 +23,7 @@ This system is built for scenarios that require **document ingestion**, **code i
 - **LM Studio** running locally with:
 	- At least one **embedding model** loaded
 	- At least one **language model** loaded
-- **Docker** or **Podman** (for Qdrant, Redis, Neo4j)
+- **Docker** or **Podman** (for Weaviate, Redis, Neo4j)
 - Dependencies listed in `requirements.txt`
 
 ---
@@ -40,11 +40,22 @@ This system is built for scenarios that require **document ingestion**, **code i
 
 ## Environment Variables
 
+Key `.env` entries you may need to adjust:
+
+- `WEAVIATE_URL` / `WEAVIATE_GRPC_PORT` – REST and gRPC endpoints for your Weaviate deployment.
+- `WEAVIATE_CLASS` – Target collection name (defaults to `RAGDocument`).
+- `WEAVIATE_CONNECT_RETRIES` / `WEAVIATE_CONNECT_BACKOFF` – How long the app should keep trying while Weaviate boots.
+- `LMSTUDIO_HOST` / `LMSTUDIO_PORT` – LM Studio HTTP server host/port.
+- `REDIS_HOST`, `NEO4J_URI`, etc. – Service endpoints when running remotely.
+
 ---
 
 ## Starting Required Services
 
-You can run Qdrant, Redis, and Neo4j using the provided **Podman Compose** file:
+You can run Weaviate, Redis, and Neo4j using the provided **Podman Compose** file.
+Make sure the Weaviate service:
+- exposes both REST (8080) and gRPC (50051) ports so the client can complete its startup checks
+- sets a stable `CLUSTER_HOSTNAME` (e.g., `weaviate-node-1`) so restarts reuse the same Raft identity
 
 Or with Docker Compose:
 
@@ -63,7 +74,7 @@ During ingestion:
 
 - Text is split into chunks
 - Embeddings are generated via LM Studio
-- Data is inserted into Qdrant
+- Data is inserted into Weaviate
 - Entities and relationships are extracted and inserted into Neo4j
 
 ---
@@ -89,7 +100,7 @@ Connect from another machine:
 If another machine has **LM Studio** and similar specs:
 
 1. Clone this repository.
-2. Configure `.env` with the **remote** Qdrant, Redis, and Neo4j URLs.
+2. Configure `.env` with the **remote** Weaviate, Redis, and Neo4j URLs.
 3. Run:
 	or connect via the socket server.
 
