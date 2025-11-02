@@ -1,11 +1,15 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
-import re
+
 import time
 from typing import Any, Dict, List, Optional, Iterator, Callable, TypeVar
 from urllib.parse import urlparse
 
+import requests
 import weaviate
-from weaviate.classes.init import AdditionalConfig, Timeout
+from weaviate import WeaviateClient, connect_to_custom
+from weaviate.classes.init import Auth
+from weaviate.config import AdditionalConfig, Timeout
 from weaviate.classes.config import Configure, Property, DataType, Tokenization
 from weaviate.classes.query import Filter
 
@@ -18,13 +22,22 @@ T = TypeVar("T")
 
 class WeaviateRepository(VectorInterface):
     """
-    Weaviate adapter that conforms to VectorInterface:
-      - upsert(key, vector, metadata, tenant_id=None)
-      - search(vector, top_k=5, filters=None, tenant_id=None) -> List[ScoredItem]
-      - iter_payloads(batch_size=256, tenant_id=None) -> Iterator[dict]
+    Weaviate adapter that conforms to VectorInterface (Python client v4 only).
+
+    Public methods:
+        - upsert(key, vector, metadata, tenant_id=None) -> None
+        - search(vector, top_k=5, filters=None, tenant_id=None) -> List[ScoredItem]
+        - iter_payloads(batch_size=256, tenant_id=None) -> Iterator[dict]
     """
 
     def __init__(self, config: Optional[Config] = None) -> None:
+        """
+        Initialize repository and ensure Weaviate connectivity and schema.
+
+        Notes:
+            - Uses Weaviate Python client v4 exclusively.
+            - Removes any v3 fallback logic.
+        """
         cfg = config or Config()
         self._class = cfg.WEAVIATE_CLASS
         self._mt = bool(cfg.WEAVIATE_MULTI_TENANCY)
@@ -34,10 +47,28 @@ class WeaviateRepository(VectorInterface):
         self._connect_backoff = max(0.1, float(getattr(cfg, "WEAVIATE_CONNECT_BACKOFF", 2.0)))
 
         additional = self._build_additional_config()
-        self.client = self._retry("connect", lambda: self._init_client(cfg, additional))
+        self.client = self._retry("connect", lambda: self._init_client_v4(cfg, additional))
+        self._retry("wait for readiness", lambda: self._wait_for_cluster_ready(cfg))
         self._retry("ensure schema", lambda: self._ensure_class(cfg))
 
+    # -------------------------------------------------------------------------
+    # Internal helpers
+    # -------------------------------------------------------------------------
+
     def _retry(self, name: str, func: Callable[[], T]) -> T:
+        """
+        Retry helper with backoff for transient failures.
+
+        Args:
+            name: Human-readable operation name for logging.
+            func: Callable to execute.
+
+        Returns:
+            The callable's return value.
+
+        Raises:
+            The last captured exception if all attempts fail.
+        """
         last_exc: Optional[Exception] = None
         for attempt in range(1, self._connect_retries + 1):
             try:
@@ -56,141 +87,203 @@ class WeaviateRepository(VectorInterface):
         assert last_exc is not None
         raise last_exc
 
-    def _build_additional_config(self):
+    def _build_additional_config(self) -> Optional[AdditionalConfig]:
+        """
+        Build AdditionalConfig with Timeout settings if supported by the installed client.
+
+        Returns:
+            AdditionalConfig instance or None if construction fails.
+        """
         try:
-            return AdditionalConfig(timeout=Timeout(init=self._timeout, query=self._timeout))
+            # v4 supports granular timeouts: init/query/insert
+            return AdditionalConfig(
+                timeout=Timeout(init=self._timeout, query=self._timeout, insert=self._timeout)
+            )
         except Exception:
-            # Older/newer client versions may not support the AdditionalConfig helper.
+            # Fail-soft in case of unexpected client variation
             return None
 
-    def _init_client(self, cfg: Config, additional: Optional[AdditionalConfig]):
-        client = self._init_client_v3(cfg, additional)
-        if client is not None:
-            return client
-        return self._init_client_v4(cfg, additional)
-
-    def _init_client_v3(self, cfg: Config, additional: Optional[AdditionalConfig]):
+    def _nodes_payload_has_leader(self, payload: Any) -> bool:
         """
-        Attempt to initialise the legacy v3-style client (url + auth_client_secret).
-        Returns the client when successful, otherwise None.
+        Best-effort check to detect a Raft leader in /v1/nodes payload.
+        Weaviate payloads can vary across versions; this method tolerates several shapes.
         """
-        if not hasattr(weaviate, "WeaviateClient"):
-            return None
-
-        kwargs: Dict[str, Any] = {}
-        if additional is not None:
-            kwargs["additional_config"] = additional
-        auth_obj = None
-        if getattr(cfg, "WEAVIATE_API_KEY", "") and hasattr(weaviate, "auth"):
-            auth_cls = getattr(weaviate.auth, "AuthApiKey", None)
-            if auth_cls:
-                auth_obj = auth_cls(api_key=cfg.WEAVIATE_API_KEY)
-                kwargs["auth_client_secret"] = auth_obj
-
         try:
-            return weaviate.WeaviateClient(url=cfg.WEAVIATE_URL, **kwargs)
-        except TypeError:
-            # Signature mismatch (likely v4 client); fall back.
-            return None
+            nodes = payload if isinstance(payload, list) else payload.get("nodes")
+        except Exception:
+            nodes = None
+        if not nodes:
+            return False
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            # normalize keys
+            low = {str(k).lower(): v for k, v in node.items()}
+            role = str(low.get("role", "")).lower()
+            if role == "leader":
+                return True
+            if str(low.get("is_leader", "")).lower() in ("true", "1"):
+                return True
+            raft = low.get("raft") or low.get("raft_info") or {}
+            if isinstance(raft, dict):
+                rlow = {str(k).lower(): v for k, v in raft.items()}
+                rstate = str(rlow.get("state", "")).lower()
+                if rstate == "leader":
+                    return True
+            # last resort: text search
+            if "leader" in str(node).lower():
+                return True
+        return False
 
-    def _init_client_v4(self, cfg: Config, additional: Optional[AdditionalConfig]):
+    def _wait_for_cluster_ready(self, cfg: Config) -> None:
         """
-        Initialise the modern v4 client by trying the official helper constructors.
+        Poll Weaviate health endpoints until the node reports readiness and a Raft leader is elected.
+
+        This method tolerates temporary 403/5xx responses that may appear while Raft elects a leader.
+
+        Raises:
+            TimeoutError if readiness is not achieved within the configured time.
+        """
+        base_url = cfg.WEAVIATE_URL.rstrip("/")
+        # Always include /v1/nodes as the final gate (leader election)
+        probe_paths = ["/.well-known/ready", "/v1/.well-known/ready", "/v1/nodes"]
+        # Give Raft enough time to elect a leader (min 60s or 6x timeout)
+        deadline = time.time() + max(float(self._timeout) * 6.0, 60.0)
+        last_error: Optional[Exception] = None
+
+        while time.time() < deadline:
+            for path in probe_paths:
+                url = f"{base_url}{path}"
+                try:
+                    resp = requests.get(url, timeout=self._timeout)
+                except requests.RequestException as exc:
+                    last_error = exc
+                    continue
+
+                # 200 OK or 204 No Content are both acceptable for readiness endpoints
+                if resp.status_code in (200, 204):
+                    # If /v1/nodes is used, validate node statuses and leader presence.
+                    if path.endswith("/nodes"):
+                        try:
+                            payload = resp.json()
+                        except ValueError as exc:
+                            last_error = RuntimeError(f"Invalid JSON from {url}: {exc}")
+                            continue
+                        nodes = payload if isinstance(payload, list) else payload.get("nodes")
+                        if not nodes:
+                            last_error = RuntimeError("Weaviate /v1/nodes returned empty nodes list")
+                            continue
+                        # Check all nodes healthy/ready AND a leader exists
+                        all_ready = True
+                        for node in nodes:
+                            if not isinstance(node, dict):
+                                continue
+                            status = str(node.get("status", "")).lower()
+                            if status not in ("ready", "healthy"):
+                                all_ready = False
+                                break
+                        if all_ready and self._nodes_payload_has_leader(payload):
+                            return
+                        last_error = RuntimeError(f"Weaviate nodes not ready or leader missing: {payload}")
+                        continue
+                    # For /.well-known/ready endpoints, don't exit early; keep looping to /v1/nodes gate.
+                    continue
+
+                if resp.status_code in (401, 403, 500, 503):
+                    # Typical during leader election:
+                    # 403: "leader not found" -> keep waiting
+                    text = resp.text.strip() if isinstance(resp.text, str) else str(resp.text)
+                    if resp.status_code == 403 and "leader not found" in text.lower():
+                        last_error = RuntimeError(
+                            f"Weaviate readiness: {url} => 403 (leader not found) – waiting for election"
+                        )
+                    else:
+                        last_error = RuntimeError(
+                            f"Weaviate readiness probe {url} returned {resp.status_code}: {text}"
+                        )
+                    continue
+
+                try:
+                    resp.raise_for_status()
+                except requests.RequestException as exc:
+                    last_error = exc
+            time.sleep(self._connect_backoff)
+
+        if last_error:
+            raise last_error
+        raise TimeoutError("Timed out waiting for Weaviate readiness")
+
+    def _init_client_v4(self, cfg: Config, additional: Optional[AdditionalConfig]) -> WeaviateClient:
+        """
+        Initialize a Weaviate v4 client using `connect_to_custom`.
+
+        Args:
+            cfg: Application configuration instance.
+            additional: Optional AdditionalConfig.
+
+        Returns:
+            An initialized WeaviateClient.
+
+        Raises:
+            RuntimeError if the client cannot be created.
         """
         parsed = urlparse(cfg.WEAVIATE_URL)
-        scheme = parsed.scheme or "http"
+        scheme = (parsed.scheme or "http").lower()
         host = parsed.hostname or cfg.WEAVIATE_URL
-        http_port = parsed.port or (443 if scheme == "https" else 80)
+        http_port = parsed.port or (443 if scheme == "https" else 8080)
         grpc_port = self._grpc_port or 50051
         secure = scheme == "https"
 
         auth_credentials = None
-        if getattr(cfg, "WEAVIATE_API_KEY", "") and hasattr(weaviate, "auth"):
-            auth_cls = getattr(weaviate.auth, "AuthApiKey", None)
-            if auth_cls:
-                auth_credentials = auth_cls(api_key=cfg.WEAVIATE_API_KEY)
+        api_key = getattr(cfg, "WEAVIATE_API_KEY", "") or None
+        if api_key:
+            # v4 Auth helper
+            auth_credentials = Auth.api_key(api_key)
 
-        additional_kwargs = {}
+        kwargs: Dict[str, Any] = {
+            "http_host": host,
+            "http_port": http_port,
+            "grpc_host": host,
+            "grpc_port": grpc_port,
+            "http_secure": secure,
+            "grpc_secure": secure,
+            "skip_init_checks": True,  # We perform our own readiness loop
+        }
+        if auth_credentials is not None:
+            kwargs["auth_credentials"] = auth_credentials
         if additional is not None:
-            additional_kwargs["additional_config"] = additional
+            kwargs["additional_config"] = additional
 
-        connect_errors: list[Exception] = []
+        client = connect_to_custom(**kwargs)
 
-        if hasattr(weaviate, "connect_to_custom"):
-            kwargs = {
-                "http_host": host,
-                "http_port": http_port,
-                "grpc_host": host,
-                "grpc_port": grpc_port,
-                "http_secure": secure,
-                "grpc_secure": secure,
-                "skip_init_checks": True,
-            }
-            if auth_credentials is not None:
-                kwargs["auth_credentials"] = auth_credentials
-            kwargs.update(additional_kwargs)
-            try:
-                return self._call_with_kwarg_fallback(weaviate.connect_to_custom, kwargs)
-            except Exception as exc:  # pragma: no cover - can't easily emulate in tests
-                connect_errors.append(exc)
+        # Quick check; the full readiness loop runs separately.
+        if not client:
+            raise RuntimeError("Failed to initialize Weaviate v4 client")
 
-        if hasattr(weaviate, "connect_to_local"):
-            kwargs = {
-                "host": host,
-                "port": http_port,
-                "grpc_port": grpc_port,
-                "skip_init_checks": True,
-            }
-            if secure:
-                kwargs["http_secure"] = True
-                kwargs["grpc_secure"] = True
-            if auth_credentials is not None:
-                kwargs["auth_credentials"] = auth_credentials
-            kwargs.update(additional_kwargs)
-            try:
-                return self._call_with_kwarg_fallback(weaviate.connect_to_local, kwargs)
-            except Exception as exc:  # pragma: no cover
-                connect_errors.append(exc)
+        return client
 
-        if connect_errors:
-            raise RuntimeError(
-                "Unable to initialise Weaviate client with the installed weaviate-client package."
-            ) from connect_errors[-1]
-        raise RuntimeError(
-            "Installed weaviate-client package does not expose a supported connection helper."
-        )
+    # -------------------------------------------------------------------------
+    # Schema management
+    # -------------------------------------------------------------------------
 
-    @staticmethod
-    def _call_with_kwarg_fallback(func, kwargs):
-        """
-        Call a weaviate helper, progressively removing unsupported keyword arguments.
-        This allows compatibility across client releases with slightly different signatures.
-        """
-        current_kwargs = dict(kwargs)
-        while True:
-            try:
-                return func(**current_kwargs)
-            except TypeError as exc:
-                match = re.search(r"unexpected keyword argument '([^']+)'", str(exc))
-                if not match:
-                    raise
-                bad_arg = match.group(1)
-                if bad_arg not in current_kwargs:
-                    raise
-                current_kwargs.pop(bad_arg)
-                continue
-
-    # ----- schema -----
     def _ensure_class(self, cfg: Config) -> None:
+        """
+        Ensure the target collection exists; create it if missing.
+
+        Notes:
+            - Uses v4 `collections` API.
+            - Vectorizer is set to `none` by default (explicit vectors required).
+        """
         schema = self.client.collections
-        names = [c.name for c in schema.list_all()]  # type: ignore
+        names = [c.name for c in schema.list_all()]  # type: ignore[attr-defined]
         if self._class in names:
             return
 
-        # You can swap the vectorizer for a local one if needed.
-        vec_cfg = Configure.NamedVectors.text2vec_openai()
-        coll_cfg = Configure.collection(
-            vectorizer_config=vec_cfg,
+        # v4: disable built-in vectorizer; we will pass vectors explicitly
+        vectorizer_config = Configure.Vectorizer.none()
+
+        collection_config = Configure.collection(
+            vectorizer_config=vectorizer_config,
             properties=[
                 Property(name="external_id", dataType=DataType.TEXT, tokenization=Tokenization.WORD),
                 Property(name="content", dataType=DataType.TEXT, tokenization=Tokenization.WORD),
@@ -203,15 +296,32 @@ class WeaviateRepository(VectorInterface):
             ],
             multi_tenancy=Configure.multi_tenancy(enabled=cfg.WEAVIATE_MULTI_TENANCY),
         )
-        schema.create(self._class, coll_cfg)  # type: ignore
-        logger.info("Created Weaviate class '%s' (multitenant=%s)", self._class, cfg.WEAVIATE_MULTI_TENANCY)
+
+        schema.create(self._class, collection_config)  # type: ignore[attr-defined]
+        logger.info(
+            "Created Weaviate class '%s' (multitenant=%s)",
+            self._class,
+            cfg.WEAVIATE_MULTI_TENANCY,
+        )
 
     def _coll(self, tenant_id: Optional[str]):
+        """
+        Get the collection handle, optionally bound to a tenant.
+
+        Args:
+            tenant_id: Tenant name if multi-tenancy is enabled.
+
+        Returns:
+            Collection handle.
+        """
         if self._mt:
             return self.client.collections.get(self._class, tenant=tenant_id)
         return self.client.collections.get(self._class)
 
-    # ----- VectorInterface -----
+    # -------------------------------------------------------------------------
+    # VectorInterface implementation
+    # -------------------------------------------------------------------------
+
     def upsert(
         self,
         key: Optional[str],
@@ -219,57 +329,80 @@ class WeaviateRepository(VectorInterface):
         metadata: Dict[str, Any],
         tenant_id: Optional[str] = None,
     ) -> None:
+        """
+        Insert or update an object using a stable identifier.
+
+        Args:
+            key: Preferred unique id to use as UUID.
+            vector: Vector to store (required if using vectorizer 'none' or named vectors).
+            metadata: Object properties. 'content' is treated as the primary text field.
+            tenant_id: Optional tenant name.
+
+        Raises:
+            ValueError: If a stable id cannot be determined.
+        """
         coll = self._coll(tenant_id)
-        # Use a stable UUID key if possible (external_id / hash)
-        obj_id = key or metadata.get("hash") or metadata.get("external_id")
-        if not obj_id:
+
+        object_id = key or metadata.get("hash") or metadata.get("external_id")
+        if not object_id:
             raise ValueError("upsert requires a stable key/external_id/hash")
 
-        props = dict(metadata)
-        text = props.pop("content", None) or props.get("structure_summary") or ""
-        props["external_id"] = key or metadata.get("external_id") or metadata.get("hash") or obj_id
+        properties = dict(metadata)
+        text_content = properties.pop("content", None) or properties.get("structure_summary") or ""
+        properties["external_id"] = key or metadata.get("external_id") or metadata.get("hash") or object_id
 
-        # Insert; if already exists, update
-        # Weaviate v4 has no direct "upsert" concept; we can try update and fall back to insert on not-found.
+        # Try update then insert if not existing.
         try:
             coll.data.update(
-                uuid=str(obj_id),
-                properties=props | {"content": text},
-                vector=vector,  # optional: only with named vectors; else omit
+                uuid=str(object_id),
+                properties={**properties, "content": text_content},
+                vector=vector,  # Explicit vector since vectorizer is none
             )
         except Exception:
             coll.data.insert(
-                properties=props | {"content": text},
-                uuid=str(obj_id),
+                properties={**properties, "content": text_content},
+                uuid=str(object_id),
                 vector=vector,
             )
 
     def _build_where(self, filters: Optional[Dict[str, Any]]) -> Optional[Filter]:
+        """
+        Build a boolean filter according to visibility and user ownership.
+
+        Args:
+            filters: Dictionary with visibility/owner_id/user_id conditions.
+
+        Returns:
+            A Filter instance or None if no conditions are required.
+        """
         if not filters:
             return None
+
         shoulds: List[Filter] = []
-        # always allow public
+
+        # Always allow public
         if filters.get("visibility") == "public":
             shoulds.append(Filter.by_property("visibility").equal("public"))
         else:
-            # Default OR: public OR owner OR allowed_user_ids contains user
             shoulds.append(Filter.by_property("visibility").equal("public"))
 
-        owner = filters.get("owner_id")
-        if owner:
-            shoulds.append(Filter.by_property("owner_id").equal(owner))
+        owner_id = filters.get("owner_id")
+        if owner_id:
+            shoulds.append(Filter.by_property("owner_id").equal(owner_id))
 
-        user = filters.get("user_id")
-        if user:
-            shoulds.append(Filter.by_property("allowed_user_ids").contains_any([user]))
-            shoulds.append(Filter.by_property("owner_id").equal(user))
+        user_id = filters.get("user_id")
+        if user_id:
+            shoulds.append(Filter.by_property("allowed_user_ids").contains_any([user_id]))
+            shoulds.append(Filter.by_property("owner_id").equal(user_id))
 
         if not shoulds:
             return None
-        out = shoulds[0]
+
+        # OR-combine all conditions
+        combined = shoulds[0]
         for s in shoulds[1:]:
-            out = out | s
-        return out
+            combined = combined | s
+        return combined
 
     def search(
         self,
@@ -278,29 +411,76 @@ class WeaviateRepository(VectorInterface):
         filters: Optional[Dict[str, Any]] = None,
         tenant_id: Optional[str] = None,
     ) -> List[ScoredItem]:
+        """
+        Vector search using near_vector.
+
+        Args:
+            vector: Query vector.
+            top_k: Maximum number of results.
+            filters: Optional visibility/ownership filter dict.
+            tenant_id: Optional tenant name.
+
+        Returns:
+            List of ScoredItem with id, score (distance), and payload (properties).
+        """
         coll = self._coll(tenant_id)
         where = self._build_where(filters)
-        res = coll.query.near_vector(vector=vector, limit=top_k, where=where)
-        out: List[ScoredItem] = []
-        for obj in getattr(res, "objects", []) or []:  # type: ignore
+
+        # v4: the argument name is `filters` (safer than `where` across versions)
+        result = coll.query.near_vector(vector=vector, limit=top_k, filters=where)
+
+        output: List[ScoredItem] = []
+        for obj in getattr(result, "objects", []) or []:  # type: ignore[attr-defined]
             meta = getattr(obj, "metadata", None)
             distance = getattr(meta, "distance", None)
             score = None if distance is None else float(distance)
             props = getattr(obj, "properties", {}) or {}
-            out.append(ScoredItem(id=str(obj.uuid), score=score, payload=props))
-        return out
+            output.append(ScoredItem(id=str(obj.uuid), score=score, payload=props))
+        return output
 
-    def iter_payloads(self, batch_size: int = 256, tenant_id: Optional[str] = None) -> Iterator[Dict[str, Any]]:
+    def iter_payloads(
+        self,
+        batch_size: int = 256,
+        tenant_id: Optional[str] = None
+    ) -> Iterator[Dict[str, Any]]:
+        """
+        Iterate all stored object properties in pages.
+
+        Args:
+            batch_size: Page size.
+            tenant_id: Optional tenant name.
+
+        Yields:
+            Object properties for each stored document.
+        """
         coll = self._coll(tenant_id)
-        cursor = None
+        cursor: Optional[str] = None
+
         while True:
-            res = coll.query.fetch_objects(limit=batch_size, cursor=cursor)
-            objs = getattr(res, "objects", []) or []  # type: ignore
-            if not objs:
+            result = coll.query.fetch_objects(limit=batch_size, cursor=cursor)
+            objects = getattr(result, "objects", []) or []  # type: ignore[attr-defined]
+            if not objects:
                 break
-            for obj in objs:
+
+            for obj in objects:
                 yield getattr(obj, "properties", {}) or {}
-            page = getattr(res, "page_info", None)
-            cursor = getattr(page, "end_cursor", None)
-            if not getattr(page, "has_next_page", False):
+
+            page_info = getattr(result, "page_info", None)
+            cursor = getattr(page_info, "end_cursor", None)
+            if not getattr(page_info, "has_next_page", False):
                 break
+
+    # -------------------------------------------------------------------------
+    # Cleanup
+    # -------------------------------------------------------------------------
+
+    def __del__(self) -> None:
+        """
+        Ensure client close on GC if available.
+        """
+        try:
+            if hasattr(self, "client") and isinstance(self.client, weaviate.WeaviateClient):
+                self.client.close()
+        except Exception:
+            # Avoid raising during interpreter shutdown
+            pass
