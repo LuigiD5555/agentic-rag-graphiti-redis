@@ -13,12 +13,23 @@ class LLMService:
         """
         Initialize LLMService with LM Studio endpoint and selected model.
         """
-        host = config.LMSTUDIO_HOST
-        port = config.LMSTUDIO_PORT
-        self.api_root = f"http://{host}:{port}"
-        self.url = f"{self.api_root}/v1/chat/completions"
+        roots = getattr(config, "LMSTUDIO_API_ROOTS", [f"http://{config.LMSTUDIO_HOST}:{config.LMSTUDIO_PORT}"])
+        preferred_root = model_manager.api_root or roots[0]
+        self._candidate_roots = []
+        for root in [preferred_root, *roots]:
+            root_norm = root.rstrip("/")
+            if root_norm not in self._candidate_roots:
+                self._candidate_roots.append(root_norm)
 
-        self.model = model_manager.get_first_language_model() or "gpt-3.5-turbo"
+        self.api_root = self._candidate_roots[0]
+        self.url = f"{self.api_root}/v1/chat/completions"
+        self._require_live = bool(getattr(config, "LMSTUDIO_REQUIRE_SERVER", False))
+
+        explicit_model = getattr(config, "LMSTUDIO_CHAT_MODEL", None)
+        if explicit_model:
+            self.model = explicit_model
+        else:
+            self.model = model_manager.get_first_language_model() or "gpt-3.5-turbo"
         self.temperature = temperature
 
         logger.info("Selected LLM model: %s", self.model)
@@ -37,22 +48,37 @@ class LLMService:
             "max_tokens": max_tokens
         }
 
-        try:
-            logger.info("Sending chat completion request to LM Studio (model=%s, max_tokens=%d)...",
-                        self.model, max_tokens)
-            response = requests.post(self.url, json=payload, timeout=30)
-            response.raise_for_status()
+        for root in self._candidate_roots:
+            url = f"{root}/v1/chat/completions"
+            try:
+                logger.info(
+                    "Sending chat completion to LM Studio (model=%s, host=%s, max_tokens=%d)...",
+                    self.model,
+                    root,
+                    max_tokens,
+                )
+                response = requests.post(url, json=payload, timeout=30)
+                response.raise_for_status()
 
-            data = response.json()
-            text = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+                data = response.json()
+                text = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
-            if not text:
-                logger.warning("LM Studio returned an empty chat completion response.")
-            else:
-                logger.info("Received chat completion response (%d chars).", len(text))
+                if not text:
+                    logger.warning("LM Studio returned an empty chat completion response.")
+                else:
+                    logger.info("Received chat completion response (%d chars).", len(text))
 
-            return text
+                self.api_root = root
+                self.url = url
+                return text
 
-        except requests.exceptions.RequestException as e:
-            logger.error("Failed to connect to LM Studio for chat completion: %s", e)
-            return ""
+            except requests.exceptions.RequestException as e:
+                logger.error("Failed to connect to LM Studio for chat completion (%s): %s", root, e)
+
+        logger.error("All LM Studio completion endpoints failed: %s", self._candidate_roots)
+        if self._require_live:
+            raise RuntimeError(
+                "LM Studio chat completions required but no endpoint responded. "
+                f"Tried: {self._candidate_roots}"
+            )
+        return ""

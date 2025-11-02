@@ -37,10 +37,21 @@ class EmbeddingService:
             -   If no model is available, the service falls back to a zero vector (dummy)
                 and logs a warning.
         """
-        api_root = str(config.LM_EMBED_URL).rstrip("/")
-        if api_root.endswith("/v1/embeddings"):
-            api_root = api_root.rsplit("/v1/embeddings", 1)[0]
-        self._embed_url: str = f"{api_root}/v1/embeddings"
+        api_roots = getattr(
+            config,
+            "LMSTUDIO_API_ROOTS",
+            [config.LM_EMBED_URL.rsplit("/v1/embeddings", 1)[0]],
+        )
+        preferred_root = (model_manager.api_root or api_roots[0]).rstrip("/")
+        self._candidate_roots: List[str] = []
+        for root in [preferred_root, *api_roots]:
+            root_norm = root.rstrip("/")
+            if root_norm not in self._candidate_roots:
+                self._candidate_roots.append(root_norm)
+
+        self._api_root: str = self._candidate_roots[0]
+        self._embed_url: str = f"{self._api_root}/v1/embeddings"
+        self._require_live = bool(getattr(config, "LMSTUDIO_REQUIRE_SERVER", False))
 
         # Expected embedding dimension for validation and dummy fallback
         self._expected_dim: int = int(getattr(config, "EMBEDDING_DIM", 768))
@@ -54,9 +65,12 @@ class EmbeddingService:
 
         self._use_dummy: bool = not bool(self._model_name)
         if self._use_dummy:
-            logger.warning(
-                "No embedding model found. Using dummy embeddings of size %d.", self._expected_dim
-            )
+            if self._require_live:
+                raise RuntimeError(
+                    "LM Studio embedding model required but none available. "
+                    "Ensure LM Studio is running and reports embedding models."
+                )
+            logger.warning("No embedding model found. Using dummy embeddings of size %d.", self._expected_dim)
         else:
             logger.info("Selected embedding model: %s", self._model_name)
 
@@ -77,22 +91,37 @@ class EmbeddingService:
                 raises ValueError/TypeError.
         """
         if self._use_dummy:
+            if self._require_live:
+                raise RuntimeError("LM Studio embeddings required but service is in dummy mode.")
             return self._dummy_vector()
 
         payload = {"model": self._model_name, "input": text}
-        try:
-            resp = self._post_json(self._embed_url, payload, timeout=15)
-            data = self._to_json(resp)
-            raw_vector = self._extract_vector(data)
-            vector = self._normalize_and_validate_vector(raw_vector)
-            return vector
-        except requests.exceptions.RequestException as exc:
-            logger.error("Embedding HTTP error; returning dummy vector: %s", exc)
-            return self._dummy_vector()
-        except (ValueError, TypeError) as exc:
-            # Schema/dimensionality/contents invalid — surface clearly or choose to fallback
-            logger.error("Invalid embedding response; returning dummy vector: %s", exc)
-            return self._dummy_vector()
+        for root in self._candidate_roots:
+            url = f"{root}/v1/embeddings"
+            try:
+                resp = self._post_json(url, payload, timeout=15)
+                data = self._to_json(resp)
+                raw_vector = self._extract_vector(data)
+                vector = self._normalize_and_validate_vector(raw_vector)
+                self._api_root = root
+                self._embed_url = url
+                return vector
+            except requests.exceptions.RequestException as exc:
+                logger.error("Embedding HTTP error (%s); attempting next endpoint: %s", root, exc)
+                continue
+            except (ValueError, TypeError) as exc:
+                logger.error("Invalid embedding response; returning dummy vector: %s", exc)
+                if self._require_live:
+                    raise
+                return self._dummy_vector()
+
+        logger.error("All LM Studio embedding endpoints failed: %s", self._candidate_roots)
+        if self._require_live:
+            raise RuntimeError(
+                "LM Studio embeddings required but every endpoint failed. "
+                f"Tried: {self._candidate_roots}"
+            )
+        return self._dummy_vector()
 
     # ------------- Internals -------------
 

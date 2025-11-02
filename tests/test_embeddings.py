@@ -1,29 +1,122 @@
-"""
-Test the EmbeddingService class.
-"""
-from src.embeddings import EmbeddingService
-from src.config.settings import Config
+from typing import Optional
+
+import pytest
+import requests
+
+from src.providers.lmstudio.embeddings import EmbeddingService
 
 
-def test_embeddings_fallback(monkeypatch):
-    """
-    Test fallback to dummy mode when no embeddings are available.
-    """
-    config = Config()
+class ConfigStub:
+    def __init__(self, embed_model: Optional[str] = None, dim: int = 4, hosts: Optional[list[str]] = None) -> None:
+        base_hosts = hosts or ["http://localhost:8080", "http://host.containers.internal:8080"]
+        self.LMSTUDIO_API_ROOTS = base_hosts
+        self.LM_EMBED_URLS = [f"{root}/v1/embeddings" for root in base_hosts]
+        self.LM_LLM_URLS = [f"{root}/v1/completions" for root in base_hosts]
+        self.LM_EMBED_URL = self.LM_EMBED_URLS[0]
+        self.EMBEDDING_DIM = dim
+        self.EMBEDDING_MODEL = embed_model
+        self.LMSTUDIO_REQUIRE_SERVER = False
 
-    # Force connection failure by mocking _get_available_models
-    def mock_get_models(self):
-        raise ConnectionError()
 
-    monkeypatch.setattr(EmbeddingService, "_get_available_models", mock_get_models)
+class ModelManagerStub:
+    def __init__(self, model_name: Optional[str], api_root: str = "http://localhost:8080") -> None:
+        self._model_name = model_name
+        self.api_root = api_root
 
-    service = EmbeddingService(config)
+    def get_first_embedding_model(self) -> Optional[str]:
+        return self._model_name
 
-    # Ensure dummy mode is enabled
-    assert service.use_dummy is True
 
-    # Generate embedding and validate properties
-    embedding = service.generate("test")
-    assert isinstance(embedding, list)
-    assert len(embedding) == 768
-    assert all(v == 0.0 for v in embedding)
+class ResponseStub:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+
+def test_embeddings_fallback_to_dummy_when_no_model():
+    config = ConfigStub(embed_model=None, dim=6)
+    manager = ModelManagerStub(model_name=None)
+
+    service = EmbeddingService(config, manager)
+    embedding = service.generate("hola rag")
+
+    assert embedding == [0.0] * 6
+
+
+def test_embeddings_parse_valid_response(monkeypatch):
+    config = ConfigStub(embed_model=None, dim=4)
+    manager = ModelManagerStub(model_name="test-embed")
+
+    service = EmbeddingService(config, manager)
+
+    def fake_post(*_args, **_kwargs):
+        return ResponseStub({"data": [{"embedding": [0.1, 0.2, 0.3, 0.4]}]})
+
+    monkeypatch.setattr(service, "_post_json", fake_post)
+    vector = service.generate("tokenize this text")
+
+    assert vector == pytest.approx([0.1, 0.2, 0.3, 0.4])
+
+
+def test_embeddings_invalid_dimension_returns_dummy(monkeypatch):
+    config = ConfigStub(embed_model=None, dim=5)
+    manager = ModelManagerStub(model_name="test-embed")
+
+    service = EmbeddingService(config, manager)
+
+    def fake_post(*_args, **_kwargs):
+        return ResponseStub({"data": [{"embedding": [0.1, 0.2]}]})
+
+    monkeypatch.setattr(service, "_post_json", fake_post)
+    vector = service.generate("text")
+
+    assert vector == [0.0] * 5
+
+
+def test_embeddings_attempts_fallback_hosts(monkeypatch):
+    config = ConfigStub(embed_model=None, dim=4)
+    manager = ModelManagerStub(model_name="test-embed", api_root=config.LMSTUDIO_API_ROOTS[0])
+
+    service = EmbeddingService(config, manager)
+
+    attempts = {"count": 0}
+
+    def fake_post(url, *_args, **_kwargs):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise requests.exceptions.ConnectionError("boom")
+        return ResponseStub({"data": [{"embedding": [0.4, 0.5, 0.6, 0.7]}]})
+
+    monkeypatch.setattr(service, "_post_json", fake_post)
+
+    vector = service.generate("texto")
+
+    assert attempts["count"] == 2
+    assert vector == pytest.approx([0.4, 0.5, 0.6, 0.7])
+
+
+def test_embeddings_require_live_without_model_raises():
+    config = ConfigStub(embed_model=None, dim=4)
+    config.LMSTUDIO_REQUIRE_SERVER = True
+    manager = ModelManagerStub(model_name=None)
+
+    with pytest.raises(RuntimeError):
+        EmbeddingService(config, manager)
+
+
+def test_embeddings_require_live_raises_on_connection_failure(monkeypatch):
+    config = ConfigStub(embed_model="test-embed", dim=4)
+    config.LMSTUDIO_REQUIRE_SERVER = True
+    manager = ModelManagerStub(model_name="test-embed", api_root=config.LMSTUDIO_API_ROOTS[0])
+
+    service = EmbeddingService(config, manager)
+
+    def fake_post(url, *_args, **_kwargs):
+        raise requests.exceptions.ConnectionError("down")
+
+    monkeypatch.setattr(service, "_post_json", fake_post)
+
+    with pytest.raises(RuntimeError):
+        service.generate("texto")

@@ -43,6 +43,13 @@ class Config:
         # ----- LM Studio host & port -----
         self.LMSTUDIO_HOST = os.getenv("LMSTUDIO_HOST", "host.containers.internal")
         self.LMSTUDIO_PORT = int(os.getenv("LMSTUDIO_PORT", "1234"))
+        self.LMSTUDIO_EXTRA_HOSTS = [
+            host.strip()
+            for host in os.getenv("LMSTUDIO_EXTRA_HOSTS", "").split(",")
+            if host.strip()
+        ]
+        self.LMSTUDIO_CHAT_MODEL = os.getenv("LMSTUDIO_CHAT_MODEL", "")
+        self.LMSTUDIO_REQUIRE_SERVER = os.getenv("LMSTUDIO_REQUIRE_SERVER", "").lower() in ("1", "true", "yes")
 
         # ----- Document ingestion -----
         self.DOCS_PATH = os.getenv("DOCS_PATH", "/mnt/Documents/Documents")
@@ -55,9 +62,69 @@ class Config:
     @property
     def LM_EMBED_URL(self):
         """Embeddings endpoint URL for LM Studio."""
-        return f"http://{self.LMSTUDIO_HOST}:{self.LMSTUDIO_PORT}/v1/embeddings"
+        return self.LM_EMBED_URLS[0]
+
+    @property
+    def LM_EMBED_URLS(self):
+        """List of embeddings endpoints including fallbacks."""
+        return [f"{root}/v1/embeddings" for root in self._lmstudio_api_roots()]
 
     @property
     def LM_LLM_URL(self):
         """Completions endpoint URL for LM Studio."""
-        return f"http://{self.LMSTUDIO_HOST}:{self.LMSTUDIO_PORT}/v1/completions"
+        return self.LM_LLM_URLS[0]
+
+    @property
+    def LM_LLM_URLS(self):
+        """List of completion endpoints including fallbacks."""
+        return [f"{root}/v1/completions" for root in self._lmstudio_api_roots()]
+
+    def _lmstudio_api_roots(self):
+        """
+        Ordered list of candidate LM Studio API roots (host + port) including fallbacks.
+
+        Priority:
+            1) Explicit LMSTUDIO_HOST
+            2) Any hosts supplied via LMSTUDIO_EXTRA_HOSTS (comma-separated)
+            3) Automatically add host.containers.internal when primary host is localhost/loopback
+               so containers can reach the host
+            4) Automatically add 127.0.0.1 when primary host is host.containers.internal
+               to keep local dev working without extra vars
+        """
+        unique_hosts = []
+
+        def _add(hostname: str):
+            if hostname and hostname not in unique_hosts:
+                unique_hosts.append(hostname)
+
+        _add(self.LMSTUDIO_HOST)
+        for host in self.LMSTUDIO_EXTRA_HOSTS:
+            _add(host)
+
+        loopback_hosts = {"127.0.0.1", "localhost"}
+        if self.LMSTUDIO_HOST in loopback_hosts:
+            _add("host.containers.internal")
+        if self.LMSTUDIO_HOST == "host.containers.internal":
+            _add("127.0.0.1")
+
+        podman_defaults = [
+            "gateway.containers.internal",
+            "10.0.2.2",   # slirp4netns default gateway
+            "10.88.0.1",  # podman bridge default
+        ]
+        docker_defaults = [
+            "host.docker.internal",
+            "docker.for.mac.host.internal",
+            "docker.for.win.host.internal",
+            "172.17.0.1",
+        ]
+
+        for fallback in [*podman_defaults, *docker_defaults, "localhost"]:
+            _add(fallback)
+
+        return [f"http://{host}:{self.LMSTUDIO_PORT}" for host in unique_hosts]
+
+    @property
+    def LMSTUDIO_API_ROOTS(self):
+        """Public accessor for candidate API roots."""
+        return self._lmstudio_api_roots()

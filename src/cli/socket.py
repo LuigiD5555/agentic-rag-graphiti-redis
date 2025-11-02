@@ -16,10 +16,10 @@ def main():
     cfg = Config()
 
     # LM Studio base
-    api_root = cfg.LM_EMBED_URL.rstrip("/")
-    if api_root.endswith("/v1/embeddings"):
-        api_root = api_root.rsplit("/v1/embeddings", 1)[0]
-    mm = ModelManager(api_root)
+    mm = ModelManager(
+        cfg.LMSTUDIO_API_ROOTS,
+        require_live=cfg.LMSTUDIO_REQUIRE_SERVER,
+    )
 
     embed = EmbeddingService(cfg, mm)
     chat = LLMService(cfg, mm)

@@ -13,10 +13,10 @@ class LMStudioAdapter(ProviderAdapterBase):
     """
 
     def __init__(self, config: Config):
-        api_root = config.LM_EMBED_URL.rstrip("/")
-        if api_root.endswith("/v1/embeddings"):
-            api_root = api_root.rsplit("/v1/embeddings", 1)[0]
-        mm = ModelManager(api_root)
+        mm = ModelManager(
+            config.LMSTUDIO_API_ROOTS,
+            require_live=config.LMSTUDIO_REQUIRE_SERVER,
+        )
         embedding: EmbeddingInterface = EmbeddingService(config, mm)
         chat: ChatInterface = LLMService(config, mm)
         super().__init__(embedding, chat)
