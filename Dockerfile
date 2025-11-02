@@ -1,14 +1,21 @@
 FROM python:3.11-slim
 
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Install curl and ping for debugging / network tests
-RUN apt-get update && apt-get install -y curl iputils-ping && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt .
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt --no-cache-dir -v
-COPY src/ src/
+RUN pip install --upgrade pip && pip install -r requirements.txt
 
-EXPOSE 5000
+COPY podman-compose.yml podman-compose.yml
+COPY src/ src/
+COPY tests/ tests/
+
+ARG RUN_TESTS=1
+RUN if [ "$RUN_TESTS" = "1" ]; then pytest -q; fi
+
 CMD ["python", "-m", "src.main", "--socket"]
