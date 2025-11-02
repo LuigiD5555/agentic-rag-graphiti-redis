@@ -1,5 +1,5 @@
 import pytest
-from src.graph_store import validate_label, validate_relation
+from src.storage.graph.neo4j_repository import validate_label, validate_relation
 
 
 def test_validate_label():
