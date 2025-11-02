@@ -1,15 +1,23 @@
+# LangChain stack
 langchain
 langchain-core
 langchain-community
 langchain-text-splitters
 langchain-experimental
+
+# Storage / graph / cache
 redis
 neo4j
+weaviate-client>=4.6.4
+grpcio>=1.64.0
+
+# Ingestion
 unstructured
 python-docx
 pypdf
 python-pptx
+
+# Utils
 python-dotenv
-pytest
 requests
-weaviate-client
+pytest
