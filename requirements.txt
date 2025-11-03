@@ -16,6 +16,7 @@ unstructured
 python-docx
 pypdf
 python-pptx
+tiktoken
 
 # Utils
 python-dotenv

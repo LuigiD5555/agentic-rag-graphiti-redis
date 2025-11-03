@@ -1,4 +1,8 @@
+import json
 import os
+import re
+from pathlib import Path
+
 from dotenv import load_dotenv
 
 
@@ -13,6 +17,17 @@ class Config:
     def __init__(self):
         load_dotenv()
 
+        self._DEFAULT_EXCLUDED_DIRS = {
+            ".git",
+            "__pycache__",
+            "node_modules",
+            ".venv",
+            "venv",
+            "env",
+            ".idea",
+            ".vscode",
+        }
+
         # ----- Vector DB backend selection -----
         # Current supported value: "weaviate"
         self.VECTOR_BACKEND = os.getenv("VECTOR_BACKEND", "weaviate").lower()
@@ -23,6 +38,11 @@ class Config:
         self.WEAVIATE_CLASS = os.getenv("WEAVIATE_CLASS", "RAGDocument")
         # If running native multitenancy, keep True; else you can emulate with prefixes in the repository.
         self.WEAVIATE_MULTI_TENANCY = os.getenv("WEAVIATE_MULTI_TENANCY", "true").lower() in ("1", "true", "yes")
+        raw_default_tenant = os.getenv("WEAVIATE_DEFAULT_TENANT", "").strip()
+        if self.WEAVIATE_MULTI_TENANCY:
+            self.WEAVIATE_DEFAULT_TENANT = raw_default_tenant or "tenant-default"
+        else:
+            self.WEAVIATE_DEFAULT_TENANT = raw_default_tenant or ""
         self.WEAVIATE_TIMEOUT = int(os.getenv("WEAVIATE_TIMEOUT", "30"))
         self.WEAVIATE_GRPC_PORT = int(os.getenv("WEAVIATE_GRPC_PORT", "50051"))
         self.WEAVIATE_CONNECT_RETRIES = int(os.getenv("WEAVIATE_CONNECT_RETRIES", "5"))
@@ -55,6 +75,11 @@ class Config:
         self.DOCS_PATH = os.getenv("DOCS_PATH", "/mnt/Documents/Documents")
         self.CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "500"))
         self.CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "50"))
+        self.DOCS_EXCLUDE_FILE = os.getenv("DOCS_EXCLUDE_FILE", "").strip()
+        (
+            self.DOCS_EXCLUDE_DIRS,
+            self.DOCS_EXCLUDE_GLOBS,
+        ) = self._build_exclude_configuration()
 
         # ----- Cache TTL -----
         self.CACHE_TTL = int(os.getenv("CACHE_TTL", "3600"))
@@ -128,3 +153,124 @@ class Config:
     def LMSTUDIO_API_ROOTS(self):
         """Public accessor for candidate API roots."""
         return self._lmstudio_api_roots()
+
+    # ------------------------------------------------------------------ #
+    # Private helpers for exclude configuration
+    # ------------------------------------------------------------------ #
+
+    def _build_exclude_configuration(self):
+        raw_entries = list(self._DEFAULT_EXCLUDED_DIRS)
+        raw_entries.extend(self._parse_list_env(os.getenv("DOCS_EXCLUDE_DIRS", "")))
+        raw_entries.extend(self._parse_list_env(os.getenv("DOCS_EXCLUDE_PATTERNS", "")))
+        raw_entries.extend(self._load_excludes_from_files())
+
+        dirnames, globs = self._classify_exclude_entries(raw_entries)
+
+        return tuple(sorted(dirnames)), tuple(sorted(globs))
+
+    @staticmethod
+    def _parse_list_env(raw_value: str | None):
+        if not raw_value:
+            return []
+
+        value = raw_value.strip()
+        if not value:
+            return []
+
+        if value.startswith("["):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                parsed = []
+            else:
+                if isinstance(parsed, list):
+                    return [str(item).strip() for item in parsed if str(item).strip()]
+                if isinstance(parsed, dict):
+                    collected = []
+                    for key in ("directories", "patterns", "paths"):
+                        items = parsed.get(key, [])
+                        if isinstance(items, list):
+                            collected.extend(str(item).strip() for item in items if str(item).strip())
+                    return collected
+                return []
+
+        tokens = [token.strip() for token in re.split(r"[,\n]", value) if token.strip()]
+        return tokens
+
+    def _load_excludes_from_files(self):
+        entries = []
+
+        requested = self.DOCS_EXCLUDE_FILE
+        candidates = [requested] if requested else []
+        if not candidates:
+            candidates.extend([".ragignore", ".rag-ingest-ignore", "rag-ingest-ignore.txt"])
+
+        seen = set()
+        for candidate in candidates:
+            if not candidate:
+                continue
+            candidate_path = Path(candidate).expanduser()
+            if not candidate_path.is_absolute():
+                candidate_path = Path(os.getcwd()) / candidate_path
+            try_path = candidate_path.resolve()
+            if try_path in seen or not try_path.is_file():
+                continue
+            seen.add(try_path)
+            entries.extend(self._read_exclude_file(try_path))
+
+        return entries
+
+    @staticmethod
+    def _read_exclude_file(path: Path):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            return []
+
+        if path.suffix.lower() == ".json":
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+            if isinstance(parsed, dict):
+                collected = []
+                for key in ("directories", "patterns", "paths"):
+                    items = parsed.get(key, [])
+                    if isinstance(items, list):
+                        collected.extend(str(item).strip() for item in items if str(item).strip())
+                return collected
+            # Fall through to treat JSON text as newline separated if unexpected structure.
+
+        lines = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            lines.append(stripped)
+        return lines
+
+    @staticmethod
+    def _classify_exclude_entries(entries):
+        dirnames = set()
+        globs = set()
+
+        for entry in entries:
+            candidate = str(entry).strip()
+            if not candidate:
+                continue
+            normalized = candidate.replace("\\", "/").strip()
+            normalized = normalized.rstrip("/")
+            if not normalized:
+                continue
+            if Config._is_glob_like(normalized) or "/" in normalized:
+                globs.add(normalized)
+            else:
+                dirnames.add(normalized)
+
+        return dirnames, globs
+
+    @staticmethod
+    def _is_glob_like(entry: str):
+        return any(char in entry for char in "*?[]")

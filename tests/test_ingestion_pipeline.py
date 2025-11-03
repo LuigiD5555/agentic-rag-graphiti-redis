@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import os
 from collections import deque
 from typing import Dict, Any, Iterator, List, Optional
+
+import pytest
 
 from src.ingestion.pipeline import IngestionPipeline, SplitterStrategy
 from src.interfaces.vector_interface import VectorInterface, SupportsExists
@@ -95,3 +98,47 @@ def test_ingestion_pipeline_sanitizes_and_upserts(tmp_path):
     assert len(embedding.calls) == len(vector_store.upserts)
     for text in embedding.calls:
         assert "\u2028" not in text
+
+
+@pytest.mark.skipif(not hasattr(os, "symlink"), reason="Symlinks not supported on this platform.")
+def test_ingestion_pipeline_skips_broken_symlink(tmp_path):
+    origin = tmp_path / "missing.txt"
+    broken_link = tmp_path / "broken.txt"
+    try:
+        broken_link.symlink_to(origin)
+    except OSError as exc:  # pragma: no cover - depends on filesystem permissions
+        pytest.skip(f"Unable to create symlink: {exc}")
+
+    embedding = DummyEmbedding()
+    vector_store = DummyVectorStore()
+    pipeline = IngestionPipeline(
+        embedding_service=embedding,
+        vector_store=vector_store,
+        chunk_size=20,
+        chunk_overlap=0,
+    )
+
+    pipeline.ingest_paths([str(broken_link)])
+
+    assert not vector_store.upserts
+    assert not embedding.calls
+
+
+def test_ingestion_pipeline_accepts_file_path(tmp_path):
+    doc = tmp_path / "doc.md"
+    doc.write_text("# Title\n\nContent.", encoding="utf-8")
+
+    embedding = DummyEmbedding()
+    vector_store = DummyVectorStore()
+    pipeline = IngestionPipeline(
+        embedding_service=embedding,
+        vector_store=vector_store,
+        chunk_size=20,
+        chunk_overlap=0,
+        splitter_strategy=SplitterStrategy.MARKDOWN_HEADERS,
+    )
+
+    pipeline.ingest_paths([str(doc)])
+
+    assert vector_store.upserts
+    assert embedding.calls
