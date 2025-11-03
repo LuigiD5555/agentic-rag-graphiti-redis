@@ -30,7 +30,8 @@ def main():
         embedding_service=embed,
         vector_store=vector,
         chunk_size=cfg.CHUNK_SIZE,
-        chunk_overlap=cfg.CHUNK_OVERLAP
+        chunk_overlap=cfg.CHUNK_OVERLAP,
+        tenant_id=(cfg.WEAVIATE_DEFAULT_TENANT or None),
     )
     pipeline.ingest_paths(args.paths)
 

@@ -41,6 +41,8 @@ class WeaviateRepository(VectorInterface):
         cfg = config or Config()
         self._class = cfg.WEAVIATE_CLASS
         self._mt = bool(cfg.WEAVIATE_MULTI_TENANCY)
+        raw_default_tenant = getattr(cfg, "WEAVIATE_DEFAULT_TENANT", "") or ""
+        self._default_tenant = str(raw_default_tenant).strip() or None
         self._timeout = int(cfg.WEAVIATE_TIMEOUT)
         self._grpc_port = int(getattr(cfg, "WEAVIATE_GRPC_PORT", 50051))
         self._connect_retries = max(1, int(getattr(cfg, "WEAVIATE_CONNECT_RETRIES", 5)))
@@ -117,7 +119,6 @@ class WeaviateRepository(VectorInterface):
         for node in nodes:
             if not isinstance(node, dict):
                 continue
-            # normalize keys
             low = {str(k).lower(): v for k, v in node.items()}
             role = str(low.get("role", "")).lower()
             if role == "leader":
@@ -130,7 +131,6 @@ class WeaviateRepository(VectorInterface):
                 rstate = str(rlow.get("state", "")).lower()
                 if rstate == "leader":
                     return True
-            # last resort: text search
             if "leader" in str(node).lower():
                 return True
         return False
@@ -145,9 +145,7 @@ class WeaviateRepository(VectorInterface):
             TimeoutError if readiness is not achieved within the configured time.
         """
         base_url = cfg.WEAVIATE_URL.rstrip("/")
-        # Always include /v1/nodes as the final gate (leader election)
         probe_paths = ["/.well-known/ready", "/v1/.well-known/ready", "/v1/nodes"]
-        # Give Raft enough time to elect a leader (min 60s or 6x timeout)
         deadline = time.time() + max(float(self._timeout) * 6.0, 60.0)
         last_error: Optional[Exception] = None
 
@@ -160,9 +158,7 @@ class WeaviateRepository(VectorInterface):
                     last_error = exc
                     continue
 
-                # 200 OK or 204 No Content are both acceptable for readiness endpoints
                 if resp.status_code in (200, 204):
-                    # If /v1/nodes is used, validate node statuses and leader presence.
                     if path.endswith("/nodes"):
                         try:
                             payload = resp.json()
@@ -173,7 +169,6 @@ class WeaviateRepository(VectorInterface):
                         if not nodes:
                             last_error = RuntimeError("Weaviate /v1/nodes returned empty nodes list")
                             continue
-                        # Check all nodes healthy/ready AND a leader exists
                         all_ready = True
                         for node in nodes:
                             if not isinstance(node, dict):
@@ -182,16 +177,17 @@ class WeaviateRepository(VectorInterface):
                             if status not in ("ready", "healthy"):
                                 all_ready = False
                                 break
+                        if len(nodes) == 1:
+                            n0 = nodes[0] if isinstance(nodes[0], dict) else {}
+                            if str(n0.get("status", "")).lower() in ("ready", "healthy"):
+                                return
                         if all_ready and self._nodes_payload_has_leader(payload):
                             return
                         last_error = RuntimeError(f"Weaviate nodes not ready or leader missing: {payload}")
                         continue
-                    # For /.well-known/ready endpoints, don't exit early; keep looping to /v1/nodes gate.
-                    continue
+                    return
 
                 if resp.status_code in (401, 403, 500, 503):
-                    # Typical during leader election:
-                    # 403: "leader not found" -> keep waiting
                     text = resp.text.strip() if isinstance(resp.text, str) else str(resp.text)
                     if resp.status_code == 403 and "leader not found" in text.lower():
                         last_error = RuntimeError(
@@ -237,7 +233,6 @@ class WeaviateRepository(VectorInterface):
         auth_credentials = None
         api_key = getattr(cfg, "WEAVIATE_API_KEY", "") or None
         if api_key:
-            # v4 Auth helper
             auth_credentials = Auth.api_key(api_key)
 
         kwargs: Dict[str, Any] = {
@@ -247,7 +242,7 @@ class WeaviateRepository(VectorInterface):
             "grpc_port": grpc_port,
             "http_secure": secure,
             "grpc_secure": secure,
-            "skip_init_checks": True,  # We perform our own readiness loop
+            "skip_init_checks": True,
         }
         if auth_credentials is not None:
             kwargs["auth_credentials"] = auth_credentials
@@ -255,11 +250,8 @@ class WeaviateRepository(VectorInterface):
             kwargs["additional_config"] = additional
 
         client = connect_to_custom(**kwargs)
-
-        # Quick check; the full readiness loop runs separately.
         if not client:
             raise RuntimeError("Failed to initialize Weaviate v4 client")
-
         return client
 
     # -------------------------------------------------------------------------
@@ -275,34 +267,92 @@ class WeaviateRepository(VectorInterface):
             - Vectorizer is set to `none` by default (explicit vectors required).
         """
         schema = self.client.collections
-        names = [c.name for c in schema.list_all()]  # type: ignore[attr-defined]
-        if self._class in names:
+        existing_classes = schema.list_all()
+        names = [
+            c.name if hasattr(c, "name") else str(c)
+            for c in existing_classes
+        ]
+        if self._class not in names:
+            # IMPORTANT: use `data_type=` (snake_case) to satisfy Pydantic validation.
+            schema.create(
+                self._class,
+                vectorizer_config=Configure.Vectorizer.none(),  # v4 expects vectorizer_config for these helpers
+                properties=[
+                    Property(name="external_id", data_type=DataType.TEXT, tokenization=Tokenization.WORD),
+                    Property(name="content", data_type=DataType.TEXT, tokenization=Tokenization.WORD),
+                    Property(name="structure_summary", data_type=DataType.TEXT),
+                    Property(name="visibility", data_type=DataType.TEXT),
+                    Property(name="owner_id", data_type=DataType.TEXT),
+                    Property(name="allowed_user_ids", data_type=DataType.TEXT_ARRAY),
+                    Property(name="hash", data_type=DataType.TEXT),
+                    Property(name="source", data_type=DataType.TEXT),
+                ],
+                multi_tenancy_config=Configure.multi_tenancy(enabled=bool(cfg.WEAVIATE_MULTI_TENANCY)),
+            )
+
+            logger.info(
+                "Created Weaviate class '%s' (multitenant=%s)",
+                self._class,
+                cfg.WEAVIATE_MULTI_TENANCY,
+            )
+
+        if self._mt and self._default_tenant:
+            self._ensure_default_tenant()
+
+    def _ensure_default_tenant(self) -> None:
+        """
+        Create the configured default tenant if missing (Weaviate multi-tenancy).
+        """
+        if not self._mt or not self._default_tenant:
             return
 
-        # v4: disable built-in vectorizer; we will pass vectors explicitly
-        vectorizer_config = Configure.Vectorizer.none()
+        collection = self.client.collections.get(self._class)
+        tenants_api = getattr(collection, "tenants", None)
+        if tenants_api is None:
+            logger.warning(
+                "Weaviate client does not expose tenants API while multitenancy is enabled."
+            )
+            return
 
-        collection_config = Configure.collection(
-            vectorizer_config=vectorizer_config,
-            properties=[
-                Property(name="external_id", dataType=DataType.TEXT, tokenization=Tokenization.WORD),
-                Property(name="content", dataType=DataType.TEXT, tokenization=Tokenization.WORD),
-                Property(name="structure_summary", dataType=DataType.TEXT),
-                Property(name="visibility", dataType=DataType.TEXT),
-                Property(name="owner_id", dataType=DataType.TEXT),
-                Property(name="allowed_user_ids", dataType=DataType.TEXT_ARRAY),
-                Property(name="hash", dataType=DataType.TEXT),
-                Property(name="source", dataType=DataType.TEXT),
-            ],
-            multi_tenancy=Configure.multi_tenancy(enabled=cfg.WEAVIATE_MULTI_TENANCY),
-        )
+        existing: set[str] = set()
+        try:
+            listed = tenants_api.list() if hasattr(tenants_api, "list") else tenants_api.get()  # type: ignore[attr-defined]
+        except Exception:
+            listed = []
 
-        schema.create(self._class, collection_config)  # type: ignore[attr-defined]
-        logger.info(
-            "Created Weaviate class '%s' (multitenant=%s)",
-            self._class,
-            cfg.WEAVIATE_MULTI_TENANCY,
-        )
+        for tenant in listed or []:
+            name = getattr(tenant, "name", None)
+            if not name and isinstance(tenant, dict):
+                name = tenant.get("name") or tenant.get("id")
+            if not name:
+                name = str(tenant)
+            existing.add(str(name))
+
+        if self._default_tenant in existing:
+            return
+
+        try:
+            tenants_api.create([self._default_tenant])
+            return
+        except TypeError:
+            try:
+                tenants_api.create(self._default_tenant)
+                return
+            except TypeError:
+                try:
+                    from weaviate.classes.tenants import Tenant  # type: ignore
+
+                    tenants_api.create(Tenant(name=self._default_tenant))  # type: ignore[call-arg]
+                    return
+                except Exception as exc:
+                    if "already exist" not in str(exc).lower():
+                        raise
+            except Exception as exc:
+                if "already exist" not in str(exc).lower():
+                    raise
+        except Exception as exc:
+            if "already exist" not in str(exc).lower():
+                raise
 
     def _coll(self, tenant_id: Optional[str]):
         """
@@ -314,9 +364,17 @@ class WeaviateRepository(VectorInterface):
         Returns:
             Collection handle.
         """
-        if self._mt:
-            return self.client.collections.get(self._class, tenant=tenant_id)
-        return self.client.collections.get(self._class)
+        coll = self.client.collections.get(self._class)
+        if not self._mt:
+            return coll
+
+        effective_tenant = (tenant_id or self._default_tenant)
+        if not effective_tenant:
+            raise RuntimeError(
+                "Weaviate multi-tenancy is enabled but no tenant_id was provided. "
+                "Set WEAVIATE_DEFAULT_TENANT or pass tenant_id explicitly."
+            )
+        return coll.with_tenant(str(effective_tenant))
 
     # -------------------------------------------------------------------------
     # VectorInterface implementation
@@ -343,25 +401,25 @@ class WeaviateRepository(VectorInterface):
         """
         coll = self._coll(tenant_id)
 
-        object_id = key or metadata.get("hash") or metadata.get("external_id")
-        if not object_id:
+        raw_id = key or metadata.get("hash") or metadata.get("external_id")
+        if not raw_id:
             raise ValueError("upsert requires a stable key/external_id/hash")
+        uuid_id = self._normalize_uuid(raw_id)
 
         properties = dict(metadata)
         text_content = properties.pop("content", None) or properties.get("structure_summary") or ""
-        properties["external_id"] = key or metadata.get("external_id") or metadata.get("hash") or object_id
+        properties["external_id"] = key or metadata.get("external_id") or metadata.get("hash") or raw_id
 
-        # Try update then insert if not existing.
         try:
             coll.data.update(
-                uuid=str(object_id),
+                uuid=uuid_id,
                 properties={**properties, "content": text_content},
-                vector=vector,  # Explicit vector since vectorizer is none
+                vector=vector,
             )
         except Exception:
             coll.data.insert(
                 properties={**properties, "content": text_content},
-                uuid=str(object_id),
+                uuid=uuid_id,
                 vector=vector,
             )
 
@@ -380,7 +438,6 @@ class WeaviateRepository(VectorInterface):
 
         shoulds: List[Filter] = []
 
-        # Always allow public
         if filters.get("visibility") == "public":
             shoulds.append(Filter.by_property("visibility").equal("public"))
         else:
@@ -398,11 +455,22 @@ class WeaviateRepository(VectorInterface):
         if not shoulds:
             return None
 
-        # OR-combine all conditions
         combined = shoulds[0]
         for s in shoulds[1:]:
             combined = combined | s
         return combined
+
+    @staticmethod
+    def _normalize_uuid(value: Any) -> str:
+        """
+        Convert arbitrary stable ids into UUID strings accepted by Weaviate.
+        """
+        import uuid
+
+        try:
+            return str(uuid.UUID(str(value)))
+        except (ValueError, AttributeError, TypeError):
+            return str(uuid.uuid5(uuid.NAMESPACE_URL, str(value)))
 
     def search(
         self,
@@ -426,7 +494,6 @@ class WeaviateRepository(VectorInterface):
         coll = self._coll(tenant_id)
         where = self._build_where(filters)
 
-        # v4: the argument name is `filters` (safer than `where` across versions)
         result = coll.query.near_vector(vector=vector, limit=top_k, filters=where)
 
         output: List[ScoredItem] = []
@@ -482,5 +549,4 @@ class WeaviateRepository(VectorInterface):
             if hasattr(self, "client") and isinstance(self.client, weaviate.WeaviateClient):
                 self.client.close()
         except Exception:
-            # Avoid raising during interpreter shutdown
             pass

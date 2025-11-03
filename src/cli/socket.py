@@ -27,7 +27,14 @@ def main():
     graph = Neo4jRepository(cfg)
     cache = CacheService(cfg)
 
-    rag_engine = RAGEngine(embed, vector, graph, cache, chat)
+    rag_engine = RAGEngine(
+        embed,
+        vector,
+        graph,
+        cache,
+        chat,
+        default_tenant=(cfg.WEAVIATE_DEFAULT_TENANT or None),
+    )
     agent = Agent(rag_engine)
 
     host, port = "0.0.0.0", int(os.getenv("SOCKET_PORT", "5555"))

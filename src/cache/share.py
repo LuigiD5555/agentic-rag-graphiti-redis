@@ -35,7 +35,9 @@ def main():
 
     cfg = Config()
     client = _get_client(cfg)
-    coll = client.collections.get(cfg.WEAVIATE_CLASS, tenant=args.tenant) if cfg.WEAVIATE_MULTI_TENANCY else client.collections.get(cfg.WEAVIATE_CLASS)
+    coll = client.collections.get(cfg.WEAVIATE_CLASS)
+    if cfg.WEAVIATE_MULTI_TENANCY and args.tenant:
+        coll = coll.with_tenant(args.tenant)
 
     # Find object by external_id or hash
     where = Filter.by_property("external_id").equal(args.id) | Filter.by_property("hash").equal(args.id)
