@@ -18,4 +18,4 @@ COPY tests/ tests/
 ARG RUN_TESTS=1
 RUN if [ "$RUN_TESTS" = "1" ]; then pytest -q; fi
 
-CMD ["python", "-m", "src.main", "--socket"]
+CMD ["python", "-m", "src.main"]
