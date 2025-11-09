@@ -139,6 +139,8 @@ class IngestionPipeline:
             self._process_code_document(PythonCodeStructure(full_path))
         elif full_path.endswith(".js"):
             self._process_code_document(JavaScriptCodeStructure(full_path))
+        else:
+            self._process_as_plain_text(full_path)
 
     def _should_skip_path(self, path: str) -> bool:
         """
@@ -265,6 +267,18 @@ class IngestionPipeline:
             )
         except TypeError:
             self.vector_store.upsert(summary_hash, embedding, metadata)
+
+    def _process_as_plain_text(self, path: str) -> None:
+        """
+        Fallback handler: attempt to ingest any remaining file as plain text.
+
+        Some extensions may not have a dedicated loader; rather than skipping them
+        outright we try a simple text read to honor the user's request.
+        """
+        try:
+            self._process_text_document(PlainTextLoader(path))
+        except (UnicodeDecodeError, ValueError, OSError) as exc:
+            logger.warning("Skipping %s; plain-text fallback failed: %s", path, exc)
 
     # ---------- helpers ----------
 

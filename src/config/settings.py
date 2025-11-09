@@ -60,6 +60,7 @@ class Config(BaseSettings):
     # Computed in model_post_init
     DOCS_EXCLUDE_DIRS: tuple[str, ...] | str = ()
     DOCS_EXCLUDE_GLOBS: tuple[str, ...] | str = ()
+    DOCS_FILE_EXTS: tuple[str, ...] | list[str] = (".pdf", ".docx", ".txt", ".md", ".py", ".js")
 
     # ----- Cache TTL -----
     CACHE_TTL: int = 3600
@@ -97,6 +98,30 @@ class Config(BaseSettings):
         dirs, globs = self._build_exclude_configuration()
         self.DOCS_EXCLUDE_DIRS = tuple(sorted(dirs))
         self.DOCS_EXCLUDE_GLOBS = tuple(sorted(globs))
+
+        # Normalize file extensions (accept list/tuple/str env inputs)
+        ext_values: list[str]
+        raw_exts = self.DOCS_FILE_EXTS
+        if isinstance(raw_exts, str):
+            ext_values = self._parse_list_env(raw_exts)
+        elif isinstance(raw_exts, tuple):
+            ext_values = list(raw_exts)
+        else:
+            ext_values = list(raw_exts)
+
+        def _normalize_ext(value: str) -> str:
+            cleaned = str(value or "").strip().lower()
+            if not cleaned:
+                return ""
+            return cleaned if cleaned.startswith(".") else f".{cleaned}"
+
+        normalized_set: set[str] = set()
+        for ext in ext_values:
+            norm = _normalize_ext(ext)
+            if norm:
+                normalized_set.add(norm)
+
+        self.DOCS_FILE_EXTS = tuple(sorted(normalized_set))
 
     @property
     def LM_EMBED_URL(self):
