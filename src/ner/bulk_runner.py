@@ -11,8 +11,7 @@ from neo4j.exceptions import Neo4jError
 from requests import RequestException
 from src import logger
 from src.config.settings import Config
-from src.providers.lmstudio.model_manager import ModelManager
-from src.providers.lmstudio.client import LLMService
+from src.providers.factory import ProviderFactory
 from src.storage.graph.neo4j_repository import Neo4jRepository
 from src.ner.extractor import NERExtractor
 from src.vectorstores import get_vector_store
@@ -35,11 +34,8 @@ class NERBulkProcessor:
         self.only_code = only_code
 
         cfg = Config()
-        mm = ModelManager(
-            cfg.LMSTUDIO_API_ROOTS,
-            require_live=cfg.LMSTUDIO_REQUIRE_SERVER,
-        )
-        self.llm = LLMService(cfg, mm)
+        provider = ProviderFactory(cfg)
+        self.llm = provider.chat()
         self.vector = get_vector_store(cfg)
         self.ner_repo = Neo4jRepository(cfg)
         self.extractor = NERExtractor(self.llm, self.ner_repo)

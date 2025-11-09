@@ -2,9 +2,7 @@
 import os
 import socket
 from src.config.settings import Config
-from src.providers.lmstudio.model_manager import ModelManager
-from src.providers.lmstudio.embeddings import EmbeddingService
-from src.providers.lmstudio.client import LLMService
+from src.providers.factory import ProviderFactory
 from src.storage.graph.neo4j_repository import Neo4jRepository
 from src.cache.redis_cache import CacheService
 from src.rag.engine import RAGEngine
@@ -15,14 +13,9 @@ from src.vectorstores import get_vector_store
 def main():
     cfg = Config()
 
-    # LM Studio base
-    mm = ModelManager(
-        cfg.LMSTUDIO_API_ROOTS,
-        require_live=cfg.LMSTUDIO_REQUIRE_SERVER,
-    )
-
-    embed = EmbeddingService(cfg, mm)
-    chat = LLMService(cfg, mm)
+    provider = ProviderFactory(cfg)
+    embed = provider.embeddings()
+    chat = provider.chat()
     vector = get_vector_store(cfg)
     graph = Neo4jRepository(cfg)
     cache = CacheService(cfg)

@@ -6,6 +6,7 @@ from src.interfaces.graph_interface import GraphInterface
 from src.cache.redis_cache import CacheService
 from src.interfaces.chat_interface import ChatInterface
 from src import logger
+from src.storage.graph.null_repository import NullGraphRepository
 
 
 def _build_user_filter(user_id: Optional[str]) -> Dict[str, Any]:
@@ -36,7 +37,7 @@ class RAGEngine:
         self,
         embedding: EmbeddingInterface,
         vector_store: VectorInterface,
-        graph_store: GraphInterface,
+        graph_store: GraphInterface | None,
         cache: CacheService,
         llm: ChatInterface,
         mark_cache: bool = True,
@@ -45,7 +46,7 @@ class RAGEngine:
     ) -> None:
         self.embedding = embedding
         self.vector = vector_store
-        self.graph = graph_store
+        self.graph = graph_store or NullGraphRepository()
         self.cache = cache
         self.llm = llm
         self.mark_cache = mark_cache
