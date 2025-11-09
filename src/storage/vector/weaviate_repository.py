@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import time
 from typing import Any, Dict, List, Optional, Iterator, Callable, TypeVar
+from dataclasses import dataclass
 from urllib.parse import urlparse
 
 import requests
@@ -12,10 +13,12 @@ from weaviate.classes.init import Auth
 from weaviate.config import AdditionalConfig, Timeout
 from weaviate.classes.config import Configure, Property, DataType, Tokenization
 from weaviate.classes.query import Filter
+from weaviate.exceptions import UnexpectedStatusCodeError
 
 from src.config.settings import Config
 from src.interfaces.vector_interface import VectorInterface, ScoredItem
 from src import logger
+from src.utils.decorators import timed, logged
 
 T = TypeVar("T")
 
@@ -137,68 +140,34 @@ class WeaviateRepository(VectorInterface):
 
     def _wait_for_cluster_ready(self, cfg: Config) -> None:
         """
-        Poll Weaviate health endpoints until the node reports readiness and a Raft leader is elected.
+        Wait until Weaviate reports readiness and a Raft leader exists.
 
-        This method tolerates temporary 403/5xx responses that may appear while Raft elects a leader.
-
-        Raises:
-            TimeoutError if readiness is not achieved within the configured time.
+        Uses guard checks with early returns and delegates to small helpers
+        to avoid deep nesting.
         """
         base_url = cfg.WEAVIATE_URL.rstrip("/")
-        probe_paths = ["/.well-known/ready", "/v1/.well-known/ready", "/v1/nodes"]
         deadline = time.time() + max(float(self._timeout) * 6.0, 60.0)
         last_error: Optional[Exception] = None
 
         while time.time() < deadline:
-            for path in probe_paths:
-                url = f"{base_url}{path}"
-                try:
-                    resp = requests.get(url, timeout=self._timeout)
-                except requests.RequestException as exc:
-                    last_error = exc
+            for path in ("/.well-known/ready", "/v1/.well-known/ready", "/v1/nodes"):
+                resp = self._health_check(base_url, path)
+                if resp is None:
+                    # request error; try next path
                     continue
 
                 if resp.status_code in (200, 204):
-                    if path.endswith("/nodes"):
-                        try:
-                            payload = resp.json()
-                        except ValueError as exc:
-                            last_error = RuntimeError(f"Invalid JSON from {url}: {exc}")
-                            continue
-                        nodes = payload if isinstance(payload, list) else payload.get("nodes")
-                        if not nodes:
-                            last_error = RuntimeError("Weaviate /v1/nodes returned empty nodes list")
-                            continue
-                        all_ready = True
-                        for node in nodes:
-                            if not isinstance(node, dict):
-                                continue
-                            status = str(node.get("status", "")).lower()
-                            if status not in ("ready", "healthy"):
-                                all_ready = False
-                                break
-                        if len(nodes) == 1:
-                            n0 = nodes[0] if isinstance(nodes[0], dict) else {}
-                            if str(n0.get("status", "")).lower() in ("ready", "healthy"):
-                                return
-                        if all_ready and self._nodes_payload_has_leader(payload):
-                            return
-                        last_error = RuntimeError(f"Weaviate nodes not ready or leader missing: {payload}")
+                    if path.endswith("/nodes") and not self._nodes_ready_with_leader(resp):
+                        last_error = RuntimeError("Weaviate nodes not ready or leader missing")
                         continue
                     return
 
-                if resp.status_code in (401, 403, 500, 503):
-                    text = resp.text.strip() if isinstance(resp.text, str) else str(resp.text)
-                    if resp.status_code == 403 and "leader not found" in text.lower():
-                        last_error = RuntimeError(
-                            f"Weaviate readiness: {url} => 403 (leader not found) – waiting for election"
-                        )
-                    else:
-                        last_error = RuntimeError(
-                            f"Weaviate readiness probe {url} returned {resp.status_code}: {text}"
-                        )
+                unhealthy = self._explain_unhealthy(resp)
+                if unhealthy is not None:
+                    last_error = unhealthy
                     continue
 
+                # Unexpected code
                 try:
                     resp.raise_for_status()
                 except requests.RequestException as exc:
@@ -208,6 +177,41 @@ class WeaviateRepository(VectorInterface):
         if last_error:
             raise last_error
         raise TimeoutError("Timed out waiting for Weaviate readiness")
+
+    def _health_check(self, base_url: str, path: str):
+        try:
+            return requests.get(f"{base_url}{path}", timeout=self._timeout)
+        except requests.RequestException:
+            return None
+
+    def _nodes_ready_with_leader(self, resp: requests.Response) -> bool:  # type: ignore[name-defined]
+        try:
+            payload = resp.json()
+        except ValueError:
+            return False
+        nodes = payload if isinstance(payload, list) else payload.get("nodes")
+        if not nodes:
+            return False
+        all_ready = True
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            status = str(node.get("status", "")).lower()
+            if status not in ("ready", "healthy"):
+                all_ready = False
+                break
+        if len(nodes) == 1:
+            n0 = nodes[0] if isinstance(nodes[0], dict) else {}
+            return str(n0.get("status", "")).lower() in ("ready", "healthy")
+        return all_ready and self._nodes_payload_has_leader(payload)
+
+    def _explain_unhealthy(self, resp: requests.Response) -> Optional[Exception]:  # type: ignore[name-defined]
+        if resp.status_code in (401, 403, 500, 503):
+            text = resp.text.strip() if isinstance(resp.text, str) else str(resp.text)
+            if resp.status_code == 403 and "leader not found" in text.lower():
+                return RuntimeError("Weaviate readiness: leader not found – waiting for election")
+            return RuntimeError(f"Weaviate readiness probe returned {resp.status_code}: {text}")
+        return None
 
     def _init_client_v4(self, cfg: Config, additional: Optional[AdditionalConfig]) -> WeaviateClient:
         """
@@ -273,22 +277,7 @@ class WeaviateRepository(VectorInterface):
             for c in existing_classes
         ]
         if self._class not in names:
-            # IMPORTANT: use `data_type=` (snake_case) to satisfy Pydantic validation.
-            schema.create(
-                self._class,
-                vectorizer_config=Configure.Vectorizer.none(),  # v4 expects vectorizer_config for these helpers
-                properties=[
-                    Property(name="external_id", data_type=DataType.TEXT, tokenization=Tokenization.WORD),
-                    Property(name="content", data_type=DataType.TEXT, tokenization=Tokenization.WORD),
-                    Property(name="structure_summary", data_type=DataType.TEXT),
-                    Property(name="visibility", data_type=DataType.TEXT),
-                    Property(name="owner_id", data_type=DataType.TEXT),
-                    Property(name="allowed_user_ids", data_type=DataType.TEXT_ARRAY),
-                    Property(name="hash", data_type=DataType.TEXT),
-                    Property(name="source", data_type=DataType.TEXT),
-                ],
-                multi_tenancy_config=Configure.multi_tenancy(enabled=bool(cfg.WEAVIATE_MULTI_TENANCY)),
-            )
+            self._create_class(schema, cfg)
 
             logger.info(
                 "Created Weaviate class '%s' (multitenant=%s)",
@@ -298,6 +287,33 @@ class WeaviateRepository(VectorInterface):
 
         if self._mt and self._default_tenant:
             self._ensure_default_tenant()
+
+    def _class_properties(self) -> List[Property]:
+        """Value object for class properties (kept in one place)."""
+        return [
+            Property(name="external_id", data_type=DataType.TEXT, tokenization=Tokenization.WORD),
+            Property(name="content", data_type=DataType.TEXT, tokenization=Tokenization.WORD),
+            Property(name="structure_summary", data_type=DataType.TEXT),
+            Property(name="visibility", data_type=DataType.TEXT),
+            Property(name="owner_id", data_type=DataType.TEXT),
+            Property(name="allowed_user_ids", data_type=DataType.TEXT_ARRAY),
+            Property(name="hash", data_type=DataType.TEXT),
+            Property(name="source", data_type=DataType.TEXT),
+        ]
+
+    def _create_class(self, schema, cfg: Config) -> None:
+        """Isolated creation to keep _ensure_class lean."""
+        schema.create(
+            self._class,
+            vectorizer_config=Configure.Vectorizer.none(),
+            properties=self._class_properties(),
+            multi_tenancy_config=Configure.multi_tenancy(enabled=bool(cfg.WEAVIATE_MULTI_TENANCY)),
+        )
+        logger.info(
+            "Created Weaviate class '%s' (multitenant=%s)",
+            self._class,
+            cfg.WEAVIATE_MULTI_TENANCY,
+        )
 
     def _ensure_default_tenant(self) -> None:
         """
@@ -314,6 +330,15 @@ class WeaviateRepository(VectorInterface):
             )
             return
 
+        existing = self._list_tenant_names(tenants_api)
+
+        if self._default_tenant in existing:
+            return
+
+        self._create_tenant(tenants_api, self._default_tenant)
+
+    @staticmethod
+    def _list_tenant_names(tenants_api) -> set[str]:
         existing: set[str] = set()
         try:
             listed = tenants_api.list() if hasattr(tenants_api, "list") else tenants_api.get()  # type: ignore[attr-defined]
@@ -327,22 +352,22 @@ class WeaviateRepository(VectorInterface):
             if not name:
                 name = str(tenant)
             existing.add(str(name))
+        return existing
 
-        if self._default_tenant in existing:
-            return
-
+    @staticmethod
+    def _create_tenant(tenants_api, name: str) -> None:
         try:
-            tenants_api.create([self._default_tenant])
+            tenants_api.create([name])
             return
         except TypeError:
             try:
-                tenants_api.create(self._default_tenant)
+                tenants_api.create(name)
                 return
             except TypeError:
                 try:
                     from weaviate.classes.tenants import Tenant  # type: ignore
 
-                    tenants_api.create(Tenant(name=self._default_tenant))  # type: ignore[call-arg]
+                    tenants_api.create(Tenant(name=name))  # type: ignore[call-arg]
                     return
                 except Exception as exc:
                     if "already exist" not in str(exc).lower():
@@ -380,6 +405,8 @@ class WeaviateRepository(VectorInterface):
     # VectorInterface implementation
     # -------------------------------------------------------------------------
 
+    @logged("Upserting record into Weaviate")
+    @timed()
     def upsert(
         self,
         key: Optional[str],
@@ -410,18 +437,51 @@ class WeaviateRepository(VectorInterface):
         text_content = properties.pop("content", None) or properties.get("structure_summary") or ""
         properties["external_id"] = key or metadata.get("external_id") or metadata.get("hash") or raw_id
 
+        self._upsert_record(coll, uuid_id, vector, properties, text_content)
+
+    @logged("Batch upserting records into Weaviate")
+    @timed()
+    def batch_upsert(
+        self,
+        records: List[Dict[str, Any]],
+        tenant_id: Optional[str] = None,
+    ) -> None:
+        """
+        Batch upsert convenience method.
+
+        Each record must contain: {"key": str|None, "vector": List[float], "metadata": dict}
+        """
+        coll = self._coll(tenant_id)
+        for rec in records:
+            key = rec.get("key")
+            vector = rec.get("vector")
+            metadata = dict(rec.get("metadata") or {})
+            raw_id = key or metadata.get("hash") or metadata.get("external_id")
+            if not raw_id:
+                raise ValueError("batch_upsert record requires key/external_id/hash")
+            uuid_id = self._normalize_uuid(raw_id)
+            properties = dict(metadata)
+            text_content = properties.pop("content", None) or properties.get("structure_summary") or ""
+            properties["external_id"] = key or metadata.get("external_id") or metadata.get("hash") or raw_id
+            self._upsert_record(coll, uuid_id, vector, properties, text_content)
+
+    def _upsert_record(self, coll, uuid_id: str, vector: List[float], properties: Dict[str, Any], text: str) -> None:
         try:
-            coll.data.update(
-                uuid=uuid_id,
-                properties={**properties, "content": text_content},
-                vector=vector,
-            )
+            coll.data.update(uuid=uuid_id, properties={**properties, "content": text}, vector=vector)
+        except UnexpectedStatusCodeError as exc:
+            if getattr(exc, "status_code", None) == 404:
+                logger.info(
+                    "Weaviate update missed (404). Inserting new object. uuid=%s source=%s",
+                    uuid_id,
+                    properties.get("path") or properties.get("source"),
+                )
+                coll.data.insert(uuid=uuid_id, properties={**properties, "content": text}, vector=vector)
+                return
+            logger.exception("Weaviate update failed for uuid=%s", uuid_id)
+            raise
         except Exception:
-            coll.data.insert(
-                properties={**properties, "content": text_content},
-                uuid=uuid_id,
-                vector=vector,
-            )
+            logger.exception("Weaviate update failed, attempting insert for uuid=%s", uuid_id)
+            coll.data.insert(uuid=uuid_id, properties={**properties, "content": text}, vector=vector)
 
     def _build_where(self, filters: Optional[Dict[str, Any]]) -> Optional[Filter]:
         """
@@ -472,6 +532,8 @@ class WeaviateRepository(VectorInterface):
         except (ValueError, AttributeError, TypeError):
             return str(uuid.uuid5(uuid.NAMESPACE_URL, str(value)))
 
+    @logged("Executing Weaviate search")
+    @timed()
     def search(
         self,
         vector: List[float],
