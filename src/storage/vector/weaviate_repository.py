@@ -333,30 +333,20 @@ class WeaviateRepository(VectorInterface):
         weaviate-client version. Prefer named vector 'default' when possible.
         """
         vectorizer_none = Configure.Vectorizer.none()
-        named_vector = getattr(Configure, "NamedVector", None)
 
-        # Prefer modern named vector config
-        if callable(named_vector):
-            try:
-                self._uses_named_vectors = True
-                self._target_vector_name = "default"
-                return {
-                    "vector_config": [
-                        named_vector(
-                            name=self._target_vector_name,
-                            vectorizer=vectorizer_none,
-                        )
-                    ]
+        # Build as named vectors with a single "default" entry, using dicts to
+        # avoid class/signature drift between client versions. This satisfies
+        # clients that expect vector_config to be a list and require a name.
+        self._uses_named_vectors = True
+        self._target_vector_name = "default"
+        return {
+            "vector_config": [
+                {
+                    "name": self._target_vector_name,
+                    "vectorizer": vectorizer_none,
                 }
-            except Exception:
-                # Fall through to legacy argument
-                self._uses_named_vectors = False
-                self._target_vector_name = None
-
-        # Legacy single-vector config
-        self._uses_named_vectors = False
-        self._target_vector_name = None
-        return {"vectorizer_config": vectorizer_none}
+            ]
+        }
 
     @staticmethod
     def _list_tenant_names(tenants_api) -> set[str]:
@@ -492,7 +482,8 @@ class WeaviateRepository(VectorInterface):
         """
         payload = {**properties, "content": text}
         try:
-            # BYOV: pass the vector; for named vectors with a single "default", this is valid.
+            # BYOV: pass single `vector`. With one named vector ("default"),
+            # the server assigns it correctly even in named-vector schemas.
             coll.data.insert(uuid=uuid_id, properties=payload, vector=vector)
             return
         except UnexpectedStatusCodeError as exc:
