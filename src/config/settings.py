@@ -3,86 +3,100 @@ import os
 import re
 from pathlib import Path
 
-from dotenv import load_dotenv
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Config:
+class Config(BaseSettings):
     """
-    Centralized runtime configuration.
+    Centralized runtime configuration using Pydantic BaseSettings.
 
     Notes:
-    - Vector DB backend is selected via VECTOR_BACKEND; default is "weaviate".
+    - Loads environment variables and optional .env file.
+    - Maintains the same env var names to avoid breaking existing setups/tests.
     """
 
-    def __init__(self):
-        load_dotenv()
+    # Pydantic settings
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-        self._DEFAULT_EXCLUDED_DIRS = {
-            ".git",
-            "__pycache__",
-            "node_modules",
-            ".venv",
-            "venv",
-            "env",
-            ".idea",
-            ".vscode",
-        }
+    # ----- Vector DB backend selection -----
+    VECTOR_BACKEND: str = "weaviate"
 
-        # ----- Vector DB backend selection -----
-        # Current supported value: "weaviate"
-        self.VECTOR_BACKEND = os.getenv("VECTOR_BACKEND", "weaviate").lower()
+    # ----- Weaviate configuration -----
+    WEAVIATE_URL: str = "http://localhost:8080"
+    WEAVIATE_API_KEY: str = ""
+    WEAVIATE_CLASS: str = "RAGDocument"
+    WEAVIATE_MULTI_TENANCY: bool = True
+    WEAVIATE_DEFAULT_TENANT: str = "tenant-default"
+    WEAVIATE_TIMEOUT: int = 30
+    WEAVIATE_GRPC_PORT: int = 50051
+    WEAVIATE_CONNECT_RETRIES: int = 5
+    WEAVIATE_CONNECT_BACKOFF: float = 2.0
 
-        # ----- Weaviate configuration -----
-        self.WEAVIATE_URL = os.getenv("WEAVIATE_URL", "http://localhost:8080")
-        self.WEAVIATE_API_KEY = os.getenv("WEAVIATE_API_KEY", "")
-        self.WEAVIATE_CLASS = os.getenv("WEAVIATE_CLASS", "RAGDocument")
-        # If running native multitenancy, keep True; else you can emulate with prefixes in the repository.
-        self.WEAVIATE_MULTI_TENANCY = os.getenv("WEAVIATE_MULTI_TENANCY", "true").lower() in ("1", "true", "yes")
-        raw_default_tenant = os.getenv("WEAVIATE_DEFAULT_TENANT", "").strip()
+    # ----- Embeddings -----
+    EMBEDDING_DIM: int = 768
+
+    # ----- Redis -----
+    REDIS_HOST: str = "redis"
+    REDIS_PORT: int = 6379
+
+    # ----- Neo4j -----
+    NEO4J_URI: str = "bolt://neo4j:7687"
+    NEO4J_USER: str = "neo4j"
+    NEO4J_PASSWORD: str = ""
+
+    # ----- LM Studio host & port -----
+    LMSTUDIO_HOST: str = "host.containers.internal"
+    LMSTUDIO_PORT: int = 1234
+    # Comma-separated list in env; we normalize to list in model_post_init
+    LMSTUDIO_EXTRA_HOSTS: list[str] = []
+    LMSTUDIO_CHAT_MODEL: str = ""
+    LMSTUDIO_REQUIRE_SERVER: bool = False
+
+    # ----- Document ingestion -----
+    DOCS_PATH: str = "/mnt/Documents/Documents"
+    CHUNK_SIZE: int = 500
+    CHUNK_OVERLAP: int = 50
+    DOCS_EXCLUDE_FILE: str = ""
+    # Computed in model_post_init
+    DOCS_EXCLUDE_DIRS: tuple[str, ...] | str = ()
+    DOCS_EXCLUDE_GLOBS: tuple[str, ...] | str = ()
+
+    # ----- Cache TTL -----
+    CACHE_TTL: int = 3600
+
+    # Defaults for exclude directories
+    _DEFAULT_EXCLUDED_DIRS = {
+        ".git",
+        "__pycache__",
+        "node_modules",
+        ".venv",
+        "venv",
+        "env",
+        ".idea",
+        ".vscode",
+    }
+
+    def model_post_init(self, __context) -> None:  # type: ignore[override]
+        # Normalize booleans/strings that might come in as env strings
+        if isinstance(self.WEAVIATE_MULTI_TENANCY, str):
+            self.WEAVIATE_MULTI_TENANCY = str(self.WEAVIATE_MULTI_TENANCY).lower() in ("1", "true", "yes")
+
+        # Default tenant handling depends on multitenancy
+        raw_tenant = (self.WEAVIATE_DEFAULT_TENANT or "").strip()
         if self.WEAVIATE_MULTI_TENANCY:
-            self.WEAVIATE_DEFAULT_TENANT = raw_default_tenant or "tenant-default"
+            self.WEAVIATE_DEFAULT_TENANT = raw_tenant or "tenant-default"
         else:
-            self.WEAVIATE_DEFAULT_TENANT = raw_default_tenant or ""
-        self.WEAVIATE_TIMEOUT = int(os.getenv("WEAVIATE_TIMEOUT", "30"))
-        self.WEAVIATE_GRPC_PORT = int(os.getenv("WEAVIATE_GRPC_PORT", "50051"))
-        self.WEAVIATE_CONNECT_RETRIES = int(os.getenv("WEAVIATE_CONNECT_RETRIES", "5"))
-        self.WEAVIATE_CONNECT_BACKOFF = float(os.getenv("WEAVIATE_CONNECT_BACKOFF", "2.0"))
+            self.WEAVIATE_DEFAULT_TENANT = raw_tenant or ""
 
-        # ----- Embeddings -----
-        self.EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "768"))
+        # Normalize extra hosts from env if supplied as comma-separated string
+        if isinstance(self.LMSTUDIO_EXTRA_HOSTS, str):
+            tokens = [h.strip() for h in self.LMSTUDIO_EXTRA_HOSTS.split(",") if h.strip()]
+            self.LMSTUDIO_EXTRA_HOSTS = tokens
 
-        # ----- Redis -----
-        self.REDIS_HOST = os.getenv("REDIS_HOST", "redis")
-        self.REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-
-        # ----- Neo4j -----
-        self.NEO4J_URI = os.getenv("NEO4J_URI", "bolt://neo4j:7687")
-        self.NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
-        self.NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")
-
-        # ----- LM Studio host & port -----
-        self.LMSTUDIO_HOST = os.getenv("LMSTUDIO_HOST", "host.containers.internal")
-        self.LMSTUDIO_PORT = int(os.getenv("LMSTUDIO_PORT", "1234"))
-        self.LMSTUDIO_EXTRA_HOSTS = [
-            host.strip()
-            for host in os.getenv("LMSTUDIO_EXTRA_HOSTS", "").split(",")
-            if host.strip()
-        ]
-        self.LMSTUDIO_CHAT_MODEL = os.getenv("LMSTUDIO_CHAT_MODEL", "")
-        self.LMSTUDIO_REQUIRE_SERVER = os.getenv("LMSTUDIO_REQUIRE_SERVER", "").lower() in ("1", "true", "yes")
-
-        # ----- Document ingestion -----
-        self.DOCS_PATH = os.getenv("DOCS_PATH", "/mnt/Documents/Documents")
-        self.CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "500"))
-        self.CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "50"))
-        self.DOCS_EXCLUDE_FILE = os.getenv("DOCS_EXCLUDE_FILE", "").strip()
-        (
-            self.DOCS_EXCLUDE_DIRS,
-            self.DOCS_EXCLUDE_GLOBS,
-        ) = self._build_exclude_configuration()
-
-        # ----- Cache TTL -----
-        self.CACHE_TTL = int(os.getenv("CACHE_TTL", "3600"))
+        # Build exclude configuration
+        dirs, globs = self._build_exclude_configuration()
+        self.DOCS_EXCLUDE_DIRS = tuple(sorted(dirs))
+        self.DOCS_EXCLUDE_GLOBS = tuple(sorted(globs))
 
     @property
     def LM_EMBED_URL(self):
@@ -165,8 +179,7 @@ class Config:
         raw_entries.extend(self._load_excludes_from_files())
 
         dirnames, globs = self._classify_exclude_entries(raw_entries)
-
-        return tuple(sorted(dirnames)), tuple(sorted(globs))
+        return dirnames, globs
 
     @staticmethod
     def _parse_list_env(raw_value: str | None):
