@@ -11,7 +11,7 @@ import hashlib
 from enum import Enum
 from datetime import datetime, timezone, timedelta
 import re
-from typing import Iterable, List, Optional, Sequence
+from typing import Iterable, List, Optional, Dict, Callable, Any, cast
 
 # Modern splitters live in the separate package `langchain_text_splitters`
 from langchain_text_splitters import (
@@ -32,6 +32,8 @@ except ImportError:
 
 from src.interfaces.embedding_interface import EmbeddingInterface
 from src.interfaces.vector_interface import VectorInterface, SupportsExists
+from src.cli.options import PipelineOptions
+from src.utils.decorators import timed, logged
 from src.ingestion.loaders.pdf_loader import PDFLoader
 from src.ingestion.loaders.docx_loader import DocxLoader
 from src.ingestion.loaders.text_loader import PlainTextLoader
@@ -56,56 +58,43 @@ class IngestionPipeline:
         self,
         embedding_service: EmbeddingInterface,
         vector_store: VectorInterface,
-        chunk_size: int = 500,
-        chunk_overlap: int = 50,
-        owner_id: Optional[str] = None,
-        visibility: str = "private",
-        allowed_user_ids: Optional[List[str]] = None,
-        tenant_id: Optional[str] = None,
-        splitter_strategy: SplitterStrategy = SplitterStrategy.TOKEN,
-        tokenizer_model_name: str = "gpt-4o-mini",
-        markdown_levels: Optional[object] = None,  # e.g. [("#", "Header 1"), ("##", "Header 2")]
-        semantic_embeddings: Optional[object] = None,       # LangChain Embeddings if using SEMANTIC
+        options: PipelineOptions,
     ):
-        """
-        Initialize the ingestion pipeline.
-
-        Args:
-            embedding_service: Service to generate embeddings.
-            vector_store: Storage interface for vector data.
-            chunk_size: Maximum size of each chunk (tokens for TOKEN, chars for RECURSIVE; ignored for pure MD headers).
-            chunk_overlap: Overlap between consecutive chunks.
-            owner_id: Logical owner/user id for access control metadata.
-            visibility: Visibility level (e.g., "private" | "shared" | "public").
-            allowed_user_ids: Optional list of user ids who may access the content.
-            tenant_id: Multi-tenant segregation id; forwarded to vector store when supported.
-            splitter_strategy: Strategy for splitting: token/recursive/md_headers/semantic.
-            tokenizer_model_name: Tokenizer name used by TOKEN strategy.
-            markdown_levels: Header map (dict or list of (separator, label) pairs) for Markdown header splitter.
-            semantic_embeddings: LangChain Embeddings instance (only for semantic).
-        """
+        """Initialize the ingestion pipeline with a parameter object."""
         self.embedding_service = embedding_service
         self.vector_store = vector_store
+        self.options = options
 
-        self.owner_id = owner_id
-        self.visibility = visibility
-        self.allowed_user_ids = allowed_user_ids or []
-        self.tenant_id = tenant_id
+        self.owner_id = options.owner_id
+        self.visibility = options.visibility
+        self.allowed_user_ids = list(options.allowed_user_ids)
+        self.tenant_id = options.tenant_id
 
-        self.splitter_strategy = splitter_strategy
-        self.tokenizer_model_name = tokenizer_model_name
-        self.markdown_levels = self._normalize_markdown_headers(markdown_levels)
-        self.semantic_embeddings = semantic_embeddings
+        self.chunk_size = options.chunk_size
+        self.chunk_overlap = options.chunk_overlap
+        self.splitter_strategy = options.splitter_strategy or SplitterStrategy.TOKEN
+        self.tokenizer_model_name = options.tokenizer_model_name
+        self.markdown_levels = self._normalize_markdown_headers(options.markdown_levels)
+        self.semantic_embeddings = options.semantic_embeddings
 
-        self.text_splitter = self._build_text_splitter(
-            strategy=splitter_strategy,
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-            tokenizer_model_name=tokenizer_model_name,
-            markdown_levels=self.markdown_levels,
-            semantic_embeddings=semantic_embeddings,
+        self.text_splitter = self._build_text_splitter(self.splitter_strategy, options)
+
+    # --- Friendly factory to reduce long call sites ---
+    @classmethod
+    def from_options(
+        cls,
+        embedding_service: EmbeddingInterface,
+        vector_store: VectorInterface,
+        options: PipelineOptions,
+    ) -> "IngestionPipeline":
+        return cls(
+            embedding_service=embedding_service,
+            vector_store=vector_store,
+            options=options,
         )
 
+    @logged("Ingesting candidate paths")
+    @timed()
     def ingest_paths(self, paths: List[str]) -> None:
         """
         Ingest documents from a list of directory paths.
@@ -135,6 +124,8 @@ class IngestionPipeline:
         """
         if self._should_skip_path(full_path):
             return
+
+        logger.info("Processing candidate file: %s", full_path)
 
         if full_path.endswith(".pdf"):
             self._process_text_document(PDFLoader(full_path))
@@ -175,48 +166,68 @@ class IngestionPipeline:
 
     def _process_text_document(self, loader) -> None:
         """
-        Load and process a text-based document.
+        Load and process a text-based document and upsert its chunks into the vector store.
+
+        This implementation *whitelists* metadata keys to avoid passing arbitrary
+        document metadata to Weaviate (e.g., 'aapl:keywords', 'pdf:Title', etc.),
+        which would violate Weaviate/GraphQL property name rules and cause 4xx/5xx
+        errors during insert/update.
 
         Args:
-            loader: A document loader instance with `load()` -> List[Document].
+            loader: A document loader instance exposing `load() -> List[Document]`.
         """
+        # 1) Load full documents
         documents: List[Document] = loader.load()
 
+        # 2) Split into chunks with your existing strategy
         for chunk in self._split_documents(documents):
-            sanitized_text = self._sanitize_text(chunk.page_content)
-            content_hash = self._generate_hash(sanitized_text)
+            # --- Sanitize and hash content (idempotency key) ---
+            sanitized_text: str = self._sanitize_text(chunk.page_content)
+            content_hash: str = self._generate_hash(sanitized_text)
 
+            # Skip duplicates quickly
             if self._vector_store_contains(content_hash):
                 continue
 
+            # 3) Generate embedding once per chunk
             embedding = self.embedding_service.generate(sanitized_text)
 
-            # Prepare metadata carefully, preserving loader metadata and adding access controls.
-            metadata = dict(getattr(chunk, "metadata", {}) or {})
-            metadata.update({
-                "content": sanitized_text,
-                "source": metadata.get("source", "document"),
-                "visibility": self.visibility,
-                "owner_id": self.owner_id,
-                "allowed_user_ids": self.allowed_user_ids,
-                "hash": content_hash,
-            })
-            metadata = self._prune_metadata(metadata)
+            # 4) Build SAFE metadata strictly from a whitelist.
+            #    DO NOT trust arbitrary keys from chunk.metadata (e.g., XMP tags).
+            raw_meta: Dict[str, Any] = dict(getattr(chunk, "metadata", {}) or {})
 
-            # Some vector stores accept tenant_id as a separate kwarg; keep compatibility.
+            # Only include fields explicitly supported by your Weaviate schema.
+            # Coerce types defensively to match schema expectations.
+            safe_metadata: Dict[str, Any] = {
+                "content": sanitized_text,                               # str
+                "source": str(raw_meta.get("source") or "document"),     # str
+                "visibility": str(self.visibility),                      # str
+                "owner_id": str(self.owner_id),                          # str
+                "allowed_user_ids": [str(u) for u in (self.allowed_user_ids or [])],  # list[str]
+                "hash": content_hash,                                    # str
+            }
+
+            # Do NOT add arbitrary metadata keys like 'path' if not in schema.
+            # If you need it for debugging, log it instead of sending to Weaviate.
+            # self.logger.debug("Chunk path (not sent to DB): %s", getattr(loader, "path", None))
+
+            # Final pruning/validation step (your function should enforce whitelist/regex/types)
+            safe_metadata = self._prune_metadata(safe_metadata)
+
+            # 5) Upsert in the vector store. Some repos accept tenant_id kwarg.
             try:
                 self.vector_store.upsert(
                     content_hash,
                     embedding,
-                    metadata,
+                    safe_metadata,
                     tenant_id=self.tenant_id,  # type: ignore[arg-type]
                 )
             except TypeError:
-                # Fallback for stores that do not support tenant_id as kwarg.
+                # Fallback for vector stores that don't accept tenant_id as a kwarg
                 self.vector_store.upsert(
                     content_hash,
                     embedding,
-                    metadata,
+                    safe_metadata,
                 )
 
     def _process_code_document(self, code_loader) -> None:
@@ -242,6 +253,7 @@ class IngestionPipeline:
             "allowed_user_ids": self.allowed_user_ids,
             "hash": summary_hash,
         }
+        metadata.setdefault("path", getattr(code_loader, "path", None))
         metadata = self._prune_metadata(metadata)
 
         try:
@@ -291,55 +303,59 @@ class IngestionPipeline:
     def _build_text_splitter(
         self,
         strategy: SplitterStrategy,
-        chunk_size: int,
-        chunk_overlap: int,
-        tokenizer_model_name: str,
-        markdown_levels: Sequence[tuple[str, str]],
-        semantic_embeddings: Optional[object],
+        options: PipelineOptions,
     ):
+        """Factory that returns a modern text splitter instance using registered strategies."""
+
+        builders: Dict[SplitterStrategy, Callable[[], object]] = {
+            SplitterStrategy.TOKEN: lambda: TokenTextSplitter(
+                chunk_size=options.chunk_size,
+                chunk_overlap=options.chunk_overlap,
+                model_name=options.tokenizer_model_name,
+            ),
+            SplitterStrategy.RECURSIVE: lambda: RecursiveCharacterTextSplitter(
+                chunk_size=options.chunk_size,
+                chunk_overlap=options.chunk_overlap,
+            ),
+            SplitterStrategy.MARKDOWN_HEADERS: lambda: MarkdownHeaderTextSplitter(
+                headers_to_split_on=self.markdown_levels,
+            ),
+        }
+
+        if SemanticChunker is not None:
+            builders[SplitterStrategy.SEMANTIC] = lambda: self._build_semantic_splitter(options)
+
+        builder = builders.get(strategy)
+        if builder is None:
+            raise ValueError(f"Unknown splitting strategy: {strategy}")
+        return builder()
+
+    def _build_semantic_splitter(self, options: PipelineOptions):
         """
-        Factory that returns a modern text splitter instance.
-
-        Returns:
-            A configured splitter instance from `langchain_text_splitters`
-            (or `langchain_experimental` for semantic).
+        Build a text splitter. If semantic chunking is requested, use SemanticChunker.
+        Otherwise fall back to fixed-size chunking.
         """
-        if strategy == SplitterStrategy.TOKEN:
-            # Token-aware splitter (sizes are in tokens).
-            return TokenTextSplitter(
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                model_name=tokenizer_model_name,
+        # Ensure the experimental SemanticChunker is available at runtime.
+        if SemanticChunker is None:
+            raise RuntimeError(
+                "SemanticChunker is not available; install langchain_experimental to use semantic splitting."
             )
 
-        if strategy == SplitterStrategy.RECURSIVE:
-            return RecursiveCharacterTextSplitter(
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-            )
+        embeddings = options.semantic_embeddings
+        if embeddings is None:
+            raise ValueError("options.semantic_embeddings must be provided to build a SemanticChunker.")
 
-        if strategy == SplitterStrategy.MARKDOWN_HEADERS:
-            # This splitter returns chunks by Markdown header hierarchy.
-            return MarkdownHeaderTextSplitter(headers_to_split_on=markdown_levels)
-
-        if strategy == SplitterStrategy.SEMANTIC:
-            if SemanticChunker is None:
-                raise ImportError(
-                    "SemanticChunker is not available. Install `langchain-experimental`."
-                )
-            if semantic_embeddings is None:
-                raise ValueError(
-                    "semantic_embeddings is required for SplitterStrategy.SEMANTIC."
-                )
-            # `buffer_size` acts like overlap; `chunk_size` hints target size.
-            return SemanticChunker(
-                semantic_embeddings,
-                breakpoint_threshold_type="percentile",
-                buffer_size=chunk_overlap,
-                chunk_size=chunk_size,
-            )
-
-        raise ValueError(f"Unknown splitting strategy: {strategy}")
+        # Cast both the class and the embeddings to Any to satisfy static type checkers
+        return cast(Any, SemanticChunker)(
+            cast(Any, embeddings),
+            breakpoint_threshold_type="percentile",  # 'percentile'|'standard_deviation'|'interquartile'|'gradient'
+            buffer_size=options.chunk_overlap,       # window between sentences
+            # Optional: control max number of chunks to produce
+            number_of_chunks=getattr(options, "number_of_chunks", None),
+            # Optional: tuning threshold (0–100 if using 'percentile')
+            breakpoint_threshold_amount=getattr(options, "breakpoint_threshold_amount", None),
+            add_start_index=True,
+        )
 
     def _split_documents(self, documents: List[Document]) -> Iterable[Document]:
         """
@@ -401,45 +417,99 @@ class IngestionPipeline:
         sanitized = self._sanitize_text(text)
         return hashlib.sha256(sanitized.encode("utf-8")).hexdigest()
 
-    @staticmethod
-    def _prune_metadata(metadata: dict) -> dict:
+    # TODO: refactor this metod to another using less if/else statements
+    def _prune_metadata(self, metadata: dict) -> dict:
         """
-        Drop metadata entries that are empty, blank, or None to satisfy strict vector stores.
+        Keep only properties that exist in the Weaviate class schema and coerce types.
+
+        Allowed keys correspond to RAGDocument schema:
+        - content: str
+        - source: str
+        - visibility: str
+        - owner_id: str
+        - allowed_user_ids: list[str]
+        - hash: str
+        Any other key (e.g., XMP/EXIF like 'aapl:keywords', 'pdf:Author', 'path', etc.) is dropped.
         """
-        cleaned: dict = {}
-        for key, value in metadata.items():
-            if value is None:
-                continue
-            if isinstance(value, str):
-                if not value.strip():
-                    continue
-                lower_key = key.lower()
-                if lower_key.endswith("date"):
-                    coerced = IngestionPipeline._coerce_datetime(value)
-                    if not coerced:
-                        continue
-                    cleaned[key] = coerced
-                    continue
-            if isinstance(value, (list, tuple, set)) and not any(item for item in value):
-                continue
-            cleaned[key] = value
-        return cleaned
+        allowed_keys = {
+            "content",
+            "source",
+            "visibility",
+            "owner_id",
+            "allowed_user_ids",
+            "hash",
+        }
+        pruned: dict = {}
+
+        # content
+        value = metadata.get("content")
+        if isinstance(value, str):
+            pruned["content"] = value
+
+        # source
+        value = metadata.get("source")
+        if isinstance(value, str):
+            pruned["source"] = value
+
+        # visibility
+        value = metadata.get("visibility")
+        if isinstance(value, str):
+            pruned["visibility"] = value
+
+        # owner_id
+        value = metadata.get("owner_id")
+        if isinstance(value, str):
+            pruned["owner_id"] = value
+
+        # allowed_user_ids
+        value = metadata.get("allowed_user_ids")
+        if value is None:
+            pass
+        elif isinstance(value, list):
+            pruned["allowed_user_ids"] = [str(x) for x in value]
+        elif isinstance(value, str):
+            pruned["allowed_user_ids"] = [value]
+        else:
+            # drop invalid types
+            pass
+
+        # hash
+        value = metadata.get("hash")
+        if isinstance(value, str):
+            pruned["hash"] = value
+
+        # Finally, ensure we did not leak any unexpected key
+        for k in list(pruned.keys()):
+            if k not in allowed_keys:
+                pruned.pop(k, None)
+
+        return pruned
 
     @staticmethod
     def _coerce_datetime(raw: str) -> Optional[str]:
-        """
-        Try to coerce various date representations into RFC3339 strings.
-        """
+        """Try to coerce various date representations into RFC3339 strings."""
         text = raw.strip()
         if not text:
             return None
 
-        # Normalize common timezone shorthands
-        if text.endswith("Z"):
-            candidate = text[:-1] + "+00:00"
-        else:
-            candidate = text
+        candidate = text[:-1] + "+00:00" if text.endswith("Z") else text
 
+        coerced = IngestionPipeline._coerce_by_strptime(candidate)
+        if coerced:
+            return coerced
+
+        coerced = IngestionPipeline._coerce_by_iso(candidate)
+        if coerced:
+            return coerced
+
+        coerced = IngestionPipeline._coerce_pdf_timestamp(text)
+        if coerced:
+            return coerced
+
+        return None
+
+    @staticmethod
+    def _coerce_by_strptime(candidate: str) -> Optional[str]:
         for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
             try:
                 dt = datetime.strptime(candidate, fmt)
@@ -447,44 +517,47 @@ class IngestionPipeline:
                 return dt.isoformat()
             except ValueError:
                 continue
+        return None
 
-        # Attempt ISO parsing with timezone information
+    @staticmethod
+    def _coerce_by_iso(candidate: str) -> Optional[str]:
         try:
             dt = datetime.fromisoformat(candidate)
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
             return dt.isoformat()
         except ValueError:
-            pass
+            return None
 
+    @staticmethod
+    def _coerce_pdf_timestamp(text: str) -> Optional[str]:
         # PDF timestamp format: D:YYYYMMDDHHmmSS[Z+-offset]
         m = re.match(r"^D:(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?([Zz]|[+-]\d{2}'?\d{2}')?$", text)
-        if m:
-            parts = m.groups()
-            y = int(parts[0])
-            month = int(parts[1] or "1")
-            day = int(parts[2] or "1")
-            hour = int(parts[3] or "0")
-            minute = int(parts[4] or "0")
-            second = int(parts[5] or "0")
-            tz_raw = parts[6] or "Z"
-            if tz_raw.upper() == "Z":
-                tz = timezone.utc
-            elif re.match(r"[+-]\d{2}'?\d{2}'?", tz_raw):
-                sign = 1 if tz_raw.startswith("+") else -1
-                digits = re.sub(r"[+'-]", "", tz_raw)
-                offset_hours = int(digits[:2])
-                offset_minutes = int(digits[2:4]) if len(digits) >= 4 else 0
-                tz = timezone(sign * timedelta(hours=offset_hours, minutes=offset_minutes))
-            else:
-                tz = timezone.utc
-            try:
-                dt = datetime(y, month, day, hour, minute, second, tzinfo=tz)
-                return dt.isoformat()
-            except ValueError:
-                return None
-
-        return None
+        if not m:
+            return None
+        parts = m.groups()
+        y = int(parts[0])
+        month = int(parts[1] or "1")
+        day = int(parts[2] or "1")
+        hour = int(parts[3] or "0")
+        minute = int(parts[4] or "0")
+        second = int(parts[5] or "0")
+        tz_raw = parts[6] or "Z"
+        if tz_raw.upper() == "Z":
+            tz = timezone.utc
+        elif re.match(r"[+-]\d{2}'?\d{2}'?", tz_raw):
+            sign = 1 if tz_raw.startswith("+") else -1
+            digits = re.sub(r"[+'-]", "", tz_raw)
+            offset_hours = int(digits[:2])
+            offset_minutes = int(digits[2:4]) if len(digits) >= 4 else 0
+            tz = timezone(sign * timedelta(hours=offset_hours, minutes=offset_minutes))
+        else:
+            tz = timezone.utc
+        try:
+            dt = datetime(y, month, day, hour, minute, second, tzinfo=tz)
+            return dt.isoformat()
+        except ValueError:
+            return None
 
     def _vector_store_contains(self, hash_id: str) -> bool:
         """

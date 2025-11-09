@@ -3,10 +3,10 @@ Module for ingesting documents and code into vector database.
 """
 import argparse
 from src.config.settings import Config
-from src.providers.lmstudio.model_manager import ModelManager
-from src.providers.lmstudio.embeddings import EmbeddingService
-from src.storage.vector.weaviate_repository import WeaviateRepository
+from src.providers.factory import ProviderFactory
+from src.vectorstores import get_vector_store
 from src.ingestion.pipeline import IngestionPipeline
+from src.cli.options import PipelineOptions
 
 
 def main():
@@ -18,20 +18,19 @@ def main():
     args = ap.parse_args()
 
     cfg = Config()
-    mm = ModelManager(
-        cfg.LMSTUDIO_API_ROOTS,
-        require_live=cfg.LMSTUDIO_REQUIRE_SERVER,
-    )
+    provider = ProviderFactory(cfg)
+    embed = provider.embeddings()
+    vector = get_vector_store(cfg)
 
-    embed = EmbeddingService(cfg, mm)
-    vector = WeaviateRepository(cfg)
-
-    pipeline = IngestionPipeline(
-        embedding_service=embed,
-        vector_store=vector,
+    pipeline_options = PipelineOptions(
         chunk_size=cfg.CHUNK_SIZE,
         chunk_overlap=cfg.CHUNK_OVERLAP,
         tenant_id=(cfg.WEAVIATE_DEFAULT_TENANT or None),
+    )
+    pipeline = IngestionPipeline.from_options(
+        embedding_service=embed,
+        vector_store=vector,
+        options=pipeline_options,
     )
     pipeline.ingest_paths(args.paths)
 

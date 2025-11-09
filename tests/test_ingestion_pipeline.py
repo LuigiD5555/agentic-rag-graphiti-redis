@@ -7,6 +7,7 @@ from typing import Dict, Any, Iterator, List, Optional
 import pytest
 
 from src.ingestion.pipeline import IngestionPipeline, SplitterStrategy
+from src.cli.options import PipelineOptions
 from src.interfaces.vector_interface import VectorInterface, SupportsExists
 
 
@@ -71,13 +72,15 @@ def test_ingestion_pipeline_sanitizes_and_upserts(tmp_path):
     pipeline = IngestionPipeline(
         embedding_service=embedding,
         vector_store=vector_store,
-        chunk_size=20,
-        chunk_overlap=0,
-        owner_id="user-1",
-        visibility="shared",
-        allowed_user_ids=["user-2"],
-        tenant_id="tenant-A",
-        splitter_strategy=SplitterStrategy.RECURSIVE,
+        options=PipelineOptions(
+            chunk_size=20,
+            chunk_overlap=0,
+            owner_id="user-1",
+            visibility="shared",
+            allowed_user_ids=["user-2"],
+            tenant_id="tenant-A",
+            splitter_strategy=SplitterStrategy.RECURSIVE,
+        ),
     )
 
     pipeline.ingest_paths([str(tmp_path)])
@@ -114,8 +117,10 @@ def test_ingestion_pipeline_skips_broken_symlink(tmp_path):
     pipeline = IngestionPipeline(
         embedding_service=embedding,
         vector_store=vector_store,
-        chunk_size=20,
-        chunk_overlap=0,
+        options=PipelineOptions(
+            chunk_size=20,
+            chunk_overlap=0,
+        ),
     )
 
     pipeline.ingest_paths([str(broken_link)])
@@ -133,9 +138,11 @@ def test_ingestion_pipeline_accepts_file_path(tmp_path):
     pipeline = IngestionPipeline(
         embedding_service=embedding,
         vector_store=vector_store,
-        chunk_size=20,
-        chunk_overlap=0,
-        splitter_strategy=SplitterStrategy.MARKDOWN_HEADERS,
+        options=PipelineOptions(
+            chunk_size=20,
+            chunk_overlap=0,
+            splitter_strategy=SplitterStrategy.MARKDOWN_HEADERS,
+        ),
     )
 
     pipeline.ingest_paths([str(doc)])

@@ -24,46 +24,15 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import Iterable, List, Set, Tuple
 
 from src.config.settings import Config
-from src.providers.lmstudio.model_manager import ModelManager
-from src.providers.lmstudio.embeddings import EmbeddingService
+from src.providers.factory import ProviderFactory
 from src.ingestion.pipeline import IngestionPipeline
+from src.cli.options import IngestionOptions, DiscoveryOptions, PipelineOptions
+from src.utils.decorators import timed, logged
 from src.vectorstores import get_vector_store
-
-
-# ------------------------------- Data model -------------------------------
-
-@dataclass(frozen=True)
-class IngestionOptions:
-    """
-    Immutable container for ingestion parameters.
-
-    Attributes:
-        root_paths: Root directories or individual files to ingest.
-        allowed_extensions: File extensions to include (lowercase, with leading dot). Empty set means "all".
-        excluded_directory_names: Directory *names* (not paths) to skip (e.g., {".git","node_modules"}).
-        follow_symbolic_links: Whether to follow symbolic links to directories in os.walk.
-        dry_run: If True, list candidates only; do not ingest.
-        per_file_mode: If True, ingest files one by one (more granular logs).
-        maximum_files: 0 means no limit; otherwise cut candidate list to this number.
-        log_level_name: Logging level name ("DEBUG", "INFO", ...).
-        scan_progress_every: Log a progress line every N visited directories (0 disables incremental scan logs).
-        excluded_path_globs: Path-like glob expressions (relative to each root) to exclude.
-    """
-    root_paths: Tuple[str, ...]
-    allowed_extensions: Set[str] = field(default_factory=set)
-    excluded_directory_names: Set[str] = field(default_factory=set)
-    excluded_path_globs: Set[str] = field(default_factory=set)
-    follow_symbolic_links: bool = False
-    dry_run: bool = False
-    per_file_mode: bool = False
-    maximum_files: int = 0
-    log_level_name: str = "INFO"
-    scan_progress_every: int = 0
 
 
 # --------------------------- Utility / helpers ----------------------------
@@ -79,25 +48,55 @@ def _normalize_extension(ext: str) -> str:
 class FileDiscoveryService:
     """Service that walks the filesystem and selects candidate files for ingestion."""
 
-    def discover(
-        self,
-        roots: Iterable[str],
-        allowed_extensions: Set[str],
-        excluded_directory_names: Set[str],
-        excluded_path_globs: Set[str],
-        follow_symbolic_links: bool,
-        progress_every: int = 0,
-    ) -> Tuple[List[str], int]:
+    # --- Strategies (simple interchangeable filters) ---
+    class _Strategy:
+        def allow_dir(self, rel_dirpath: str, dirname: str) -> bool:  # pragma: no cover - interface
+            return True
+
+        def allow_file(self, rel_dirpath: str, filename: str) -> bool:  # pragma: no cover - interface
+            return True
+
+    class _IgnoreDirsStrategy(_Strategy):
+        def __init__(self, excluded: Set[str]):
+            self._excluded = excluded
+
+        def allow_dir(self, rel_dirpath: str, dirname: str) -> bool:
+            return dirname not in self._excluded
+
+    class _ExtFilterStrategy(_Strategy):
+        def __init__(self, allowed_exts: Set[str]):
+            self._allowed = allowed_exts
+
+        def allow_file(self, rel_dirpath: str, filename: str) -> bool:
+            if not self._allowed:
+                return True
+            _, ext = os.path.splitext(filename)
+            return ext.lower() in self._allowed
+
+    class _GlobExclusionStrategy(_Strategy):
+        def __init__(self, patterns: Set[str]):
+            self._patterns = patterns
+
+        def allow_dir(self, rel_dirpath: str, dirname: str) -> bool:
+            if not self._patterns:
+                return True
+            relative = dirname if not rel_dirpath else os.path.join(rel_dirpath, dirname)
+            return not FileDiscoveryService._matches_any_glob(relative, self._patterns)
+
+        def allow_file(self, rel_dirpath: str, filename: str) -> bool:
+            if not self._patterns:
+                return True
+            relative = filename if not rel_dirpath else os.path.join(rel_dirpath, filename)
+            return not FileDiscoveryService._matches_any_glob(relative, self._patterns)
+
+    @logged("Starting file discovery")
+    @timed()
+    def discover(self, opts: DiscoveryOptions) -> Tuple[List[str], int]:
         """
         Traverse roots and return candidate file paths and visited directory count.
 
         Args:
-            roots: Root directories or files to scan.
-            allowed_extensions: Allowed file extensions in lowercase with leading dot.
-            excluded_directory_names: Directory *names* to exclude during traversal.
-            excluded_path_globs: Glob-like patterns (relative to each root) to exclude files or directories.
-            follow_symbolic_links: Whether to follow symlinks when walking the tree.
-            progress_every: If > 0, log a progress line every N visited directories.
+            opts: DiscoveryOptions controlling traversal and filters.
 
         Returns:
             (files, visited_dir_count)
@@ -105,7 +104,7 @@ class FileDiscoveryService:
         files: List[str] = []
         visited_dirs = 0
 
-        for raw_root in roots:
+        for raw_root in opts.roots:
             root = os.path.abspath(raw_root)
             if not os.path.exists(root):
                 logging.warning("Root does not exist: %s", root)
@@ -113,46 +112,38 @@ class FileDiscoveryService:
 
             if os.path.isfile(root):
                 rel_file = os.path.basename(root)
-                if self._matches_any_glob(rel_file, excluded_path_globs):
+                if self._matches_any_glob(rel_file, opts.excluded_globs):
                     continue
                 _, ext = os.path.splitext(root)
-                if not allowed_extensions or ext.lower() in allowed_extensions:
+                if self._is_allowed_ext(ext, opts.allowed_exts):
                     files.append(root)
                 continue
 
+            # Build filters for this traversal
+            filters = self._build_filters(opts)
+
             # Walk directory tree
-            for dirpath, dirnames, filenames in os.walk(root, followlinks=follow_symbolic_links):
+            for dirpath, dirnames, filenames in os.walk(root, followlinks=opts.follow_symlinks):
                 visited_dirs += 1
 
                 # Scan progress (incremental feedback)
-                if progress_every and (visited_dirs % progress_every == 0):
+                if opts.progress_every and (visited_dirs % opts.progress_every == 0):
                     logging.info("Scanning… visited=%d dir(s), current=%s", visited_dirs, dirpath)
 
                 rel_dirpath = os.path.relpath(dirpath, root)
                 if rel_dirpath == ".":
                     rel_dirpath = ""
 
-                if rel_dirpath and self._matches_any_glob(rel_dirpath, excluded_path_globs):
+                if rel_dirpath and self._matches_any_glob(rel_dirpath, opts.excluded_globs):
                     dirnames[:] = []
                     continue
 
-                # In-place filter to prune traversal
-                pruned_dirnames = []
-                for dirname in dirnames:
-                    if dirname in excluded_directory_names:
-                        continue
-                    relative_dir = dirname if not rel_dirpath else os.path.join(rel_dirpath, dirname)
-                    if self._matches_any_glob(relative_dir, excluded_path_globs):
-                        continue
-                    pruned_dirnames.append(dirname)
+                # In-place filter to prune traversal (by strategies)
+                pruned_dirnames = [d for d in dirnames if all(s.allow_dir(rel_dirpath, d) for s in filters)]
                 dirnames[:] = pruned_dirnames
 
                 for filename in filenames:
-                    _, ext = os.path.splitext(filename)
-                    if allowed_extensions and ext.lower() not in allowed_extensions:
-                        continue
-                    relative_file = filename if not rel_dirpath else os.path.join(rel_dirpath, filename)
-                    if self._matches_any_glob(relative_file, excluded_path_globs):
+                    if not all(s.allow_file(rel_dirpath, filename) for s in filters):
                         continue
                     files.append(os.path.join(dirpath, filename))
 
@@ -189,6 +180,22 @@ class FileDiscoveryService:
                 return True
         return False
 
+    @staticmethod
+    def _is_allowed_ext(ext: str, allowed: Set[str]) -> bool:
+        if not allowed:
+            return True
+        return ext.lower() in allowed
+
+    # Strategy builder
+    def _build_filters(self, opts: DiscoveryOptions) -> List["FileDiscoveryService._Strategy"]:
+        filters: List[FileDiscoveryService._Strategy] = []
+        if opts.excluded_dirs:
+            filters.append(FileDiscoveryService._IgnoreDirsStrategy(opts.excluded_dirs))
+        if opts.excluded_globs:
+            filters.append(FileDiscoveryService._GlobExclusionStrategy(opts.excluded_globs))
+        filters.append(FileDiscoveryService._ExtFilterStrategy(opts.allowed_exts))
+        return filters
+
 
 # ------------------------ Orchestration / application ---------------------
 
@@ -201,11 +208,28 @@ class IngestionOrchestrator:
 
     def run(self, options: IngestionOptions) -> None:
         """Execute the ingestion flow end-to-end, respecting provided options."""
+        # Guard clauses
         if not options.root_paths:
             raise ValueError("At least one root path must be provided.")
         if all(not os.path.exists(p) for p in options.root_paths):
             raise FileNotFoundError("None of the provided root paths exist.")
 
+        self._log_discovery_intro(options)
+        candidates, visited_dirs = self._discover_files(options)
+        candidates = self._cap_candidates(candidates, options.maximum_files)
+
+        logging.info("Visited directories: %d", visited_dirs)
+        logging.info("Candidate files found: %d", len(candidates))
+
+        if options.dry_run:
+            self._report_dry_run(candidates)
+            return
+
+        pipeline = self._build_pipeline()
+        ingested, failed = self._ingest(candidates, pipeline, per_file=options.per_file_mode)
+        self._report_final(ingested, failed)
+
+    def _log_discovery_intro(self, options: IngestionOptions) -> None:
         logging.info("Roots to scan (%d): %s", len(options.root_paths), list(options.root_paths))
         logging.info(
             "Allowed extensions: %s",
@@ -220,55 +244,46 @@ class IngestionOrchestrator:
             sorted(options.excluded_path_globs) if options.excluded_path_globs else "(none)",
         )
 
-        candidates, visited_dirs = self._discovery.discover(
+    def _discover_files(self, options: IngestionOptions) -> Tuple[List[str], int]:
+        disc_opts = DiscoveryOptions(
             roots=options.root_paths,
-            allowed_extensions=options.allowed_extensions,
-            excluded_directory_names=options.excluded_directory_names,
-            excluded_path_globs=options.excluded_path_globs,
-            follow_symbolic_links=options.follow_symbolic_links,
+            allowed_exts=options.allowed_extensions,
+            excluded_dirs=options.excluded_directory_names,
+            excluded_globs=options.excluded_path_globs,
+            follow_symlinks=options.follow_symbolic_links,
             progress_every=max(0, int(options.scan_progress_every or 0)),
         )
+        return self._discovery.discover(disc_opts)
 
-        total_candidates = len(candidates)
-        if options.maximum_files and total_candidates > options.maximum_files:
-            candidates = candidates[: options.maximum_files]
+    @staticmethod
+    def _cap_candidates(candidates: List[str], maximum: int) -> List[str]:
+        if not maximum or maximum <= 0:
+            return candidates
+        return candidates[:maximum]
 
-        logging.info("Visited directories: %d", visited_dirs)
-        logging.info(
-            "Candidate files found: %d%s",
-            total_candidates,
-            f" (limited to first {len(candidates)})"
-            if options.maximum_files and total_candidates > options.maximum_files
-            else "",
-        )
-
-        if options.dry_run:
-            for path in candidates:
-                print(path)
-            logging.info("Dry-run complete. No ingestion performed.")
-            return
-
+    def _build_pipeline(self) -> IngestionPipeline:
         logging.info("Initializing services (LM Studio, EmbeddingService, VectorStore, Pipeline)…")
-        # FIX: pass API roots list (or string) to ModelManager, not Config
-        model_manager = ModelManager(
-            api_roots=self._config.LMSTUDIO_API_ROOTS,
-            require_live=self._config.LMSTUDIO_REQUIRE_SERVER,
-        )
-        embedding_service = EmbeddingService(self._config, model_manager)
+        provider = ProviderFactory(self._config)
+        embedding_service = provider.embeddings()
         vector_store = get_vector_store(self._config)
-        pipeline = IngestionPipeline(
-            embedding_service=embedding_service,
-            vector_store=vector_store,
+        pipeline_options = PipelineOptions(
             chunk_size=self._config.CHUNK_SIZE,
             chunk_overlap=self._config.CHUNK_OVERLAP,
             tenant_id=(self._config.WEAVIATE_DEFAULT_TENANT or None),
         )
+        return IngestionPipeline.from_options(
+            embedding_service=embedding_service,
+            vector_store=vector_store,
+            options=pipeline_options,
+        )
 
+    @staticmethod
+    def _ingest(candidates: List[str], pipeline: IngestionPipeline, per_file: bool) -> Tuple[int, int]:
         logging.info("Starting ingestion. Files to ingest: %d", len(candidates))
         ingested = 0
         failed = 0
 
-        if options.per_file_mode:
+        if per_file:
             for index, path in enumerate(candidates, start=1):
                 logging.info("[%-5d/%-5d] Ingesting: %s", index, len(candidates), path)
                 try:
@@ -277,14 +292,24 @@ class IngestionOrchestrator:
                 except (OSError, ValueError, RuntimeError) as exc:
                     failed += 1
                     logging.error("Failed to ingest %s: %s", path, exc)
-        else:
-            try:
-                pipeline.ingest_paths(candidates)
-                ingested = len(candidates)
-            except (OSError, ValueError, RuntimeError) as exc:
-                failed = len(candidates)
-                logging.error("Batch ingestion failed: %s", exc)
+            return ingested, failed
 
+        try:
+            pipeline.ingest_paths(candidates)
+            ingested = len(candidates)
+        except (OSError, ValueError, RuntimeError) as exc:
+            failed = len(candidates)
+            logging.error("Batch ingestion failed: %s", exc)
+        return ingested, failed
+
+    @staticmethod
+    def _report_dry_run(candidates: List[str]) -> None:
+        for path in candidates:
+            print(path)
+        logging.info("Dry-run complete. No ingestion performed.")
+
+    @staticmethod
+    def _report_final(ingested: int, failed: int) -> None:
         logging.info("Ingestion finished. ingested=%d, failed=%d", ingested, failed)
 
 

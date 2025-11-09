@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.main import FileDiscoveryService
+from src.cli.options import DiscoveryOptions
 
 
 def test_file_discovery_respects_directory_and_glob_excludes(tmp_path):
@@ -22,14 +23,15 @@ def test_file_discovery_respects_directory_and_glob_excludes(tmp_path):
     (tmp_path / "notes.tmp").write_text("tmp", encoding="utf-8")
 
     discovery = FileDiscoveryService()
-    files, _ = discovery.discover(
-        roots=[str(tmp_path)],
-        allowed_extensions=set(),
-        excluded_directory_names={"env"},
-        excluded_path_globs={"logs/**", "*.tmp"},
-        follow_symbolic_links=False,
+    opts = DiscoveryOptions(
+        roots=(str(tmp_path),),
+        allowed_exts=set(),
+        excluded_dirs={"env"},
+        excluded_globs={"logs/**", "*.tmp"},
+        follow_symlinks=False,
         progress_every=0,
     )
+    files, _ = discovery.discover(opts)
 
     assert str(keep_dir / "keep.md") in files
     assert all("logs" not in path for path in files)
