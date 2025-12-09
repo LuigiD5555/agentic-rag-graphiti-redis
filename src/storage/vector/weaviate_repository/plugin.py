@@ -12,7 +12,7 @@ class WeaviateVectorPlugin(StoragePluginInterface):
     """
     Storage plugin that wraps WeaviateRepository and exposes it as a vector backend.
 
-    This allows configuring the engine via a dotted path, Django-style.
+    This allows configuring the engine via a dotted path.
     """
 
     def __init__(self, config: Config | None = None, **_: Any) -> None:
@@ -24,8 +24,8 @@ class WeaviateVectorPlugin(StoragePluginInterface):
         """
         Return the underlying VectorInterface implementation.
 
-        This mirrors the idea of Django backends exposing a connection/wrapper,
-        while keeping callers decoupled from the concrete repository class.
+        This expose a connection/wrapper, while keeping callers decoupled from the
+        concrete repository class.
         """
         return self._repo
 

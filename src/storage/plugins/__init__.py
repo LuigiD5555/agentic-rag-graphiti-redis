@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 def _import_string(dotted_path: str) -> Any:
     """
-    Import a class or object from a dotted path, similar to Django's import_string.
+    Import a class or object from a dotted path.
 
     Example: "src.storage.vector.weaviate_repository.plugin.WeaviateVectorPlugin"
     """
@@ -23,7 +23,7 @@ def _import_string(dotted_path: str) -> Any:
 
 def load_storage_backend(engine_path: str) -> Any:
     """
-    Load a storage backend class from an ENGINE string, Django-style.
+    Load a storage backend class from an ENGINE string.
 
     The returned object is the class; callers are responsible for instantiation.
     """

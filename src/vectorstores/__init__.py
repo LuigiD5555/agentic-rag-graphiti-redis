@@ -8,7 +8,7 @@ Usage in your app:
     cfg = Config()
     vector = get_vector_store(cfg)  # returns the configured backend (Weaviate by default)
 
-The implementation follows a Django-style ENGINE pattern via src.storage.plugins.
+The implementation follows a ENGINE pattern via src.storage.plugins.
 """
 
 from typing import Any, cast
@@ -22,7 +22,6 @@ def _build_default_vector_storage_config(config: Config) -> dict[str, Any]:
     """
     Build a default storage config dict for the vector backend.
 
-    This mirrors Django's DATABASES style, but is simplified for now.
     """
     backend = (getattr(config, "VECTOR_BACKEND", "weaviate") or "weaviate").lower()
 
