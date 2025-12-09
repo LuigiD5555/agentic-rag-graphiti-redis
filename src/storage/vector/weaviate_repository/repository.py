@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional, Iterator, Callable, TypeVar
+from typing import Any, Callable, Dict, Iterator, List, Optional, TypeVar
 from urllib.parse import urlparse
 
 import requests
@@ -15,177 +15,19 @@ from weaviate.classes.query import Filter
 from weaviate.exceptions import UnexpectedStatusCodeError
 
 from src.config.settings import Config
-from src.interfaces.vector_interface import VectorInterface, ScoredItem
+from src.interfaces.vector_interface import ScoredItem, VectorInterface
 from src import logger
-from src.utils.decorators import timed, logged
+from src.utils.decorators import logged, timed
+
+from .schema import SchemaManager
 
 T = TypeVar("T")
 
 
-class SchemaManager:
-    """
-    Encapsulates schema and tenant lifecycle concerns for a single Weaviate class.
-
-    Keeps WeaviateRepository focused on vector operations while centralizing
-    collection creation and tenant handling.
-    """
-
-    def __init__(
-        self,
-        client: WeaviateClient,
-        cfg: Config,
-        class_name: str,
-        multitenant_enabled: bool,
-        default_tenant: Optional[str],
-        vector_config_builder: Callable[[], Dict[str, Any]],
-        class_properties_provider: Callable[[], List[Property]],
-    ) -> None:
-        self.client = client
-        self.cfg = cfg
-        self.class_name = class_name
-        self.multitenant_enabled = multitenant_enabled
-        self.default_tenant = default_tenant
-        self._vector_config_builder = vector_config_builder
-        self._class_properties_provider = class_properties_provider
-
-    def ensure_class(self) -> None:
-        """
-        Ensure the target collection exists; create it if missing.
-        """
-        schema = self.client.collections
-        existing_classes = schema.list_all()
-        names = [c.name if hasattr(c, "name") else str(c) for c in existing_classes]
-        if self.class_name not in names:
-            self._create_class(schema)
-        if self.multitenant_enabled and self.default_tenant:
-            self._ensure_default_tenant()
-
-    def coll(self, tenant_id: Optional[str]):
-        """
-        Get the collection handle, optionally bound to a tenant.
-        """
-        coll = self.client.collections.get(self.class_name)
-        if not self.multitenant_enabled:
-            return coll
-
-        effective_tenant = tenant_id or self.default_tenant
-        if not effective_tenant:
-            raise RuntimeError(
-                "Weaviate multi-tenancy is enabled but no tenant_id was provided. "
-                "Set WEAVIATE_DEFAULT_TENANT or pass tenant_id explicitly."
-            )
-        return coll.with_tenant(str(effective_tenant))
-
-    def _create_class(self, schema) -> None:
-        """
-        Create the collection with modern vector configuration.
-
-        Tries `vector_config` (v4) and falls back to `vectorizer_config`
-        on older clients.
-        """
-        vector_kwargs = self._vector_config_builder()
-
-        try:
-            schema.create(
-                self.class_name,
-                properties=self._class_properties_provider(),
-                multi_tenancy_config=Configure.multi_tenancy(enabled=self.multitenant_enabled),
-                **vector_kwargs,
-            )
-        except (TypeError, ValueError):
-            # Legacy argument for older client variants
-            schema.create(
-                self.class_name,
-                vectorizer_config=Configure.Vectorizer.none(),
-                properties=self._class_properties_provider(),
-                multi_tenancy_config=Configure.multi_tenancy(enabled=self.multitenant_enabled),
-            )
-        logger.info(
-            "Created Weaviate class '%s' (multitenant=%s)",
-            self.class_name,
-            self.multitenant_enabled,
-        )
-
-    def _ensure_default_tenant(self) -> None:
-        """
-        Create the configured default tenant if missing (Weaviate multi-tenancy).
-        """
-        collection = self.client.collections.get(self.class_name)
-        tenants_api = getattr(collection, "tenants", None)
-        if tenants_api is None:
-            logger.warning(
-                "Weaviate client does not expose tenants API while multitenancy is enabled."
-            )
-            return
-
-        existing = self._list_tenant_names(tenants_api)
-        if self.default_tenant in existing:
-            return
-
-        self._create_tenant(tenants_api, self.default_tenant)
-
-    @staticmethod
-    def _list_tenant_names(tenants_api) -> set[str]:
-        existing: set[str] = set()
-        try:
-            listed = tenants_api.list() if hasattr(tenants_api, "list") else tenants_api.get()  # type: ignore[attr-defined]
-        except Exception:
-            listed = []
-
-        for tenant in listed or []:
-            name = getattr(tenant, "name", None)
-            if not name and isinstance(tenant, dict):
-                name = tenant.get("name") or tenant.get("id")
-            if not name:
-                name = str(tenant)
-            existing.add(str(name))
-        return existing
-
-    @staticmethod
-    def _create_tenant(tenants_api, name: str) -> None:
-        try:
-            tenants_api.create([name])
-            return
-        except TypeError:
-            try:
-                tenants_api.create(name)
-                return
-            except TypeError:
-                try:
-                    from weaviate.classes.tenants import Tenant  # type: ignore
-
-                    tenants_api.create(Tenant(name=name))  # type: ignore[call-arg]
-                    return
-                except Exception as exc:
-                    if "already exist" not in str(exc).lower():
-                        raise
-            except Exception as exc:
-                if "already exist" not in str(exc).lower():
-                    raise
-        except Exception as exc:
-            if "already exist" not in str(exc).lower():
-                raise
-
-
 class WeaviateRepository(VectorInterface):
-    """
-    Weaviate adapter that conforms to VectorInterface (Python client v4 only).
-
-    Public methods:
-        - upsert(key, vector, metadata, tenant_id=None) -> None
-        - batch_upsert(records, tenant_id=None) -> None
-        - search(vector, top_k=5, filters=None, tenant_id=None) -> List[ScoredItem]
-        - iter_payloads(batch_size=256, tenant_id=None) -> Iterator[dict]
-    """
+    """Weaviate adapter that conforms to VectorInterface (Python client v4 only)."""
 
     def __init__(self, config: Optional[Config] = None) -> None:
-        """
-        Initialize repository and ensure Weaviate connectivity and schema.
-
-        Notes:
-            - Uses Weaviate Python client v4 (with compatibility fallbacks).
-            - Removes any v3 fallback logic.
-        """
         cfg = config or Config()
         self._class = cfg.WEAVIATE_CLASS
         self._mt = bool(cfg.WEAVIATE_MULTI_TENANCY)
@@ -196,9 +38,8 @@ class WeaviateRepository(VectorInterface):
         self._connect_retries = max(1, int(getattr(cfg, "WEAVIATE_CONNECT_RETRIES", 5)))
         self._connect_backoff = max(0.1, float(getattr(cfg, "WEAVIATE_CONNECT_BACKOFF", 2.0)))
 
-        # Track whether the collection uses named vectors (affects querying)
         self._uses_named_vectors: bool = False
-        self._target_vector_name: Optional[str] = None  # e.g., "default" if named vectors are enabled
+        self._target_vector_name: Optional[str] = None
 
         additional = self._build_additional_config()
         self.client = self._retry("connect", lambda: self._init_client_v4(cfg, additional))
@@ -219,19 +60,6 @@ class WeaviateRepository(VectorInterface):
     # -------------------------------------------------------------------------
 
     def _retry(self, name: str, func: Callable[[], T]) -> T:
-        """
-        Retry helper with backoff for transient failures.
-
-        Args:
-            name: Human-readable operation name for logging.
-            func: Callable to execute.
-
-        Returns:
-            The callable's return value.
-
-        Raises:
-            The last captured exception if all attempts fail.
-        """
         last_exc: Optional[Exception] = None
         for attempt in range(1, self._connect_retries + 1):
             try:
@@ -251,12 +79,6 @@ class WeaviateRepository(VectorInterface):
         raise last_exc
 
     def _build_additional_config(self) -> Optional[AdditionalConfig]:
-        """
-        Build AdditionalConfig with Timeout settings if supported by the installed client.
-
-        Returns:
-            AdditionalConfig instance or None if construction fails.
-        """
         try:
             return AdditionalConfig(
                 timeout=Timeout(init=self._timeout, query=self._timeout, insert=self._timeout)
@@ -265,9 +87,6 @@ class WeaviateRepository(VectorInterface):
             return None
 
     def _nodes_payload_has_leader(self, payload: Any) -> bool:
-        """
-        Best-effort check to detect a Raft leader in /v1/nodes payload.
-        """
         try:
             nodes = payload if isinstance(payload, list) else payload.get("nodes")
         except Exception:
@@ -293,9 +112,6 @@ class WeaviateRepository(VectorInterface):
         return False
 
     def _wait_for_cluster_ready(self, cfg: Config) -> None:
-        """
-        Wait until Weaviate reports readiness and a Raft leader exists.
-        """
         base_url = cfg.WEAVIATE_URL.rstrip("/")
         deadline = time.time() + max(float(self._timeout) * 6.0, 60.0)
         last_error: Optional[Exception] = None
@@ -363,16 +179,6 @@ class WeaviateRepository(VectorInterface):
         return None
 
     def _init_client_v4(self, cfg: Config, additional: Optional[AdditionalConfig]) -> WeaviateClient:
-        """
-        Initialize a Weaviate v4 client using `connect_to_custom`.
-
-        Args:
-            cfg: Application configuration instance.
-            additional: Optional AdditionalConfig.
-
-        Returns:
-            An initialized WeaviateClient.
-        """
         parsed = urlparse(cfg.WEAVIATE_URL)
         scheme = (parsed.scheme or "http").lower()
         host = parsed.hostname or cfg.WEAVIATE_URL
@@ -405,7 +211,6 @@ class WeaviateRepository(VectorInterface):
         return client
 
     def _class_properties(self) -> List[Property]:
-        """Value object for class properties (kept in one place)."""
         return [
             Property(name="external_id", data_type=DataType.TEXT, tokenization=Tokenization.WORD),
             Property(name="content", data_type=DataType.TEXT, tokenization=Tokenization.WORD),
@@ -418,15 +223,7 @@ class WeaviateRepository(VectorInterface):
         ]
 
     def _build_vector_config_kwargs(self) -> Dict[str, Any]:
-        """
-        Build keyword arguments for schema.create that are compatible with the installed
-        weaviate-client version. Prefer named vector 'default' when possible.
-        """
         vectorizer_none = Configure.Vectorizer.none()
-
-        # Build as named vectors with a single "default" entry, using dicts to
-        # avoid class/signature drift between client versions. This satisfies
-        # clients that expect vector_config to be a list and require a name.
         self._uses_named_vectors = True
         self._target_vector_name = "default"
         return {
@@ -439,20 +236,7 @@ class WeaviateRepository(VectorInterface):
         }
 
     def _coll(self, tenant_id: Optional[str]):
-        """
-        Get the collection handle, optionally bound to a tenant.
-
-        Args:
-            tenant_id: Tenant name if multi-tenancy is enabled.
-
-        Returns:
-            Collection handle.
-        """
         return self.schema.coll(tenant_id)
-
-    # -------------------------------------------------------------------------
-    # VectorInterface implementation
-    # -------------------------------------------------------------------------
 
     @logged("Upserting record into Weaviate")
     @timed()
@@ -463,18 +247,6 @@ class WeaviateRepository(VectorInterface):
         metadata: Dict[str, Any],
         tenant_id: Optional[str] = None,
     ) -> None:
-        """
-        Insert or update an object using a stable identifier.
-
-        Args:
-            key: Preferred unique id to use as UUID.
-            vector: Vector to store (required if using vectorizer 'none' or named vectors).
-            metadata: Object properties. 'content' is treated as the primary text field.
-            tenant_id: Optional tenant name.
-
-        Raises:
-            ValueError: If a stable id cannot be determined.
-        """
         coll = self._coll(tenant_id)
 
         raw_id = key or metadata.get("hash") or metadata.get("external_id")
@@ -495,11 +267,6 @@ class WeaviateRepository(VectorInterface):
         records: List[Dict[str, Any]],
         tenant_id: Optional[str] = None,
     ) -> None:
-        """
-        Batch upsert convenience method.
-
-        Each record must contain: {"key": str|None, "vector": List[float], "metadata": dict}
-        """
         coll = self._coll(tenant_id)
         for rec in records:
             key = rec.get("key")
@@ -515,13 +282,8 @@ class WeaviateRepository(VectorInterface):
             self._upsert_record(coll, uuid_id, vector, properties, text_content)
 
     def _upsert_record(self, coll, uuid_id: str, vector: List[float], properties: Dict[str, Any], text: str) -> None:
-        """
-        Insert-or-update primitive that first tries insert, then falls back to update.
-        """
         payload = {**properties, "content": text}
         try:
-            # BYOV: pass single `vector`. With one named vector ("default"),
-            # the server assigns it correctly even in named-vector schemas.
             coll.data.insert(uuid=uuid_id, properties=payload, vector=vector)
             return
         except UnexpectedStatusCodeError as exc:
@@ -540,9 +302,6 @@ class WeaviateRepository(VectorInterface):
             self._update_existing(coll, uuid_id, payload, vector)
 
     def _update_existing(self, coll, uuid_id: str, payload: Dict[str, Any], vector: List[float]) -> None:
-        """
-        Update an object by UUID; if Weaviate returns 404, re-insert it.
-        """
         try:
             coll.data.update(uuid=uuid_id, properties=payload, vector=vector)
         except UnexpectedStatusCodeError as exc:
@@ -560,15 +319,6 @@ class WeaviateRepository(VectorInterface):
             raise
 
     def _build_where(self, filters: Optional[Dict[str, Any]]) -> Optional[Filter]:
-        """
-        Build a boolean filter according to visibility and user ownership.
-
-        Args:
-            filters: Dictionary with visibility/owner_id/user_id conditions.
-
-        Returns:
-            A Filter instance or None if no conditions are required.
-        """
         if not filters:
             return None
 
@@ -577,7 +327,6 @@ class WeaviateRepository(VectorInterface):
         if filters.get("visibility") == "public":
             shoulds.append(Filter.by_property("visibility").equal("public"))
         else:
-            # Public is always a permissible option in our model
             shoulds.append(Filter.by_property("visibility").equal("public"))
 
         owner_id = filters.get("owner_id")
@@ -586,7 +335,6 @@ class WeaviateRepository(VectorInterface):
 
         user_id = filters.get("user_id")
         if user_id:
-            # Either explicitly allowed or owned by the user
             shoulds.append(Filter.by_property("allowed_user_ids").contains_any([user_id]))
             shoulds.append(Filter.by_property("owner_id").equal(user_id))
 
@@ -600,9 +348,6 @@ class WeaviateRepository(VectorInterface):
 
     @staticmethod
     def _normalize_uuid(value: Any) -> str:
-        """
-        Convert arbitrary stable ids into UUID strings accepted by Weaviate.
-        """
         import uuid
 
         try:
@@ -619,10 +364,6 @@ class WeaviateRepository(VectorInterface):
         filters: Optional[Dict[str, Any]] = None,
         tenant_id: Optional[str] = None,
     ) -> List[ScoredItem]:
-        """
-        Vector search using `near_vector`. If named vectors are enabled, the
-        query specifies `target_vector` automatically (defaults to "default").
-        """
         coll = self._coll(tenant_id)
         where = self._build_where(filters)
 
@@ -631,7 +372,7 @@ class WeaviateRepository(VectorInterface):
                 vector=vector,
                 limit=top_k,
                 filters=where,
-                target_vector=self._target_vector_name,  # required when using named vectors
+                target_vector=self._target_vector_name,
             )
         else:
             result = coll.query.near_vector(
@@ -654,16 +395,6 @@ class WeaviateRepository(VectorInterface):
         batch_size: int = 256,
         tenant_id: Optional[str] = None
     ) -> Iterator[Dict[str, Any]]:
-        """
-        Iterate all stored object properties in pages.
-
-        Args:
-            batch_size: Page size.
-            tenant_id: Optional tenant name.
-
-        Yields:
-            Object properties for each stored document.
-        """
         coll = self._coll(tenant_id)
         cursor: Optional[str] = None
 
@@ -681,14 +412,7 @@ class WeaviateRepository(VectorInterface):
             if not getattr(page_info, "has_next_page", False):
                 break
 
-    # -------------------------------------------------------------------------
-    # Cleanup
-    # -------------------------------------------------------------------------
-
     def __del__(self) -> None:
-        """
-        Ensure client close on GC if available.
-        """
         try:
             if hasattr(self, "client") and isinstance(self.client, weaviate.WeaviateClient):
                 self.client.close()

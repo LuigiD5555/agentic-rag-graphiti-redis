@@ -7,12 +7,34 @@ Usage in your app:
 
     cfg = Config()
     vector = get_vector_store(cfg)  # returns the configured backend (Weaviate by default)
+
+The implementation follows a Django-style ENGINE pattern via src.storage.plugins.
 """
 
-from typing import cast
+from typing import Any, cast
+
 from src.config.settings import Config
 from src.interfaces.vector_interface import VectorInterface
-from src.storage.vector.weaviate_repository import WeaviateRepository
+from src.storage.plugins import create_storage_instance
+
+
+def _build_default_vector_storage_config(config: Config) -> dict[str, Any]:
+    """
+    Build a default storage config dict for the vector backend.
+
+    This mirrors Django's DATABASES style, but is simplified for now.
+    """
+    backend = (getattr(config, "VECTOR_BACKEND", "weaviate") or "weaviate").lower()
+
+    if backend == "weaviate":
+        # ENGINE points to the plugin class; additional options could be passed
+        # here in the future if needed.
+        return {
+            "ENGINE": "src.storage.vector.weaviate_repository.plugin.WeaviateVectorPlugin",
+            "BACKEND": backend,
+        }
+
+    raise ValueError(f"Unsupported VECTOR_BACKEND: {backend}")
 
 
 def get_vector_store(config: Config) -> VectorInterface:
@@ -20,11 +42,23 @@ def get_vector_store(config: Config) -> VectorInterface:
     Create the vector store backend selected in settings.
     Supported values today:
         - "weaviate"  (default)
-    Future backends can be added here (e.g., "milvus", "faiss", "pgvector").
+    Future backends can be added by introducing new plugins and
+    mapping VECTOR_BACKEND values to their ENGINE strings.
     """
-    backend = (getattr(config, "VECTOR_BACKEND", "weaviate") or "weaviate").lower()
+    storage_cfg = _build_default_vector_storage_config(config)
 
-    if backend == "weaviate":
-        return cast(VectorInterface, WeaviateRepository(config))
+    # Pass the Config instance explicitly so plugins can reuse it.
+    plugin = create_storage_instance(
+        {
+            **storage_cfg,
+            "config": config,
+        }
+    )
 
-    raise ValueError(f"Unsupported VECTOR_BACKEND: {backend}")
+    # Prefer an explicit get_client() method on the plugin, if present.
+    client = getattr(plugin, "get_client", None)
+    if callable(client):
+        return cast(VectorInterface, client())
+
+    # Fallback to a '_repo' attribute or the plugin itself.
+    return cast(VectorInterface, getattr(plugin, "_repo", plugin))
