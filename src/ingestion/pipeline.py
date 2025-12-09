@@ -36,10 +36,23 @@ from src.cli.options import PipelineOptions
 from src.utils.decorators import timed, logged
 from src.ingestion.loaders.pdf_loader import PDFLoader
 from src.ingestion.loaders.docx_loader import DocxLoader
+from src.ingestion.loaders.word_loader import WordLoader
 from src.ingestion.loaders.text_loader import PlainTextLoader
 from src.ingestion.loaders.md_loader import MarkdownLoader
+from src.ingestion.loaders.csv_loader import CSVLoader
+from src.ingestion.loaders.xlsx_loader import ExcelLoader
+from src.ingestion.loaders.ppt_loader import PowerPointLoader
+from src.ingestion.loaders.odf_loader import OpenDocumentLoader
+from src.ingestion.loaders.email_loader import EmailLoader
 from src.ingestion.loaders.py_loader import PythonCodeStructure
 from src.ingestion.loaders.js_loader import JavaScriptCodeStructure
+from src.ingestion.loaders.ts_loader import TypeScriptCodeStructure
+from src.ingestion.loaders.java_loader import JavaCodeStructure
+from src.ingestion.loaders.go_loader import GoCodeStructure
+from src.ingestion.loaders.ruby_loader import RubyCodeStructure
+from src.ingestion.loaders.csharp_loader import CSharpCodeStructure
+from src.ingestion.loaders.php_loader import PHPCodeStructure
+from src.ingestion.loaders.c_loader import CCodeStructure
 from src import logger
 
 
@@ -131,14 +144,40 @@ class IngestionPipeline:
             self._process_text_document(PDFLoader(full_path))
         elif full_path.endswith(".docx"):
             self._process_text_document(DocxLoader(full_path))
+        elif full_path.endswith((".doc", ".docm", ".rtf")):
+            self._process_text_document(WordLoader(full_path))
         elif full_path.endswith(".txt"):
             self._process_text_document(PlainTextLoader(full_path))
         elif full_path.endswith(".md"):
             self._process_text_document(MarkdownLoader(full_path))
+        elif full_path.endswith(".csv"):
+            self._process_text_document(CSVLoader(full_path))
+        elif full_path.endswith((".xlsx", ".xls", ".xlsm", ".xlsb", ".xlt")):
+            self._process_text_document(ExcelLoader(full_path))
+        elif full_path.endswith((".ppt", ".pptx", ".pptm", ".pps", ".ppsx")):
+            self._process_text_document(PowerPointLoader(full_path))
+        elif full_path.endswith((".odt", ".ods", ".odp")):
+            self._process_text_document(OpenDocumentLoader(full_path))
+        elif full_path.endswith((".eml", ".msg")):
+            self._process_text_document(EmailLoader(full_path))
         elif full_path.endswith(".py"):
             self._process_code_document(PythonCodeStructure(full_path))
         elif full_path.endswith(".js"):
             self._process_code_document(JavaScriptCodeStructure(full_path))
+        elif full_path.endswith((".ts", ".tsx")):
+            self._process_code_document(TypeScriptCodeStructure(full_path))
+        elif full_path.endswith(".java"):
+            self._process_code_document(JavaCodeStructure(full_path))
+        elif full_path.endswith(".go"):
+            self._process_code_document(GoCodeStructure(full_path))
+        elif full_path.endswith(".rb"):
+            self._process_code_document(RubyCodeStructure(full_path))
+        elif full_path.endswith(".cs"):
+            self._process_code_document(CSharpCodeStructure(full_path))
+        elif full_path.endswith(".php"):
+            self._process_code_document(PHPCodeStructure(full_path))
+        elif full_path.endswith((".c", ".cpp")):
+            self._process_code_document(CCodeStructure(full_path))
         else:
             self._process_as_plain_text(full_path)
 
