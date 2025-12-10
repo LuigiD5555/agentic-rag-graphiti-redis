@@ -28,6 +28,8 @@ class DummyVectorStore(VectorInterface, SupportsExists):
     def __init__(self) -> None:
         self.upserts: deque[Dict[str, Any]] = deque()
         self._existing: set[str] = set()
+        self.failures: deque[Dict[str, Any]] = deque()
+        self.archived: deque[str] = deque()
 
     def upsert(
         self,
@@ -61,6 +63,12 @@ class DummyVectorStore(VectorInterface, SupportsExists):
 
     def exists(self, point_id: str, tenant_id: Optional[str] = None) -> bool:
         return point_id in self._existing
+
+    def upsert_failure(self, record: Dict[str, Any]) -> None:
+        self.failures.append(record)
+
+    def archive_file(self, file_id: str, tenant_id: Optional[str] = None) -> None:
+        self.archived.append(file_id)
 
 
 def test_ingestion_pipeline_sanitizes_and_upserts(tmp_path):

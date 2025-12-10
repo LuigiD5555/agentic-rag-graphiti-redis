@@ -220,6 +220,19 @@ class WeaviateRepository(VectorInterface):
             Property(name="allowed_user_ids", data_type=DataType.TEXT_ARRAY),
             Property(name="hash", data_type=DataType.TEXT),
             Property(name="source", data_type=DataType.TEXT),
+            Property(name="file_path", data_type=DataType.TEXT),
+            Property(name="file_name", data_type=DataType.TEXT),
+            Property(name="file_extension", data_type=DataType.TEXT),
+            Property(name="parent_directory", data_type=DataType.TEXT),
+            Property(name="file_size_bytes", data_type=DataType.INT),
+            Property(name="file_modified_at", data_type=DataType.TEXT),
+            Property(name="file_id", data_type=DataType.TEXT),
+            Property(name="chunk_index", data_type=DataType.INT),
+            Property(name="chunk_total", data_type=DataType.INT),
+            Property(name="ingested_at", data_type=DataType.TEXT),
+            Property(name="directory_file_index", data_type=DataType.INT),
+            Property(name="directory_total_files", data_type=DataType.INT),
+            Property(name="archived", data_type=DataType.BOOL),
         ]
 
     def _build_vector_config_kwargs(self) -> Dict[str, Any]:
@@ -318,9 +331,10 @@ class WeaviateRepository(VectorInterface):
             logger.exception("Weaviate update failed for uuid=%s", uuid_id)
             raise
 
-    def _build_where(self, filters: Optional[Dict[str, Any]]) -> Optional[Filter]:
+    def _build_where(self, filters: Optional[Dict[str, Any]], include_archived: bool = False) -> Optional[Filter]:
+        archive_filter = Filter.by_property("archived").equal(include_archived)
         if not filters:
-            return None
+            return archive_filter
 
         shoulds: List[Filter] = []
 
@@ -338,13 +352,11 @@ class WeaviateRepository(VectorInterface):
             shoulds.append(Filter.by_property("allowed_user_ids").contains_any([user_id]))
             shoulds.append(Filter.by_property("owner_id").equal(user_id))
 
-        if not shoulds:
-            return None
-
         combined = shoulds[0]
         for s in shoulds[1:]:
             combined = combined | s
-        return combined
+
+        return archive_filter & combined
 
     @staticmethod
     def _normalize_uuid(value: Any) -> str:
@@ -365,24 +377,31 @@ class WeaviateRepository(VectorInterface):
         tenant_id: Optional[str] = None,
     ) -> List[ScoredItem]:
         coll = self._coll(tenant_id)
-        where = self._build_where(filters)
+        where = self._build_where(filters, include_archived=False)
 
-        if self._uses_named_vectors and self._target_vector_name:
-            result = coll.query.near_vector(
+        def _run_query(active_filters: Optional[Filter]):
+            if self._uses_named_vectors and self._target_vector_name:
+                return coll.query.near_vector(
+                    vector=vector,
+                    limit=top_k,
+                    filters=active_filters,
+                    target_vector=self._target_vector_name,
+                )
+            return coll.query.near_vector(
                 vector=vector,
                 limit=top_k,
-                filters=where,
-                target_vector=self._target_vector_name,
+                filters=active_filters,
             )
-        else:
-            result = coll.query.near_vector(
-                vector=vector,
-                limit=top_k,
-                filters=where,
-            )
+
+        result = _run_query(where)
+        objects = getattr(result, "objects", []) or []  # type: ignore[attr-defined]
+        if not objects:
+            archived_where = self._build_where(filters, include_archived=True)
+            result = _run_query(archived_where)
+            objects = getattr(result, "objects", []) or []  # type: ignore[attr-defined]
 
         output: List[ScoredItem] = []
-        for obj in getattr(result, "objects", []) or []:  # type: ignore[attr-defined]
+        for obj in objects:
             meta = getattr(obj, "metadata", None)
             distance = getattr(meta, "distance", None)
             score = None if distance is None else float(distance)
@@ -411,6 +430,31 @@ class WeaviateRepository(VectorInterface):
             cursor = getattr(page_info, "end_cursor", None)
             if not getattr(page_info, "has_next_page", False):
                 break
+
+    def archive_file(self, file_id: str, tenant_id: Optional[str] = None) -> None:
+        coll = self._coll(tenant_id)
+        where = Filter.by_property("file_id").equal(file_id)
+        cursor: Optional[str] = None
+
+        while True:
+            result = coll.query.fetch_objects(limit=200, cursor=cursor, filters=where)
+            objects = getattr(result, "objects", []) or []  # type: ignore[attr-defined]
+            if not objects:
+                break
+
+            for obj in objects:
+                uuid_id = getattr(obj, "uuid", None)
+                if not uuid_id:
+                    continue
+                coll.data.update(uuid=uuid_id, properties={"archived": True})
+
+            page_info = getattr(result, "page_info", None)
+            cursor = getattr(page_info, "end_cursor", None)
+            if not getattr(page_info, "has_next_page", False):
+                break
+
+    def upsert_failure(self, record: Dict[str, Any]) -> None:
+        logger.warning("Failure record: %s", record)
 
     def __del__(self) -> None:
         try:

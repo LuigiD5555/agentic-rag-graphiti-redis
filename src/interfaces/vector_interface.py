@@ -48,6 +48,15 @@ class VectorInterface(Protocol):
         Iterate stored payloads in batches, backend-agnostic.
         """
 
+    def upsert_failure(self, record: Dict[str, Any]) -> None:
+        """
+        Persist metadata about ingestion failures.
+        """
+    def archive_file(self, file_id: str, tenant_id: Optional[str] = None) -> None:
+        """
+        Mark all embeddings for a given file as archived.
+        """
+
 
 @runtime_checkable
 class SupportsExists(Protocol):
