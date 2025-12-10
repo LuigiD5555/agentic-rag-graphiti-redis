@@ -11,7 +11,7 @@ import hashlib
 from enum import Enum
 from datetime import datetime, timezone, timedelta
 import re
-from typing import Iterable, List, Optional, Dict, Callable, Any, cast
+from typing import Iterable, List, Optional, Dict, Callable, Any, cast, Set
 
 # Modern splitters live in the separate package `langchain_text_splitters`
 from langchain_text_splitters import (
@@ -34,26 +34,14 @@ from src.interfaces.embedding_interface import EmbeddingInterface
 from src.interfaces.vector_interface import VectorInterface, SupportsExists
 from src.cli.options import PipelineOptions
 from src.utils.decorators import timed, logged
-from src.ingestion.loaders.pdf_loader import PDFLoader
-from src.ingestion.loaders.docx_loader import DocxLoader
-from src.ingestion.loaders.word_loader import WordLoader
-from src.ingestion.loaders.text_loader import PlainTextLoader
-from src.ingestion.loaders.md_loader import MarkdownLoader
-from src.ingestion.loaders.csv_loader import CSVLoader
-from src.ingestion.loaders.xlsx_loader import ExcelLoader
-from src.ingestion.loaders.ppt_loader import PowerPointLoader
-from src.ingestion.loaders.odf_loader import OpenDocumentLoader
-from src.ingestion.loaders.email_loader import EmailLoader
-from src.ingestion.loaders.py_loader import PythonCodeStructure
-from src.ingestion.loaders.js_loader import JavaScriptCodeStructure
-from src.ingestion.loaders.ts_loader import TypeScriptCodeStructure
-from src.ingestion.loaders.java_loader import JavaCodeStructure
-from src.ingestion.loaders.go_loader import GoCodeStructure
-from src.ingestion.loaders.ruby_loader import RubyCodeStructure
-from src.ingestion.loaders.csharp_loader import CSharpCodeStructure
-from src.ingestion.loaders.php_loader import PHPCodeStructure
-from src.ingestion.loaders.c_loader import CCodeStructure
+from src.ingestion.loaders import (
+    CODE_LOADER_SPECS,
+    TEXT_LOADER_SPECS,
+    PlainTextLoader,
+)
+from src.ingestion.catalog import IngestionCatalog
 from src import logger
+from src.ingestion.loaders.errors import LoaderError
 
 
 class SplitterStrategy(str, Enum):
@@ -62,6 +50,12 @@ class SplitterStrategy(str, Enum):
     RECURSIVE = "recursive"          # character-based, robust generic splitter
     MARKDOWN_HEADERS = "md_headers"  # respects Markdown header hierarchy
     SEMANTIC = "semantic"            # embeddings-based (experimental)
+
+
+CATALOG_PATH = os.environ.get(
+    "INGESTION_CATALOG_PATH",
+    os.path.join("data", "ingestion_catalog.json"),
+)
 
 
 class IngestionPipeline:
@@ -91,6 +85,16 @@ class IngestionPipeline:
         self.semantic_embeddings = options.semantic_embeddings
 
         self.text_splitter = self._build_text_splitter(self.splitter_strategy, options)
+        self.catalog = IngestionCatalog(CATALOG_PATH)
+        self._observed_files: Set[str] = set()
+        self._observed_directories: Set[str] = set()
+        self._file_context: Dict[str, Optional[Any]] = {}
+        self._current_file_info: Optional[Dict[str, Any]] = None
+        self._file_context: Dict[str, Optional[Any]] = {
+            "file_index": None,
+            "total_files": None,
+            "directory_path": None,
+        }
 
     # --- Friendly factory to reduce long call sites ---
     @classmethod
@@ -115,20 +119,48 @@ class IngestionPipeline:
         Args:
             paths: List of directory paths to process.
         """
-        for path in paths:
-            if self._should_skip_path(path):
-                continue
+        self._observed_files = set()
+        self._observed_directories = set()
+        try:
+            for path in paths:
+                abs_path = os.path.abspath(path)
+                if self._should_skip_path(abs_path):
+                    continue
 
-            if os.path.isfile(path):
-                self._process_candidate_file(path)
-                continue
+                if os.path.isfile(abs_path):
+                    directory = os.path.dirname(abs_path) or os.path.abspath(".")
+                    self._record_directory_listing(directory, [abs_path])
+                    self._process_candidate_file(
+                        abs_path,
+                        file_index=1,
+                        total_files=1,
+                        directory_path=directory,
+                    )
+                    continue
 
-            for root, _, files in os.walk(path):
-                for filename in files:
-                    full_path = os.path.join(root, filename)
-                    self._process_candidate_file(full_path)
+                for root, _, files in os.walk(abs_path):
+                    sorted_files = sorted(files)
+                    full_paths = [os.path.join(root, name) for name in sorted_files]
+                    self._record_directory_listing(root, full_paths)
+                    for index, filename in enumerate(sorted_files, start=1):
+                        full_path = os.path.join(root, filename)
+                        self._process_candidate_file(
+                            full_path,
+                            file_index=index,
+                            total_files=len(sorted_files),
+                            directory_path=root,
+                        )
+        finally:
+            self._finalize_ingestion_run()
 
-    def _process_candidate_file(self, full_path: str) -> None:
+    def _process_candidate_file(
+        self,
+        full_path: str,
+        *,
+        file_index: Optional[int] = None,
+        total_files: Optional[int] = None,
+        directory_path: Optional[str] = None,
+    ) -> None:
         """
         Dispatch a file to the appropriate loader if supported.
 
@@ -138,48 +170,34 @@ class IngestionPipeline:
         if self._should_skip_path(full_path):
             return
 
+        directory = directory_path or os.path.dirname(full_path)
+        file_info = self._gather_file_metadata(full_path)
+        self._register_observed_file(full_path)
+
+        if not self.catalog.should_process_file(file_info):
+            logger.info("Skipping %s; no changes detected.", full_path)
+            self._current_file_info = None
+            return
+
+        self._file_context = {
+            "file_index": file_index,
+            "total_files": total_files,
+            "directory_path": directory,
+        }
+        self._current_file_info = file_info
         logger.info("Processing candidate file: %s", full_path)
 
-        if full_path.endswith(".pdf"):
-            self._process_text_document(PDFLoader(full_path))
-        elif full_path.endswith(".docx"):
-            self._process_text_document(DocxLoader(full_path))
-        elif full_path.endswith((".doc", ".docm", ".rtf")):
-            self._process_text_document(WordLoader(full_path))
-        elif full_path.endswith(".txt"):
-            self._process_text_document(PlainTextLoader(full_path))
-        elif full_path.endswith(".md"):
-            self._process_text_document(MarkdownLoader(full_path))
-        elif full_path.endswith(".csv"):
-            self._process_text_document(CSVLoader(full_path))
-        elif full_path.endswith((".xlsx", ".xls", ".xlsm", ".xlsb", ".xlt")):
-            self._process_text_document(ExcelLoader(full_path))
-        elif full_path.endswith((".ppt", ".pptx", ".pptm", ".pps", ".ppsx")):
-            self._process_text_document(PowerPointLoader(full_path))
-        elif full_path.endswith((".odt", ".ods", ".odp")):
-            self._process_text_document(OpenDocumentLoader(full_path))
-        elif full_path.endswith((".eml", ".msg")):
-            self._process_text_document(EmailLoader(full_path))
-        elif full_path.endswith(".py"):
-            self._process_code_document(PythonCodeStructure(full_path))
-        elif full_path.endswith(".js"):
-            self._process_code_document(JavaScriptCodeStructure(full_path))
-        elif full_path.endswith((".ts", ".tsx")):
-            self._process_code_document(TypeScriptCodeStructure(full_path))
-        elif full_path.endswith(".java"):
-            self._process_code_document(JavaCodeStructure(full_path))
-        elif full_path.endswith(".go"):
-            self._process_code_document(GoCodeStructure(full_path))
-        elif full_path.endswith(".rb"):
-            self._process_code_document(RubyCodeStructure(full_path))
-        elif full_path.endswith(".cs"):
-            self._process_code_document(CSharpCodeStructure(full_path))
-        elif full_path.endswith(".php"):
-            self._process_code_document(PHPCodeStructure(full_path))
-        elif full_path.endswith((".c", ".cpp")):
-            self._process_code_document(CCodeStructure(full_path))
-        else:
-            self._process_as_plain_text(full_path)
+        for extensions, loader_cls in TEXT_LOADER_SPECS:
+            if full_path.endswith(extensions):
+                self._process_text_document(loader_cls(full_path))
+                return
+
+        for extensions, loader_cls in CODE_LOADER_SPECS:
+            if full_path.endswith(extensions):
+                self._process_code_document(loader_cls(full_path))
+                return
+
+        self._process_as_plain_text(full_path)
 
     def _should_skip_path(self, path: str) -> bool:
         """
@@ -217,11 +235,29 @@ class IngestionPipeline:
         Args:
             loader: A document loader instance exposing `load() -> List[Document]`.
         """
-        # 1) Load full documents
-        documents: List[Document] = loader.load()
+        documents: Optional[List[Document]] = self._call_loader(loader, "load")
+        if not documents:
+            self._current_file_info = None
+            return
+
+        chunks = list(self._split_documents(documents))
+        if not chunks:
+            source = self._resolve_loader_source(loader)
+            logger.warning("Skipping %s; no chunks produced after splitting.", source)
+            self._current_file_info = None
+            return
+
+        chunk_total = len(chunks)
+        source = self._resolve_loader_source(loader)
+        file_info = self._current_file_info or self._gather_file_metadata(source)
+        file_context = getattr(self, "_file_context", {}) or {}
+        directory_file_index = file_context.get("file_index")
+        directory_total_files = file_context.get("total_files")
+        directory_path = file_context.get("directory_path") or file_info.get("parent_directory")
+        ingested_at = datetime.now(timezone.utc).isoformat()
 
         # 2) Split into chunks with your existing strategy
-        for chunk in self._split_documents(documents):
+        for chunk_index, chunk in enumerate(chunks, start=1):
             # --- Sanitize and hash content (idempotency key) ---
             sanitized_text: str = self._sanitize_text(chunk.page_content)
             content_hash: str = self._generate_hash(sanitized_text)
@@ -239,13 +275,27 @@ class IngestionPipeline:
 
             # Only include fields explicitly supported by your Weaviate schema.
             # Coerce types defensively to match schema expectations.
+            source_value = str(raw_meta.get("source") or file_info.get("file_path") or "document")
             safe_metadata: Dict[str, Any] = {
                 "content": sanitized_text,                               # str
-                "source": str(raw_meta.get("source") or "document"),     # str
+                "source": source_value,                                  # str
                 "visibility": str(self.visibility),                      # str
                 "owner_id": str(self.owner_id),                          # str
                 "allowed_user_ids": [str(u) for u in (self.allowed_user_ids or [])],  # list[str]
                 "hash": content_hash,                                    # str
+                "file_path": file_info.get("file_path"),
+                "file_name": file_info.get("file_name"),
+                "file_extension": file_info.get("file_extension"),
+                "parent_directory": directory_path,
+                "file_size_bytes": file_info.get("file_size_bytes"),
+                "file_modified_at": file_info.get("file_modified_at"),
+                "file_id": file_info.get("file_id"),
+                "chunk_index": chunk_index,
+                "chunk_total": chunk_total,
+                "ingested_at": ingested_at,
+                "directory_file_index": directory_file_index,
+                "directory_total_files": directory_total_files,
+                "archived": False,
             }
 
             # Do NOT add arbitrary metadata keys like 'path' if not in schema.
@@ -271,6 +321,8 @@ class IngestionPipeline:
                     safe_metadata,
                 )
 
+        self._finalize_file_ingestion(file_info, chunk_total)
+
     def _process_code_document(self, code_loader) -> None:
         """
         Load and process a code-based document.
@@ -278,13 +330,22 @@ class IngestionPipeline:
         Args:
             code_loader: A code structure loader instance with `load_structure_summary() -> str`.
         """
-        summary_text = self._sanitize_text(code_loader.load_structure_summary())
+        summary_text_raw = self._call_loader(code_loader, "load_structure_summary")
+        if not summary_text_raw:
+            self._current_file_info = None
+            return
+
+        summary_text = self._sanitize_text(summary_text_raw)
         summary_hash = self._generate_hash(summary_text)
+        file_info = self._current_file_info or self._gather_file_metadata(getattr(code_loader, "path", None))
 
         if self._vector_store_contains(summary_hash):
+            self._finalize_file_ingestion(file_info, chunk_total=1)
             return
 
         embedding = self.embedding_service.generate(summary_text)
+        file_context = getattr(self, "_file_context", {}) or {}
+        ingested_at = datetime.now(timezone.utc).isoformat()
 
         metadata = {
             "type": "code_context",
@@ -293,6 +354,17 @@ class IngestionPipeline:
             "owner_id": self.owner_id,
             "allowed_user_ids": self.allowed_user_ids,
             "hash": summary_hash,
+            "file_path": file_info.get("file_path"),
+            "file_name": file_info.get("file_name"),
+            "file_extension": file_info.get("file_extension"),
+            "parent_directory": file_context.get("directory_path") or file_info.get("parent_directory"),
+            "file_size_bytes": file_info.get("file_size_bytes"),
+            "file_modified_at": file_info.get("file_modified_at"),
+            "file_id": file_info.get("file_id"),
+            "directory_file_index": file_context.get("file_index"),
+            "directory_total_files": file_context.get("total_files"),
+            "ingested_at": ingested_at,
+            "archived": False,
         }
         metadata.setdefault("path", getattr(code_loader, "path", None))
         metadata = self._prune_metadata(metadata)
@@ -307,6 +379,8 @@ class IngestionPipeline:
         except TypeError:
             self.vector_store.upsert(summary_hash, embedding, metadata)
 
+        self._finalize_file_ingestion(file_info, chunk_total=1)
+
     def _process_as_plain_text(self, path: str) -> None:
         """
         Fallback handler: attempt to ingest any remaining file as plain text.
@@ -314,12 +388,166 @@ class IngestionPipeline:
         Some extensions may not have a dedicated loader; rather than skipping them
         outright we try a simple text read to honor the user's request.
         """
-        try:
-            self._process_text_document(PlainTextLoader(path))
-        except (UnicodeDecodeError, ValueError, OSError) as exc:
-            logger.warning("Skipping %s; plain-text fallback failed: %s", path, exc)
+        self._process_text_document(PlainTextLoader(path))
 
     # ---------- helpers ----------
+
+    def _record_directory_listing(self, directory_path: str, file_paths: Iterable[str]) -> None:
+        directory = os.path.abspath(directory_path)
+        self.catalog.record_directory(directory, file_paths)
+        self._observed_directories.add(directory)
+
+    def _register_observed_file(self, full_path: str) -> None:
+        self._observed_files.add(os.path.abspath(full_path))
+
+    def _finalize_file_ingestion(self, file_info: Dict[str, Any], chunk_total: int) -> None:
+        directory_total = None
+        if isinstance(self._file_context, dict):
+            directory_total = self._file_context.get("total_files")
+        self.catalog.record_file_ingestion(
+            file_info,
+            chunk_total=chunk_total,
+            directory_total=directory_total,
+        )
+        self._current_file_info = None
+
+    def _finalize_ingestion_run(self) -> None:
+        try:
+            self._handle_deleted_files()
+        finally:
+            self.catalog.save()
+
+    def _handle_deleted_files(self) -> None:
+        missing = self.catalog.list_missing_files(
+            self._observed_files,
+            self._observed_directories,
+        )
+        if not missing:
+            return
+        archive_fn = getattr(self.vector_store, "archive_file", None)
+        if not callable(archive_fn):
+            for entry in missing:
+                logger.warning("Archiving unsupported; leaving stale embeddings for %s", entry["file_path"])
+            return
+
+        for entry in missing:
+            file_id = entry.get("file_id")
+            file_path = entry.get("file_path")
+            if not file_id:
+                continue
+            try:
+                archive_fn(file_id, tenant_id=self.tenant_id)  # type: ignore[arg-type]
+                self.catalog.mark_archived(file_path)
+                logger.info("Archived embeddings for removed file %s", file_path)
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.error("Failed to archive embeddings for %s: %s", file_path, exc)
+
+    def _gather_file_metadata(self, path: Optional[str]) -> Dict[str, Any]:
+        """
+        Collect filesystem metadata for a given source path.
+        """
+        resolved = str(path or "").strip()
+        if not resolved and hasattr(path, "strip"):
+            resolved = str(path).strip()
+
+        info: Dict[str, Any] = {
+            "file_path": resolved or None,
+            "file_name": os.path.basename(resolved) if resolved else None,
+            "file_extension": os.path.splitext(resolved)[1].lower() if resolved else None,
+            "parent_directory": os.path.dirname(resolved) if resolved else None,
+            "file_size_bytes": None,
+            "file_modified_at": None,
+            "file_id": self._generate_hash(resolved) if resolved else None,
+        }
+
+        if resolved and os.path.isfile(resolved):
+            try:
+                stats = os.stat(resolved)
+                info["file_size_bytes"] = stats.st_size
+                info["file_modified_at"] = datetime.fromtimestamp(
+                    stats.st_mtime, tz=timezone.utc
+                ).isoformat()
+            except OSError:
+                pass
+
+        return info
+
+    def _call_loader(self, loader: object, method_name: str):
+        """
+        Execute a loader method with uniform error handling.
+
+        Returns:
+            The result of the loader call, or None if it failed.
+        """
+        load_fn = getattr(loader, method_name, None)
+
+        if load_fn is None:
+            logger.error(
+                "Loader %s does not implement %s; skipping.",
+                loader.__class__.__name__,
+                method_name,
+            )
+            return None
+
+        try:
+            return load_fn()
+        except LoaderError as exc:
+            self._log_loader_skip(loader, exc)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            self._log_loader_error(loader, exc)
+
+        return None
+
+    def _log_loader_skip(self, loader: object, exc: Exception) -> None:
+        """Log a warning when a loader intentionally skips a file."""
+        source = self._resolve_loader_source(loader)
+        logger.warning("Skipping %s: %s", source, exc)
+        self._record_failure(source, str(exc), reason="loader_skip")
+
+    def _log_loader_error(self, loader: object, exc: Exception) -> None:
+        """Log unexpected loader failures."""
+        source = self._resolve_loader_source(loader)
+        logger.exception(
+            "Loader %s failed for %s: %s",
+            loader.__class__.__name__,
+            source,
+            exc,
+        )
+        self._record_failure(source, str(exc), reason="loader_error")
+
+    @staticmethod
+    def _resolve_loader_source(loader: object) -> str:
+        """Attempt to resolve the source path associated with a loader."""
+        for attr in ("path", "_path", "file_path", "source"):
+            value = getattr(loader, attr, None)
+            if value:
+                return str(value)
+        return loader.__class__.__name__
+
+    def _record_failure(self, source: str, message: str, reason: str) -> None:
+        """Record metadata for a file that could not be ingested."""
+        file_info = self._gather_file_metadata(source)
+        file_context = getattr(self, "_file_context", {}) or {}
+        record = {
+            "source": source,
+            "file_path": file_info.get("file_path"),
+            "file_name": file_info.get("file_name"),
+            "file_extension": file_info.get("file_extension"),
+            "parent_directory": file_context.get("directory_path") or file_info.get("parent_directory"),
+            "file_size_bytes": file_info.get("file_size_bytes"),
+            "file_modified_at": file_info.get("file_modified_at"),
+            "file_id": file_info.get("file_id"),
+            "failure_reason": reason,
+            "failure_message": message,
+            "recorded_at": datetime.now(timezone.utc).isoformat(),
+            "directory_file_index": file_context.get("file_index"),
+            "directory_total_files": file_context.get("total_files"),
+        }
+        sink = getattr(self.vector_store, "upsert_failure", None)
+        if callable(sink):
+            sink(record)
+        else:  # pragma: no cover - defensive fallback
+            logger.warning("Failure record (no sink available): %s", record)
 
     @staticmethod
     def _normalize_markdown_headers(levels: Optional[object]) -> list[tuple[str, str]]:
@@ -482,6 +710,16 @@ class IngestionPipeline:
         - owner_id: str
         - allowed_user_ids: list[str]
         - hash: str
+        - file_path: str
+        - file_name: str
+        - file_extension: str
+        - parent_directory: str
+        - file_size_bytes: int
+        - file_modified_at: str (ISO timestamp)
+        - file_id: str
+        - chunk_index: int
+        - chunk_total: int
+        - ingested_at: str (ISO timestamp)
         Any other key (e.g., XMP/EXIF like 'aapl:keywords', 'pdf:Author', 'path', etc.) is dropped.
         """
         allowed_keys = {
@@ -491,30 +729,37 @@ class IngestionPipeline:
             "owner_id",
             "allowed_user_ids",
             "hash",
+            "file_path",
+            "file_name",
+            "file_extension",
+            "parent_directory",
+            "file_size_bytes",
+            "file_modified_at",
+            "file_id",
+            "chunk_index",
+            "chunk_total",
+            "ingested_at",
+            "directory_file_index",
+            "directory_total_files",
+            "archived",
         }
         pruned: dict = {}
 
-        # content
-        value = metadata.get("content")
-        if isinstance(value, str):
-            pruned["content"] = value
+        def _set_str(key: str) -> None:
+            value = metadata.get(key)
+            if isinstance(value, str):
+                pruned[key] = value
 
-        # source
-        value = metadata.get("source")
-        if isinstance(value, str):
-            pruned["source"] = value
+        def _set_int(key: str) -> None:
+            value = metadata.get(key)
+            if isinstance(value, int) and value >= 0:
+                pruned[key] = value
 
-        # visibility
-        value = metadata.get("visibility")
-        if isinstance(value, str):
-            pruned["visibility"] = value
+        _set_str("content")
+        _set_str("source")
+        _set_str("visibility")
+        _set_str("owner_id")
 
-        # owner_id
-        value = metadata.get("owner_id")
-        if isinstance(value, str):
-            pruned["owner_id"] = value
-
-        # allowed_user_ids
         value = metadata.get("allowed_user_ids")
         if value is None:
             pass
@@ -522,19 +767,28 @@ class IngestionPipeline:
             pruned["allowed_user_ids"] = [str(x) for x in value]
         elif isinstance(value, str):
             pruned["allowed_user_ids"] = [value]
-        else:
-            # drop invalid types
-            pass
 
-        # hash
-        value = metadata.get("hash")
-        if isinstance(value, str):
-            pruned["hash"] = value
+        _set_str("hash")
+        _set_str("file_path")
+        _set_str("file_name")
+        _set_str("file_extension")
+        _set_str("parent_directory")
+        _set_int("file_size_bytes")
+        _set_str("file_modified_at")
+        _set_str("file_id")
+        _set_int("chunk_index")
+        _set_int("chunk_total")
+        _set_str("ingested_at")
+        _set_int("directory_file_index")
+        _set_int("directory_total_files")
+        value = metadata.get("archived")
+        if isinstance(value, bool):
+            pruned["archived"] = value
 
         # Finally, ensure we did not leak any unexpected key
-        for k in list(pruned.keys()):
-            if k not in allowed_keys:
-                pruned.pop(k, None)
+        for key in list(pruned.keys()):
+            if key not in allowed_keys:
+                pruned.pop(key, None)
 
         return pruned
 
