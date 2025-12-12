@@ -300,7 +300,7 @@ class WeaviateRepository(VectorInterface):
             coll.data.insert(uuid=uuid_id, properties=payload, vector=vector)
             return
         except UnexpectedStatusCodeError as exc:
-            if getattr(exc, "status_code", None) in (409, 422):
+            if self._is_duplicate_insert_error(exc):
                 logger.info(
                     "Weaviate insert detected existing object. Updating uuid=%s source=%s",
                     uuid_id,
@@ -313,6 +313,40 @@ class WeaviateRepository(VectorInterface):
         except Exception:
             logger.exception("Weaviate insert errored unexpectedly, attempting update for uuid=%s", uuid_id)
             self._update_existing(coll, uuid_id, payload, vector)
+
+    @staticmethod
+    def _is_duplicate_insert_error(exc: UnexpectedStatusCodeError) -> bool:
+        """
+        Weaviate can return 409 Conflict for duplicates, and sometimes 422 with a
+        duplicate/exists message. Do not treat all 422 as duplicates, because
+        they can be schema/tenant validation errors.
+        """
+        status = getattr(exc, "status_code", None)
+        if status == 409:
+            return True
+        if status != 422:
+            return False
+
+        # Try to extract a meaningful error text from the exception.
+        text = ""
+        for attr in ("message", "body", "response", "response_text", "error"):
+            value = getattr(exc, attr, None)
+            if value:
+                text = str(value)
+                break
+        if not text:
+            text = str(exc)
+
+        low = text.lower()
+        duplicate_markers = (
+            "already exists",
+            "already present",
+            "conflict",
+            "duplicate",
+            "object exists",
+            "id already",
+        )
+        return any(marker in low for marker in duplicate_markers)
 
     def _update_existing(self, coll, uuid_id: str, payload: Dict[str, Any], vector: List[float]) -> None:
         try:
