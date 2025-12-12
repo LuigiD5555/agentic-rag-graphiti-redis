@@ -4,6 +4,7 @@ Uses only `requests` and environment variables already present.
 """
 
 from __future__ import annotations
+import json
 import os
 import requests
 from typing import Optional, Dict, Any, List
@@ -17,8 +18,12 @@ def list_models(base_url: str, timeout: float = 2.0) -> List[Dict[str, Any]]:
             data = r.json()
             # LM Studio returns {"data": [{"id": "..."}...]} format
             return data.get("data", [])
-    except Exception:
-        pass
+    except requests.RequestException as exc:
+        # LM Studio not reachable / network failure.
+        return []
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        # Malformed JSON or unexpected schema.
+        return []
     return []
 
 

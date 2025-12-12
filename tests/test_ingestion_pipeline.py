@@ -71,6 +71,16 @@ class DummyVectorStore(VectorInterface, SupportsExists):
         self.archived.append(file_id)
 
 
+class FailingLoader:
+    def __init__(self, path: str):
+        self.path = path
+
+    def load(self):
+        from src.ingestion.loaders.errors import LoaderError
+
+        raise LoaderError("boom")
+
+
 def test_ingestion_pipeline_sanitizes_and_upserts(tmp_path):
     target = tmp_path / "doc.txt"
     target.write_text("Hola\u2028RAG!\nAnother line.", encoding="utf-8")
@@ -157,6 +167,26 @@ def test_ingestion_pipeline_accepts_file_path(tmp_path):
 
     assert vector_store.upserts
     assert embedding.calls
+
+
+def test_loader_failure_is_recorded(tmp_path):
+    doc = tmp_path / "doc.txt"
+    doc.write_text("hi", encoding="utf-8")
+    embedding = DummyEmbedding()
+    vector_store = DummyVectorStore()
+    pipeline = IngestionPipeline(
+        embedding_service=embedding,
+        vector_store=vector_store,
+        options=PipelineOptions(chunk_size=20, chunk_overlap=0),
+    )
+
+    # call processor directly to force loader error path
+    from src.ingestion.pipeline.text_processor import process_text_document
+
+    process_text_document(pipeline, FailingLoader(str(doc)))
+
+    assert vector_store.failures, "Loader errors should be recorded via upsert_failure."
+    assert vector_store.failures[0]["failure_reason"] == "loader_skip"
 
 
 def test_embedding_token_limit_splits_chunks(tmp_path):

@@ -99,7 +99,9 @@ class SchemaManager:
         existing: set[str] = set()
         try:
             listed = tenants_api.list() if hasattr(tenants_api, "list") else tenants_api.get()
-        except Exception:
+        except Exception as exc:
+            # Listing tenants is best-effort; log for debugging but continue.
+            logger.debug("Failed to list tenants: %s", exc)
             listed = []
 
         for tenant in listed or []:
