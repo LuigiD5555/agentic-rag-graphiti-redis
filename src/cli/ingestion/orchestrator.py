@@ -82,6 +82,7 @@ class IngestionOrchestrator:
         pipeline_options = PipelineOptions(
             chunk_size=self._config.CHUNK_SIZE,
             chunk_overlap=self._config.CHUNK_OVERLAP,
+            embedding_token_limit=self._config.EMBEDDING_MAX_TOKENS,
             tenant_id=(self._config.WEAVIATE_DEFAULT_TENANT or None),
         )
         return IngestionPipeline.from_options(

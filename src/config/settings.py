@@ -17,6 +17,7 @@ class Config(BaseSettings):
 
     # Pydantic settings
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    USER_SETTINGS_FILE: str = "data/settings.json"
 
     # ----- Vector DB backend selection -----
     VECTOR_BACKEND: str = "weaviate"
@@ -34,6 +35,7 @@ class Config(BaseSettings):
 
     # ----- Embeddings -----
     EMBEDDING_DIM: int = 768
+    EMBEDDING_MAX_TOKENS: int = 512
 
     # ----- Redis -----
     REDIS_HOST: str = "redis"
@@ -60,7 +62,43 @@ class Config(BaseSettings):
     # Computed in model_post_init
     DOCS_EXCLUDE_DIRS: tuple[str, ...] | str = ()
     DOCS_EXCLUDE_GLOBS: tuple[str, ...] | str = ()
-    DOCS_FILE_EXTS: tuple[str, ...] | list[str] = (".pdf", ".docx", ".txt", ".md", ".py", ".js")
+    # Default allowed extensions mirror all registered loaders (text + code).
+    DOCS_FILE_EXTS: tuple[str, ...] | list[str] = (
+        ".pdf",
+        ".docx",
+        ".doc",
+        ".docm",
+        ".rtf",
+        ".txt",
+        ".md",
+        ".csv",
+        ".xlsx",
+        ".xls",
+        ".xlsm",
+        ".xlsb",
+        ".xlt",
+        ".ppt",
+        ".pptx",
+        ".pptm",
+        ".pps",
+        ".ppsx",
+        ".odt",
+        ".ods",
+        ".odp",
+        ".eml",
+        ".msg",
+        ".py",
+        ".js",
+        ".ts",
+        ".tsx",
+        ".java",
+        ".go",
+        ".rb",
+        ".cs",
+        ".php",
+        ".c",
+        ".cpp",
+    )
 
     # ----- Cache TTL -----
     CACHE_TTL: int = 3600
@@ -76,8 +114,31 @@ class Config(BaseSettings):
         ".idea",
         ".vscode",
     }
+    _USER_SETTING_FIELDS = (
+        "DOCS_PATH",
+        "DOCS_EXCLUDE_FILE",
+        "DOCS_EXCLUDE_DIRS",
+        "DOCS_EXCLUDE_GLOBS",
+        "DOCS_FILE_EXTS",
+        "CHUNK_SIZE",
+        "CHUNK_OVERLAP",
+        "EMBEDDING_MAX_TOKENS",
+    )
 
     def model_post_init(self, __context) -> None:  # type: ignore[override]
+        # Apply user settings (GUI-editable) unless overridden by environment variables
+        fields_set = set(getattr(self, "model_fields_set", set()) or set())
+        user_settings_path = Path(getattr(self, "USER_SETTINGS_FILE", "data/settings.json"))
+        user_settings = self._load_user_settings(user_settings_path)
+
+        for key in self._USER_SETTING_FIELDS:
+            if os.getenv(key) is not None:
+                continue
+            if key in fields_set:
+                continue
+            if key in user_settings:
+                setattr(self, key, user_settings[key])
+
         # Normalize booleans/strings that might come in as env strings
         if isinstance(self.WEAVIATE_MULTI_TENANCY, str):
             self.WEAVIATE_MULTI_TENANCY = str(self.WEAVIATE_MULTI_TENANCY).lower() in ("1", "true", "yes")
@@ -122,6 +183,9 @@ class Config(BaseSettings):
                 normalized_set.add(norm)
 
         self.DOCS_FILE_EXTS = tuple(sorted(normalized_set))
+
+        # Persist user settings file with normalized values (without overriding env overrides)
+        self._persist_user_settings(user_settings_path)
 
     @property
     def LM_EMBED_URL(self):
@@ -199,8 +263,10 @@ class Config(BaseSettings):
 
     def _build_exclude_configuration(self):
         raw_entries = list(self._DEFAULT_EXCLUDED_DIRS)
+        raw_entries.extend(self._value_as_list(self.DOCS_EXCLUDE_DIRS))
         raw_entries.extend(self._parse_list_env(os.getenv("DOCS_EXCLUDE_DIRS", "")))
         raw_entries.extend(self._parse_list_env(os.getenv("DOCS_EXCLUDE_PATTERNS", "")))
+        raw_entries.extend(self._value_as_list(self.DOCS_EXCLUDE_GLOBS))
         raw_entries.extend(self._load_excludes_from_files())
 
         dirnames, globs = self._classify_exclude_entries(raw_entries)
@@ -235,6 +301,16 @@ class Config(BaseSettings):
         tokens = [token.strip() for token in re.split(r"[,\n]", value) if token.strip()]
         return tokens
 
+    @staticmethod
+    def _value_as_list(value: tuple[str, ...] | list[str] | str | None):
+        if value is None:
+            return []
+        if isinstance(value, (list, tuple)):
+            return [str(item).strip() for item in value if str(item).strip()]
+        if isinstance(value, str):
+            return Config._parse_list_env(value)
+        return []
+
     def _load_excludes_from_files(self):
         entries = []
 
@@ -257,6 +333,40 @@ class Config(BaseSettings):
             entries.extend(self._read_exclude_file(try_path))
 
         return entries
+
+    def _load_user_settings(self, path: Path) -> dict:
+        if not path.is_file():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        return data
+
+    def _persist_user_settings(self, path: Path) -> None:
+        desired = {}
+        for key in self._USER_SETTING_FIELDS:
+            value = getattr(self, key, None)
+            if isinstance(value, tuple):
+                value = list(value)
+            desired[key] = value
+
+        try:
+            current = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+        except (OSError, json.JSONDecodeError):
+            current = None
+
+        if current == desired:
+            return
+
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(desired, indent=2), encoding="utf-8")
+        except OSError:
+            # Silent failure; do not block app startup on settings persistence
+            return
 
     @staticmethod
     def _read_exclude_file(path: Path):

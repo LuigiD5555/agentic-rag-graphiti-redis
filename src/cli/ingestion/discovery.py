@@ -60,6 +60,7 @@ class FileDiscoveryService:
         """Traverse roots and return candidate file paths and visited directory count."""
         files: List[str] = []
         visited_dirs = 0
+        progress_every = getattr(opts, "progress_every", 0)
 
         for raw_root in opts.roots:
             root = os.path.abspath(raw_root)
@@ -79,7 +80,7 @@ class FileDiscoveryService:
             filters = self._build_filters(opts)
             for dirpath, dirnames, filenames in os.walk(root, followlinks=opts.follow_symlinks):
                 visited_dirs += 1
-                if opts.progress_every and (visited_dirs % opts.progress_every == 0):
+                if progress_every and visited_dirs % progress_every == 0:
                     logging.info("Scanning… visited=%d dir(s), current=%s", visited_dirs, dirpath)
                 rel_dirpath = os.path.relpath(dirpath, root)
                 if rel_dirpath == ".":

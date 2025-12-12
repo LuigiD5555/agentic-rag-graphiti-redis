@@ -63,6 +63,7 @@ class PipelineOptions:
 
     chunk_size: int
     chunk_overlap: int
+    embedding_token_limit: int = 0
     tenant_id: Optional[str] = None
     owner_id: Optional[str] = None
     visibility: str = "private"

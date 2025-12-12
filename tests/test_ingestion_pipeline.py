@@ -157,3 +157,58 @@ def test_ingestion_pipeline_accepts_file_path(tmp_path):
 
     assert vector_store.upserts
     assert embedding.calls
+
+
+def test_embedding_token_limit_splits_chunks(tmp_path):
+    doc = tmp_path / "long.txt"
+    tokens = [f"tok{i}" for i in range(10)]
+    doc.write_text(" ".join(tokens), encoding="utf-8")
+
+    embedding = DummyEmbedding()
+    vector_store = DummyVectorStore()
+    pipeline = IngestionPipeline(
+        embedding_service=embedding,
+        vector_store=vector_store,
+        options=PipelineOptions(
+            chunk_size=100,
+            chunk_overlap=0,
+            embedding_token_limit=3,
+            splitter_strategy=SplitterStrategy.RECURSIVE,
+        ),
+    )
+
+    pipeline.ingest_paths([str(doc)])
+
+    assert len(vector_store.upserts) == 5
+    assert len(embedding.calls) == 5
+    for upsert in vector_store.upserts:
+        metadata = upsert["metadata"]
+        assert len(metadata["content"].split()) <= 2
+        assert metadata["chunk_total"] == 5
+
+
+def test_truncate_respects_token_limit(tmp_path):
+    doc = tmp_path / "long2.txt"
+    tokens = [f"tok{i}" for i in range(12)]
+    doc.write_text(" ".join(tokens), encoding="utf-8")
+
+    embedding = DummyEmbedding()
+    vector_store = DummyVectorStore()
+    pipeline = IngestionPipeline(
+        embedding_service=embedding,
+        vector_store=vector_store,
+        options=PipelineOptions(
+            chunk_size=100,
+            chunk_overlap=0,
+            embedding_token_limit=6,  # will be trimmed with safety margin
+            splitter_strategy=SplitterStrategy.RECURSIVE,
+            tokenizer_model_name="gpt-4o-mini",
+        ),
+    )
+
+    pipeline.ingest_paths([str(doc)])
+
+    assert vector_store.upserts
+    for upsert in vector_store.upserts:
+        content_tokens = upsert["metadata"]["content"].split()
+        assert len(content_tokens) <= 4  # effective limit after margin

@@ -11,7 +11,11 @@ import hashlib
 from enum import Enum
 from datetime import datetime, timezone, timedelta
 import re
-from typing import Iterable, List, Optional, Dict, Callable, Any, cast, Set
+from typing import Iterable, List, Optional, Dict, Callable, Any, cast, Set, Tuple
+try:
+    import tiktoken  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    tiktoken = None
 
 # Modern splitters live in the separate package `langchain_text_splitters`
 from langchain_text_splitters import (
@@ -95,6 +99,8 @@ class IngestionPipeline:
             "total_files": None,
             "directory_path": None,
         }
+        self.embedding_token_limit = max(0, getattr(options, "embedding_token_limit", 0))
+        self._embedding_effective_limit = self._effective_limit(self.embedding_token_limit)
 
     # --- Friendly factory to reduce long call sites ---
     @classmethod
@@ -247,7 +253,16 @@ class IngestionPipeline:
             self._current_file_info = None
             return
 
-        chunk_total = len(chunks)
+        prepared_chunks = self._prepare_embedding_segments(chunks, self.embedding_token_limit)
+        if not prepared_chunks:
+            source = self._resolve_loader_source(loader)
+            logger.warning(
+                "Skipping %s; splitting produced no embedding-ready chunks.", source
+            )
+            self._current_file_info = None
+            return
+
+        chunk_total = len(prepared_chunks)
         source = self._resolve_loader_source(loader)
         file_info = self._current_file_info or self._gather_file_metadata(source)
         file_context = getattr(self, "_file_context", {}) or {}
@@ -256,10 +271,15 @@ class IngestionPipeline:
         directory_path = file_context.get("directory_path") or file_info.get("parent_directory")
         ingested_at = datetime.now(timezone.utc).isoformat()
 
-        # 2) Split into chunks with your existing strategy
-        for chunk_index, chunk in enumerate(chunks, start=1):
+        # 2) Split into chunks with your existing strategy (and optional segmenting)
+        for chunk_index, (segment_text, chunk_meta) in enumerate(prepared_chunks, start=1):
             # --- Sanitize and hash content (idempotency key) ---
-            sanitized_text: str = self._sanitize_text(chunk.page_content)
+            sanitized_text: str = self._sanitize_text(segment_text)
+            sanitized_text = self._truncate_to_token_limit(
+                sanitized_text,
+                self._embedding_effective_limit,
+                self.tokenizer_model_name,
+            )
             content_hash: str = self._generate_hash(sanitized_text)
 
             # Skip duplicates quickly
@@ -271,7 +291,7 @@ class IngestionPipeline:
 
             # 4) Build SAFE metadata strictly from a whitelist.
             #    DO NOT trust arbitrary keys from chunk.metadata (e.g., XMP tags).
-            raw_meta: Dict[str, Any] = dict(getattr(chunk, "metadata", {}) or {})
+            raw_meta: Dict[str, Any] = dict(chunk_meta or {})
 
             # Only include fields explicitly supported by your Weaviate schema.
             # Coerce types defensively to match schema expectations.
@@ -668,6 +688,54 @@ class IngestionPipeline:
         for doc in documents:
             yield doc
 
+    def _prepare_embedding_segments(
+        self,
+        chunks: List["Document"],
+        limit: int,
+    ) -> List[Tuple[str, Dict[str, Any]]]:
+        """
+        Optionally split oversized chunks into smaller segments before embedding.
+
+        A simple whitespace token count is used to avoid blowing past the embedding
+        model's context window. When limit <= 0 no additional splitting occurs.
+        """
+        effective_limit = self._effective_limit(limit)
+        if effective_limit <= 0:
+            return [
+                (chunk.page_content or "", dict(getattr(chunk, "metadata", {}) or {}))
+                for chunk in chunks
+            ]
+
+        segments: List[Tuple[str, Dict[str, Any]]] = []
+        for chunk in chunks:
+            content = chunk.page_content or ""
+            metadata = dict(getattr(chunk, "metadata", {}) or {})
+            tokens = content.split()
+            if not tokens:
+                segments.append((content, metadata))
+                continue
+            if len(tokens) <= effective_limit:
+                segments.append((content, metadata))
+                continue
+
+            segments_created = 0
+            start = 0
+            while start < len(tokens):
+                end = min(start + effective_limit, len(tokens))
+                segments.append((" ".join(tokens[start:end]), metadata))
+                start = end
+                segments_created += 1
+
+            source = metadata.get("source") or metadata.get("file_path") or "document"
+            logger.debug(
+                "Chunk from %s split into %d segments to honor %d-token embedding limit.",
+                source,
+                segments_created,
+                limit,
+            )
+
+        return segments
+
     @staticmethod
     def _sanitize_text(text: str) -> str:
         """
@@ -684,6 +752,45 @@ class IngestionPipeline:
         return "".join(
             char if (char.isprintable() or char in "\n\t") else " " for char in encoded
         )
+
+    def _truncate_to_token_limit(self, text: str, limit: int, model_name: Optional[str]) -> str:
+        """
+        Ensure text stays under the embedding token limit with a small safety margin.
+        Uses tiktoken when available; otherwise falls back to whitespace tokens.
+        """
+        if limit <= 0:
+            return text
+
+        effective_limit = max(1, limit)
+
+        # For very small limits, prefer whitespace tokens to avoid BPE collisions.
+        if effective_limit <= 8 or tiktoken is None:
+            tokens = text.split()
+            if len(tokens) <= effective_limit:
+                return text
+            return " ".join(tokens[:effective_limit])
+
+        try:
+            enc = tiktoken.encoding_for_model(model_name) if model_name else tiktoken.get_encoding("cl100k_base")
+        except Exception:
+            enc = tiktoken.get_encoding("cl100k_base")
+
+        token_ids = enc.encode(text)
+        if len(token_ids) <= effective_limit:
+            return text
+        truncated = enc.decode(token_ids[:effective_limit])
+        return truncated
+
+    @staticmethod
+    def _effective_limit(limit: int) -> int:
+        """
+        Compute a conservative token cap: trim a margin (~10%, min 8, max 1/3 of limit).
+        """
+        if limit <= 0:
+            return 0
+        margin = max(8, int(limit * 0.1))
+        margin = min(margin, max(1, limit // 3))
+        return max(1, limit - margin)
 
     def _generate_hash(self, text: str) -> str:
         """

@@ -25,6 +25,7 @@ def main():
     pipeline_options = PipelineOptions(
         chunk_size=cfg.CHUNK_SIZE,
         chunk_overlap=cfg.CHUNK_OVERLAP,
+        embedding_token_limit=cfg.EMBEDDING_MAX_TOKENS,
         tenant_id=(cfg.WEAVIATE_DEFAULT_TENANT or None),
     )
     pipeline = IngestionPipeline.from_options(
