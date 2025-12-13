@@ -4,10 +4,10 @@ import os
 from typing import Any, Dict, Optional
 
 from src import logger
-from src.ingestion.loaders import CODE_LOADER_SPECS, TEXT_LOADER_SPECS, PlainTextLoader
+from src.storage.vector.ingestion.loaders import CODE_LOADER_SPECS, TEXT_LOADER_SPECS, PlainTextLoader
+from src.storage.vector.utils import gather_file_metadata
 
 from .code_processor import process_code_document
-from .file_metadata import gather_file_metadata
 from .loader_helpers import should_skip_path
 from .state_helpers import register_observed_file
 from .text_processor import process_text_document

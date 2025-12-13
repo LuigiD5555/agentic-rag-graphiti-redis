@@ -1,13 +1,13 @@
 """
 Object-oriented CLI to ingest documents and code into a vector database using embeddings.
 
-This module lives under src.ingestion to centralize ingestion-related logic.
+This module lives under src.rag.cli to centralize CLI-related logic.
 """
 
 import argparse
 
-from src.ingestion.error_handling import build_ingestion_options_from_args
-from src.ingestion.orchestrator import IngestionOrchestrator
+from .helpers import build_ingestion_options_from_args
+from src.storage.vector.ingestion.orchestrator import IngestionOrchestrator
 from src.rag.audit import configure_logging, get_logger, resolve_level
 from src.settings import Config
 

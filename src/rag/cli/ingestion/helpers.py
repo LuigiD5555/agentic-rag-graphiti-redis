@@ -1,9 +1,9 @@
-"""Validation/normalization helpers for ingestion flows."""
+"""Validation helpers for translating CLI args into ingestion options."""
 from __future__ import annotations
 
 import argparse
 
-from src.ingestion.options import IngestionOptions
+from src.storage.vector.ingestion.options import IngestionOptions
 
 
 def build_ingestion_options_from_args(args: argparse.Namespace, config: object) -> IngestionOptions:

@@ -18,7 +18,7 @@ try:
 except ImportError:
     SemanticChunker = None  # type: ignore
 
-from src.ingestion.options import PipelineOptions
+from src.storage.vector.ingestion.options import PipelineOptions
 
 
 class SplitterStrategy(str, Enum):

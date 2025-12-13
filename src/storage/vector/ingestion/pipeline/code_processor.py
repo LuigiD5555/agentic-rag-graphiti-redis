@@ -4,12 +4,16 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 
 from src import logger
-from .file_metadata import gather_file_metadata
 from .loader_helpers import call_loader
-from .metadata_utils import prune_metadata
 from .state_helpers import finalize_file_ingestion
-from .storage_utils import vector_store_contains
-from .text_utils import generate_hash, sanitize_text, truncate_to_token_limit
+from src.storage.vector.utils import (
+    gather_file_metadata,
+    generate_hash,
+    prune_metadata,
+    sanitize_text,
+    truncate_to_token_limit,
+    vector_store_contains,
+)
 
 
 def process_code_document(pipeline: Any, code_loader: object) -> None:

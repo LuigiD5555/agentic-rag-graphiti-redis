@@ -5,14 +5,16 @@ This module centralizes creation of the vector store so callers can stay agnosti
 to which backend is configured (Weaviate by default).
 """
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from src.settings import Config
 from src.rag.interfaces.vector_interface import VectorInterface
 from src.storage.plugins import create_storage_instance
 
+if TYPE_CHECKING:  # pragma: no cover
+    from src.settings import Config
 
-def _build_default_vector_storage_config(config: Config) -> dict[str, Any]:
+
+def _build_default_vector_storage_config(config: "Config") -> dict[str, Any]:
     """
     Build a default storage config dict for the vector backend.
     """
@@ -29,7 +31,7 @@ def _build_default_vector_storage_config(config: Config) -> dict[str, Any]:
     raise ValueError(f"Unsupported VECTOR_BACKEND: {backend}")
 
 
-def get_vector_store(config: Config) -> VectorInterface:
+def get_vector_store(config: "Config") -> VectorInterface:
     """
     Create the vector store backend selected in settings.
 

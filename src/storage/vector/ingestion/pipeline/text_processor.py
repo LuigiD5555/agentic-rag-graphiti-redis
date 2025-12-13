@@ -9,14 +9,18 @@ try:
 except ImportError:
     from langchain.schema import Document  # type: ignore
 
-from .chunking import prepare_embedding_segments
-from .file_metadata import gather_file_metadata
 from .loader_helpers import call_loader, resolve_loader_source
-from .metadata_utils import prune_metadata
 from .splitters import split_documents
 from .state_helpers import finalize_file_ingestion
-from .storage_utils import vector_store_contains
-from .text_utils import generate_hash, sanitize_text, truncate_to_token_limit
+from src.storage.vector.utils import (
+    gather_file_metadata,
+    generate_hash,
+    prepare_embedding_segments,
+    prune_metadata,
+    sanitize_text,
+    truncate_to_token_limit,
+    vector_store_contains,
+)
 
 
 def process_text_document(pipeline: Any, loader: object) -> None:

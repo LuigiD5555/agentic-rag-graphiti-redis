@@ -11,7 +11,7 @@ from langchain_community.document_loaders import (
 )
 from pptx.exc import PackageNotFoundError
 
-from src.ingestion.loaders.errors import LoaderInvalidFormatError, ensure_file_exists
+from src.storage.vector.ingestion.loaders.errors import LoaderInvalidFormatError, ensure_file_exists
 
 
 class PowerPointLoader:

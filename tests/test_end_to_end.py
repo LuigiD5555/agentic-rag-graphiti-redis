@@ -1,4 +1,4 @@
-from src.rag.agent import Agent
+from src.rag.cli.agent import Agent
 from src.rag.engine import RAGEngine
 from src.rag.interfaces.vector_interface import ScoredItem
 

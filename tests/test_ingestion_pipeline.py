@@ -6,7 +6,7 @@ from typing import Dict, Any, Iterator, List, Optional
 
 import pytest
 
-from src.ingestion.pipeline import IngestionPipeline, SplitterStrategy
+from src.storage.vector.ingestion.pipeline import IngestionPipeline, SplitterStrategy
 from src.rag.cli.options import PipelineOptions
 from src.rag.interfaces.vector_interface import VectorInterface, SupportsExists
 
@@ -76,7 +76,7 @@ class FailingLoader:
         self.path = path
 
     def load(self):
-        from src.ingestion.loaders.errors import LoaderError
+        from src.storage.vector.ingestion.loaders.errors import LoaderError
 
         raise LoaderError("boom")
 
@@ -181,7 +181,7 @@ def test_loader_failure_is_recorded(tmp_path):
     )
 
     # call processor directly to force loader error path
-    from src.ingestion.pipeline.text_processor import process_text_document
+    from src.storage.vector.ingestion.pipeline.text_processor import process_text_document
 
     process_text_document(pipeline, FailingLoader(str(doc)))
 

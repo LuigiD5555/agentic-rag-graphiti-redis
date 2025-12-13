@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Set, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - import for type hints only
-    from src.ingestion.pipeline import SplitterStrategy
+    from src.storage.vector.ingestion.pipeline import SplitterStrategy
 
 
 @dataclass(frozen=True)

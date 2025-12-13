@@ -2,7 +2,7 @@ import io
 import sys
 import time
 
-from src.rag.utils import ProgressBar
+from src.rag.audit import ProgressBar
 
 
 def _last_line(buffer: io.StringIO) -> str:

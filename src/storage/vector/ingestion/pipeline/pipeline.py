@@ -4,17 +4,17 @@ import os
 from typing import Any, Dict, List, Optional, Set
 
 from src import logger
-from src.ingestion.options import PipelineOptions
-from src.ingestion.catalog import IngestionCatalog
+from src.storage.vector.ingestion.options import PipelineOptions
+from src.storage.vector.ingestion.catalog import IngestionCatalog
 from src.rag.interfaces.embedding_interface import EmbeddingInterface
 from src.rag.interfaces.vector_interface import VectorInterface
 from src.rag.audit.decorators import logged, timed
-from src.rag.utils import EmbeddingProgress
+from src.rag.audit import EmbeddingProgress
 
 from .file_processor import process_candidate_file
 from .splitters import SplitterStrategy, build_text_splitter
 from .state_helpers import finalize_ingestion_run, record_directory_listing
-from .text_utils import effective_limit
+from src.storage.vector.utils import effective_limit
 
 
 CATALOG_PATH = os.environ.get(

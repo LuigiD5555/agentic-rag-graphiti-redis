@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from src.ingestion.loaders.errors import LoaderError
+from src.storage.vector.ingestion.loaders.errors import LoaderError
 from src.rag.audit import get_logger
 
 from .failures import record_failure

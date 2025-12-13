@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from src.ingestion.excludes import (
+from src.storage.vector.ingestion.excludes import (
     classify_exclude_entries,
     load_excludes_from_files,
     parse_list_env,

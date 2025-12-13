@@ -1,4 +1,4 @@
-"""CLI helpers for ingestion, centralized under src.ingestion."""
+"""CLI helpers for ingestion, centralized under src.rag.cli."""
 
 from .cli import IngestionCLI, main
 

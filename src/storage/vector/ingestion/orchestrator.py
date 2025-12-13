@@ -3,9 +3,9 @@
 import os
 from typing import List
 
-from src.ingestion.discovery import FileDiscoveryService
-from src.ingestion.options import DiscoveryOptions, IngestionOptions, PipelineOptions
-from src.ingestion.pipeline import IngestionPipeline
+from src.storage.vector.ingestion.discovery import FileDiscoveryService
+from src.storage.vector.ingestion.options import DiscoveryOptions, IngestionOptions, PipelineOptions
+from src.storage.vector.ingestion.pipeline import IngestionPipeline
 from src.providers.factory import ProviderFactory
 from src.rag.audit import get_logger
 from src.settings import Config

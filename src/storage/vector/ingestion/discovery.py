@@ -6,7 +6,7 @@ import os
 from pathlib import PurePosixPath
 from typing import List, Set, Tuple
 
-from src.ingestion.options import DiscoveryOptions
+from src.storage.vector.ingestion.options import DiscoveryOptions
 from src.rag.audit import get_logger
 from src.rag.audit.decorators import logged, timed
 

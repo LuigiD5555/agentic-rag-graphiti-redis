@@ -8,7 +8,7 @@ try:
 except ImportError:  # pragma: no cover
     from langchain.schema import Document  # type: ignore
 
-from src.ingestion.loaders.errors import (
+from src.storage.vector.ingestion.loaders.errors import (
     LoaderInvalidFormatError,
     dependency_missing,
     ensure_file_exists,

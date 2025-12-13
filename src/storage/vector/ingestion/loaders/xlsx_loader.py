@@ -10,7 +10,7 @@ except ImportError:  # pragma: no cover
 from langchain_community.document_loaders import UnstructuredExcelLoader as _Loader
 from unstructured.errors import UnprocessableEntityError
 
-from src.ingestion.loaders.errors import (
+from src.storage.vector.ingestion.loaders.errors import (
     LoaderDependencyError,
     LoaderInvalidFormatError,
     ensure_file_exists,
