@@ -6,8 +6,7 @@ This module lives under src.ingestion to centralize ingestion-related logic.
 
 import argparse
 
-from src.ingestion.cli.helpers import normalize_extension
-from src.ingestion.options import IngestionOptions
+from src.ingestion.error_handling import build_ingestion_options_from_args
 from src.ingestion.orchestrator import IngestionOrchestrator
 from src.rag.audit import configure_logging, get_logger, resolve_level
 from src.settings import Config
@@ -25,7 +24,7 @@ class IngestionCLI:
         """Parse CLI args, configure logging, build options, and run ingestion."""
         args = self._parser.parse_args()
         self._configure_logging(args.log_level)
-        options = self._build_options_from_args(args)
+        options = build_ingestion_options_from_args(args, self._config)
         IngestionOrchestrator(self._config).run(options)
 
     def _build_parser(self) -> argparse.ArgumentParser:
@@ -94,51 +93,6 @@ class IngestionCLI:
         level_value = resolve_level(log_level_name)
         configure_logging(level_value, fmt="%(levelname)s: %(message)s")
         self._log.debug("Logging configured at level=%s", log_level_name)
-
-    def _build_options_from_args(self, args: argparse.Namespace) -> IngestionOptions:
-        """Derive IngestionOptions from CLI args and Config, with graceful fallbacks."""
-        if args.paths:
-            root_paths = tuple(args.paths)
-        else:
-            include_dirs = getattr(self._config, "DOCS_INCLUDE_DIRS", []) or []
-            if include_dirs:
-                root_paths = tuple(include_dirs)
-            else:
-                root_paths = (getattr(self._config, "DOCS_PATH", "/mnt/Documents/Documents"),)
-
-        if args.exts is not None:
-            allowed_extensions = {normalize_extension(e) for e in args.exts}
-        else:
-            cfg_exts = getattr(self._config, "DOCS_FILE_EXTS", []) or []
-            allowed_extensions = {normalize_extension(e) for e in cfg_exts} if cfg_exts else set()
-
-        if args.exclude_dirs is not None:
-            excluded_directory_names = set(args.exclude_dirs)
-        else:
-            cfg_excludes = getattr(self._config, "DOCS_EXCLUDE_DIRS", ()) or ()
-            excluded_directory_names = set(cfg_excludes)
-
-        if args.exclude_patterns is not None:
-            excluded_path_globs = set(args.exclude_patterns)
-        else:
-            cfg_patterns = getattr(self._config, "DOCS_EXCLUDE_GLOBS", ()) or ()
-            excluded_path_globs = set(cfg_patterns)
-
-        follow_symbolic_links = bool(args.follow_symlinks or getattr(self._config, "DOCS_FOLLOW_SYMLINKS", False))
-
-        return IngestionOptions(
-            root_paths=root_paths,
-            allowed_extensions=allowed_extensions,
-            excluded_directory_names=excluded_directory_names,
-            excluded_path_globs=excluded_path_globs,
-            follow_symbolic_links=follow_symbolic_links,
-            dry_run=bool(args.dry_run),
-            per_file_mode=bool(args.per_file),
-            maximum_files=int(args.max_files or 0),
-            log_level_name=(args.log_level or getattr(self._config, "INGEST_LOG_LEVEL", "INFO") or "INFO"),
-            scan_progress_every=int(args.scan_progress or 0),
-        )
-
 
 def main() -> None:
     """Entrypoint for `python -m src.main --ingest ...`."""
