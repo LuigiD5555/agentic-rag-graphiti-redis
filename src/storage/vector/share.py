@@ -11,7 +11,7 @@ import weaviate
 from weaviate.classes.init import AdditionalConfig, Timeout
 from weaviate.classes.query import Filter
 from src.config.settings import Config
-from src.audit.logger import audit  # keep your existing audit hook
+from src.rag.audit.logger import audit  # keep your existing audit hook
 
 
 def _get_client(cfg: Config) -> weaviate.WeaviateClient:

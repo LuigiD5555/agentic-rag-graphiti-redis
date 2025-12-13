@@ -17,7 +17,7 @@ from weaviate.exceptions import UnexpectedStatusCodeError
 from src.config.settings import Config
 from src.interfaces.vector_interface import ScoredItem, VectorInterface
 from src import logger
-from src.utils.decorators import logged, timed
+from src.rag.utils.decorators import logged, timed
 
 from .schema import SchemaManager
 

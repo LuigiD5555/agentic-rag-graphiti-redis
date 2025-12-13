@@ -4,8 +4,7 @@ from __future__ import annotations
 import logging
 import time
 from functools import wraps
-from typing import Callable, TypeVar, Any
-
+from typing import Any, Callable, TypeVar
 
 F = TypeVar("F", bound=Callable[..., Any])
 
