@@ -47,6 +47,21 @@ class Config(BaseSettings):
         default_factory=lambda: {"default": {"BACKEND": "neo4j"}}
     )
 
+    # ------------------------------------------------------------------
+    # External apps (Django-like INSTALLED_APPS, plus optional entry points)
+    # ------------------------------------------------------------------
+    INSTALLED_APPS: list[str] = Field(
+        default_factory=lambda: [
+            "src.providers.lmstudio.apps.LMStudioProviderAppConfig",
+            "src.providers.openai.apps.OpenAIProviderAppConfig",
+            "src.providers.huggingface.apps.HuggingFaceProviderAppConfig",
+            "src.providers.anythingllm.apps.AnythingLLMProviderAppConfig",
+            "src.providers.litellm_gateway.apps.LiteLLMGatewayAppConfig",
+        ]
+    )
+    AUTOLOAD_APP_ENTRYPOINTS: bool = False
+    APP_ENTRYPOINT_GROUP: str = "rag_agentic_graphiti.apps"
+
     # ----- Weaviate configuration -----
     WEAVIATE_URL: str = "http://localhost:8080"
     WEAVIATE_API_KEY: str = ""
@@ -78,6 +93,10 @@ class Config(BaseSettings):
     LMSTUDIO_EXTRA_HOSTS: list[str] = []
     LMSTUDIO_CHAT_MODEL: str = ""
     LMSTUDIO_REQUIRE_SERVER: bool = False
+
+    # ----- LiteLLM gateway simulation -----
+    # When PROVIDER="litellm", the gateway delegates to this provider name.
+    LITELLM_TARGET_PROVIDER: str = "lmstudio"
 
     # ----- Document ingestion -----
     DOCS_PATH: str = "/mnt/Documents/Documents"
@@ -148,6 +167,8 @@ class Config(BaseSettings):
         "VECTOR_STORES",
         "CACHES",
         "GRAPH_STORES",
+        "INSTALLED_APPS",
+        "AUTOLOAD_APP_ENTRYPOINTS",
         "CHUNK_SIZE",
         "CHUNK_OVERLAP",
         "EMBEDDING_MAX_TOKENS",

@@ -111,12 +111,40 @@ If another machine has **LM Studio** and similar specs:
 
 ---
 
+## External Apps (Plugins)
+
+This project supports Django-like app registration:
+
+- Enable apps via `Config.INSTALLED_APPS` (stored in `data/settings.json`).
+- Apps run a `ready()` hook to register components (e.g. providers).
+- Optional Python entry-point discovery can be enabled with:
+  - `AUTOLOAD_APP_ENTRYPOINTS=true`
+  - `APP_ENTRYPOINT_GROUP=rag_agentic_graphiti.apps`
+
+### Provider Gateway Example (LiteLLM-like)
+
+Set:
+
+- `PROVIDER=litellm`
+- `LITELLM_TARGET_PROVIDER=lmstudio` (or `openai`)
+
+This uses a gateway adapter that delegates to another provider, to simulate how
+an external gateway/provider would integrate.
+
+### Provider Apps
+
+- Only `ollama` is treated as a built-in provider (core `rag`).
+- Providers like `lmstudio`, `anythingllm`, and `huggingface` are enabled via `INSTALLED_APPS`.
+
+---
+
 ## Roadmap
 
 - Support for additional document formats
 - Custom preprocessing plugins
 - Improved relation extraction with prompt templates
 - Lightweight web-based query interface
+- External apps / providers via registry
 
 ---
 

@@ -6,9 +6,9 @@ from typing import Optional
 from src.settings import Config
 from src.rag.interfaces.embedding_interface import EmbeddingInterface
 from src.rag.interfaces.chat_interface import ChatInterface
-from src.providers.adapters.lmstudio_adapter import LMStudioAdapter
-from src.providers.adapters.openai_adapter import OpenAIAdapter
 from src.rag.interfaces.provider_adapter_interface import ProviderAdapterInterface
+from src.rag.registry import ensure_apps_loaded
+from src.providers.registry import get_provider_factory
 
 
 @dataclass
@@ -16,8 +16,12 @@ class ProviderFactory:
     """
     Factory for provider adapters (embeddings + LLM) selected from Config.
 
-    Env knob (optional): PROVIDER = lmstudio | openai
+    Env knob (optional): PROVIDER = lmstudio | openai | huggingface | anythingllm | litellm | ollama
     Defaults to lmstudio.
+
+    Notes:
+    - Providers are registered by installed apps (Config.INSTALLED_APPS).
+    - The only built-in provider is `ollama` (registered by the core rag app).
     """
 
     config: Config
@@ -25,11 +29,10 @@ class ProviderFactory:
 
     def _select_adapter(self) -> ProviderAdapterInterface:
         if self._adapter is None:
+            ensure_apps_loaded(self.config)
             provider = (getattr(self.config, "PROVIDER", None) or "lmstudio").lower()
-            if provider == "openai":
-                self._adapter = OpenAIAdapter(self.config)
-            else:
-                self._adapter = LMStudioAdapter(self.config)
+            factory = get_provider_factory(provider)
+            self._adapter = factory(self.config)
         return self._adapter
 
     def embeddings(self) -> EmbeddingInterface:
