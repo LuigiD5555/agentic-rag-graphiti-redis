@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from fnmatch import fnmatchcase
 from pathlib import PurePosixPath
 from typing import List, Set, Tuple
@@ -64,7 +65,9 @@ class FileDiscoveryService:
         """Traverse roots and return candidate file paths and visited directory count."""
         files: List[str] = []
         visited_dirs = 0
+        accepted_files = 0
         progress_every = getattr(opts, "progress_every", 0)
+        last_progress = time.monotonic()
 
         for raw_root in opts.roots:
             root = os.path.abspath(raw_root)
@@ -84,8 +87,21 @@ class FileDiscoveryService:
             filters = self._build_filters(opts)
             for dirpath, dirnames, filenames in os.walk(root, followlinks=opts.follow_symlinks):
                 visited_dirs += 1
-                if progress_every and visited_dirs % progress_every == 0:
-                    log.info("Scanning… visited=%d dir(s), current=%s", visited_dirs, dirpath)
+                now = time.monotonic()
+                should_log = False
+                if progress_every:
+                    should_log = visited_dirs % progress_every == 0
+                else:
+                    should_log = (now - last_progress) >= 2.0
+
+                if should_log:
+                    log.info(
+                        "Scanning… visited=%d dir(s), accepted=%d file(s), current=%s",
+                        visited_dirs,
+                        accepted_files,
+                        dirpath,
+                    )
+                    last_progress = now
                 rel_dirpath = os.path.relpath(dirpath, root)
                 if rel_dirpath == ".":
                     rel_dirpath = ""
@@ -107,6 +123,7 @@ class FileDiscoveryService:
                     if not all(s.allow_file(rel_dirpath, filename, abs_file) for s in filters):
                         continue
                     files.append(abs_file)
+                    accepted_files += 1
 
         files = sorted(set(files))
         return files, visited_dirs

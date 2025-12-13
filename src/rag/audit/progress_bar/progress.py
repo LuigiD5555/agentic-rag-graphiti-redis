@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from typing import Iterable, Iterator, TextIO, TypeVar
 
 T = TypeVar("T")
@@ -20,6 +21,7 @@ class ProgressBar:
         fill_char: str = "▮",
         empty_char: str = "·",
         rewrite: bool | None = None,
+        min_interval_seconds: float = 0.0,
     ) -> None:
         if total <= 0:
             raise ValueError("total must be greater than zero")
@@ -33,6 +35,8 @@ class ProgressBar:
         self.current = 0
         self._finished = False
         self._last_line_length = 0
+        self._min_interval_seconds = max(0.0, float(min_interval_seconds or 0.0))
+        self._last_render_ts = 0.0
         # Auto-disable single-line rewrite when the stream is not a TTY (e.g., docker logs).
         self._rewrite = stream.isatty() if rewrite is None else bool(rewrite)
         self._render()
@@ -64,6 +68,12 @@ class ProgressBar:
         self._finished = True
 
     def _render(self, message: str | None = None) -> None:
+        now = time.monotonic()
+        if not self._rewrite and self._min_interval_seconds:
+            if self.current < self.total and (now - self._last_render_ts) < self._min_interval_seconds:
+                return
+            self._last_render_ts = now
+
         ratio = self.current / self.total
         filled = int(self.length * ratio)
         bar = f"[{self.fill_char * filled}{self.empty_char * (self.length - filled)}]"

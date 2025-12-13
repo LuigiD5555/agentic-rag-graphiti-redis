@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from typing import Any, Dict, List, Optional, Set
 
 from src import logger
@@ -10,6 +11,7 @@ from src.rag.interfaces.embedding_interface import EmbeddingInterface
 from src.rag.interfaces.vector_interface import VectorInterface
 from src.rag.audit.decorators import logged, timed
 from src.rag.audit import EmbeddingProgress
+from src.rag.audit import ProgressBar
 
 from .file_processor import process_candidate_file
 from .splitters import SplitterStrategy, build_text_splitter
@@ -89,6 +91,16 @@ class IngestionPipeline:
         self._existing_hash_cache = set()
         self.progress.reset()
         total_paths = len(paths)
+        bar: ProgressBar | None = None
+        if total_paths > 0:
+            # In docker logs (non-TTY), throttle to avoid spamming thousands of lines.
+            bar = ProgressBar(
+                total=total_paths,
+                stream=sys.stdout,
+                prefix="Ingest",
+                rewrite=None,
+                min_interval_seconds=1.0,
+            )
         try:
             for path_index, path in enumerate(paths, start=1):
                 abs_path = os.path.abspath(path)
@@ -96,6 +108,8 @@ class IngestionPipeline:
                     if not os.path.exists(abs_path):
                         logger.error("Path does not exist: %s", abs_path)
                         continue
+                    if bar:
+                        bar.update(path_index, message=os.path.basename(abs_path) or abs_path)
 
                     if os.path.isfile(abs_path):
                         directory = os.path.dirname(abs_path) or os.path.abspath(".")
@@ -126,4 +140,6 @@ class IngestionPipeline:
                     pct = (path_index / total_paths * 100) if total_paths else 100.0
                     logger.debug("Ingest progress: %.2f%% (%d/%d) %s", pct, path_index, total_paths, abs_path)
         finally:
+            if bar:
+                bar.finish(message="done")
             finalize_ingestion_run(self)
