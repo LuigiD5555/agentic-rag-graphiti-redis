@@ -2,8 +2,8 @@
 CLI to share/unshare documents in Weaviate by updating payload fields.
 
 Usage:
-  python -m src.cache.share --id <hash_or_external_id> --visibility public|private [--tenant TENANT]
-  python -m src.cache.share --id <hash_or_external_id> --grant user1,user2      [--tenant TENANT]
+  python -m src.storage.vector.share --id <hash_or_external_id> --visibility public|private [--tenant TENANT]
+  python -m src.storage.vector.share --id <hash_or_external_id> --grant user1,user2      [--tenant TENANT]
 """
 
 import argparse

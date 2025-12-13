@@ -1,4 +1,4 @@
-"""Module for Redis-based caching."""
+"""Redis-based caching service."""
 from typing import Optional, cast
 import json
 import redis

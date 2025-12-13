@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any, List
 from src.interfaces.embedding_interface import EmbeddingInterface
 from src.interfaces.vector_interface import VectorInterface, ScoredItem
 from src.interfaces.graph_interface import GraphInterface
-from src.cache.redis_cache import CacheService
+from src.storage.cache import CacheService
 from src.interfaces.chat_interface import ChatInterface
 from src import logger
 from src.storage.graph.null_repository import NullGraphRepository
