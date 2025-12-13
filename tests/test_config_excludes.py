@@ -14,7 +14,7 @@ def clear_cached_env(monkeypatch):
 
 
 def test_config_merges_default_env_and_file(tmp_path, monkeypatch):
-    ignore_file = tmp_path / ".ragignore"
+    ignore_file = tmp_path / ".ingestignore"
     ignore_file.write_text(
         """
         # comentarios deben ignorarse
@@ -43,3 +43,22 @@ def test_config_merges_default_env_and_file(tmp_path, monkeypatch):
     assert "*.cache" in excluded_globs
     assert "*.bak" in excluded_globs
     assert "**/tmp/**" in excluded_globs
+
+
+def test_config_loads_default_ingestignore(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".ingestignore").write_text(
+        """
+        # file basename
+        secrets.txt
+        # relative path
+        data/private/**
+        """,
+        encoding="utf-8",
+    )
+
+    config = Config()
+    excluded_globs = set(config.DOCS_EXCLUDE_GLOBS)
+
+    assert "secrets.txt" in excluded_globs
+    assert "data/private/**" in excluded_globs

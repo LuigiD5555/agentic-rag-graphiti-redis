@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Iterable
 
 
-DEFAULT_EXCLUDE_FILES: tuple[str, ...] = (".ragignore", ".rag-ingest-ignore", "rag-ingest-ignore.txt")
+DEFAULT_EXCLUDE_FILES: tuple[str, ...] = (".ingestignore",)
 
 
 def parse_list_env(raw_value: str | None) -> list[str]:
@@ -53,9 +53,10 @@ def value_as_list(value: tuple[str, ...] | list[str] | str | None) -> list[str]:
 def load_excludes_from_files(exclude_file: str | None, *, cwd: str | None = None) -> list[str]:
     entries: list[str] = []
 
-    candidates = [exclude_file] if exclude_file else []
-    if not candidates:
-        candidates.extend(DEFAULT_EXCLUDE_FILES)
+    candidates: list[str] = []
+    if exclude_file:
+        candidates.append(exclude_file)
+    candidates.extend(DEFAULT_EXCLUDE_FILES)
 
     seen: set[Path] = set()
     base_dir = Path(cwd or os.getcwd())
@@ -119,7 +120,11 @@ def classify_exclude_entries(entries: Iterable[object]) -> tuple[set[str], set[s
         if is_glob_like(normalized) or "/" in normalized:
             globs.add(normalized)
         else:
+            # Treat plain tokens as both:
+            # - directory names to prune fast during os.walk
+            # - basename patterns so users can ignore files like "secrets.txt"
             dirnames.add(normalized)
+            globs.add(normalized)
 
     return dirnames, globs
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 """File discovery helpers for ingestion."""
 
 import os
+import re
+from fnmatch import fnmatchcase
 from pathlib import PurePosixPath
 from typing import List, Set, Tuple
 
@@ -17,24 +19,24 @@ class FileDiscoveryService:
     """Service that walks the filesystem and selects candidate files for ingestion."""
 
     class _Strategy:
-        def allow_dir(self, rel_dirpath: str, dirname: str) -> bool:  # pragma: no cover - interface
+        def allow_dir(self, rel_dirpath: str, dirname: str, abs_path: str) -> bool:  # pragma: no cover - interface
             return True
 
-        def allow_file(self, rel_dirpath: str, filename: str) -> bool:  # pragma: no cover - interface
+        def allow_file(self, rel_dirpath: str, filename: str, abs_path: str) -> bool:  # pragma: no cover - interface
             return True
 
     class _IgnoreDirsStrategy(_Strategy):
         def __init__(self, excluded: Set[str]):
             self._excluded = excluded
 
-        def allow_dir(self, rel_dirpath: str, dirname: str) -> bool:
+        def allow_dir(self, rel_dirpath: str, dirname: str, abs_path: str) -> bool:
             return dirname not in self._excluded
 
     class _ExtFilterStrategy(_Strategy):
         def __init__(self, allowed_exts: Set[str]):
             self._allowed = allowed_exts
 
-        def allow_file(self, rel_dirpath: str, filename: str) -> bool:
+        def allow_file(self, rel_dirpath: str, filename: str, abs_path: str) -> bool:
             if not self._allowed:
                 return True
             _, ext = os.path.splitext(filename)
@@ -44,17 +46,17 @@ class FileDiscoveryService:
         def __init__(self, patterns: Set[str]):
             self._patterns = patterns
 
-        def allow_dir(self, rel_dirpath: str, dirname: str) -> bool:
+        def allow_dir(self, rel_dirpath: str, dirname: str, abs_path: str) -> bool:
             if not self._patterns:
                 return True
             relative = dirname if not rel_dirpath else os.path.join(rel_dirpath, dirname)
-            return not FileDiscoveryService._matches_any_glob(relative, self._patterns)
+            return not FileDiscoveryService._matches_any_glob(relative, self._patterns, absolute_path=abs_path)
 
-        def allow_file(self, rel_dirpath: str, filename: str) -> bool:
+        def allow_file(self, rel_dirpath: str, filename: str, abs_path: str) -> bool:
             if not self._patterns:
                 return True
             relative = filename if not rel_dirpath else os.path.join(rel_dirpath, filename)
-            return not FileDiscoveryService._matches_any_glob(relative, self._patterns)
+            return not FileDiscoveryService._matches_any_glob(relative, self._patterns, absolute_path=abs_path)
 
     @logged("Starting file discovery")
     @timed()
@@ -72,7 +74,7 @@ class FileDiscoveryService:
 
             if os.path.isfile(root):
                 rel_file = os.path.basename(root)
-                if self._matches_any_glob(rel_file, opts.excluded_globs):
+                if self._matches_any_glob(rel_file, opts.excluded_globs, absolute_path=root):
                     continue
                 _, ext = os.path.splitext(root)
                 if self._is_allowed_ext(ext, opts.allowed_exts):
@@ -88,43 +90,76 @@ class FileDiscoveryService:
                 if rel_dirpath == ".":
                     rel_dirpath = ""
 
-                if rel_dirpath and self._matches_any_glob(rel_dirpath, opts.excluded_globs):
+                if rel_dirpath and self._matches_any_glob(rel_dirpath, opts.excluded_globs, absolute_path=dirpath):
                     dirnames[:] = []
                     continue
 
-                dirnames[:] = [d for d in dirnames if all(s.allow_dir(rel_dirpath, d) for s in filters)]
+                dirnames[:] = [
+                    d
+                    for d in dirnames
+                    if all(s.allow_dir(rel_dirpath, d, os.path.join(dirpath, d)) for s in filters)
+                ]
                 for filename in filenames:
                     relative_file = filename if not rel_dirpath else os.path.join(rel_dirpath, filename)
-                    if self._matches_any_glob(relative_file, opts.excluded_globs):
+                    abs_file = os.path.join(dirpath, filename)
+                    if self._matches_any_glob(relative_file, opts.excluded_globs, absolute_path=abs_file):
                         continue
-                    if not all(s.allow_file(rel_dirpath, filename) for s in filters):
+                    if not all(s.allow_file(rel_dirpath, filename, abs_file) for s in filters):
                         continue
-                    files.append(os.path.join(dirpath, filename))
+                    files.append(abs_file)
 
         files = sorted(set(files))
         return files, visited_dirs
 
     @staticmethod
-    def _matches_any_glob(relative_path: str, patterns: Set[str]) -> bool:
+    def _matches_any_glob(relative_path: str, patterns: Set[str], *, absolute_path: str | None = None) -> bool:
         if not patterns:
             return False
 
+        def _is_glob_like(value: str) -> bool:
+            return any(char in value for char in "*?[]")
+
         normalized = relative_path.replace("\\", "/")
-        normalized = normalized.lstrip("./")
+        while normalized.startswith("./"):
+            normalized = normalized[2:]
         normalized = normalized.strip("/")
         candidate = normalized or "."
         candidate_path = PurePosixPath(candidate)
         basename = normalized.rsplit("/", 1)[-1] if normalized else ""
         basename_path = PurePosixPath(basename or ".")
 
+        abs_candidate_path: PurePosixPath | None = None
+        abs_basename_path: PurePosixPath | None = None
+        abs_candidate_str: str | None = None
+        abs_basename_str: str | None = None
+        if absolute_path:
+            abs_normalized = os.path.abspath(absolute_path).replace("\\", "/").rstrip("/") or "/"
+            abs_candidate_str = abs_normalized
+            abs_candidate_path = PurePosixPath(abs_candidate_str)
+            abs_basename_str = abs_candidate_str.rsplit("/", 1)[-1] if abs_candidate_str else ""
+            abs_basename_path = PurePosixPath(abs_basename_str or ".")
+
         for pattern in patterns:
             normalized_pattern = pattern.replace("\\", "/").strip()
             if not normalized_pattern:
                 normalized_pattern = "."
-            normalized_pattern = normalized_pattern.lstrip("./")
-            if normalized_pattern.startswith("/"):
-                normalized_pattern = normalized_pattern[1:]
-            normalized_pattern = normalized_pattern.rstrip("/")
+            while normalized_pattern.startswith("./"):
+                normalized_pattern = normalized_pattern[2:]
+            raw_pattern = normalized_pattern.rstrip("/") or "."
+
+            is_abs = raw_pattern.startswith("/") or bool(re.match(r"^[A-Za-z]:/", raw_pattern))
+            if is_abs and abs_candidate_path is not None and abs_candidate_str is not None:
+                abs_pattern = raw_pattern
+                if abs_candidate_path.match(abs_pattern):
+                    return True
+                if abs_basename_str and abs_basename_path is not None and abs_basename_path.match(abs_pattern):
+                    return True
+                # Works for both exact paths and glob patterns.
+                if fnmatchcase(abs_candidate_str, abs_pattern):
+                    return True
+                continue
+
+            normalized_pattern = raw_pattern.lstrip("/")
             if not normalized_pattern:
                 normalized_pattern = "."
             if candidate_path.match(normalized_pattern):

@@ -77,6 +77,9 @@ During ingestion:
 - Data is inserted into Weaviate
 - Entities and relationships are extracted and inserted into Neo4j
 
+To ignore files/directories from ingestion, add patterns and paths to `.ingestignore`
+(supports relative or absolute entries).
+
 ---
 
 ### Query the RAG

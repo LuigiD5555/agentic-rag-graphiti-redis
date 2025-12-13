@@ -1,0 +1,8 @@
+# Patterns, relative paths, or absolute paths to exclude from ingestion.
+#
+# Examples:
+#   node_modules/
+#   **/__pycache__/**
+#   data/private/**
+#   /absolute/path/to/secrets.txt
+
