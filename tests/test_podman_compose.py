@@ -26,17 +26,39 @@ def _port_mapping_allows_variable_or_literal(mapping: str, host_port: int, conta
     - We only validate shape and the container side ending up at the required port
       either literally or via env var; same for host side.
     """
-    if ":" not in mapping:
-        return False
+    normalized = mapping.strip()
+    if normalized[:1] == normalized[-1:] and normalized[:1] in {'"', "'"}:
+        normalized = normalized[1:-1].strip()
 
-    left, right = mapping.split(":", 1)
+    if ":" not in normalized:
+        return False
 
     def _is_literal_port(side: str, expected: int) -> bool:
         return side == str(expected)
 
     def _is_env_var(side: str) -> bool:
-        # Accept ${VAR} or ${VAR:-default}
         return bool(re.fullmatch(r"\$\{[A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?\}", side))
+
+    def _is_literal_ip(value: str) -> bool:
+        return bool(re.fullmatch(r"(?:\d{1,3}\.){3}\d{1,3}", value))
+
+    host_and_container = normalized
+    ip_match = re.match(rf"^(?P<ip>(?:\d{{1,3}}\.){{3}}\d{{1,3}}):(?P<rest>.+)$", host_and_container)
+    if ip_match:
+        ip_part = ip_match.group("ip")
+        if not _is_literal_ip(ip_part):
+            return False
+        host_and_container = ip_match.group("rest")
+
+    if ":" not in host_and_container:
+        return False
+
+    host_part, container_part = host_and_container.rsplit(":", 1)
+    left = host_part.strip()
+    right = container_part.strip()
+
+    def _is_literal_ip(value: str) -> bool:
+        return bool(re.fullmatch(r"(?:\d{1,3}\.){3}\d{1,3}", value))
 
     left_ok = _is_literal_port(left, host_port) or _is_env_var(left)
     right_ok = _is_literal_port(right, container_port) or _is_env_var(right)
@@ -48,9 +70,6 @@ def _ports_include_literal_or_env(ports_list, host_port: int, container_port: in
     Return True if `ports_list` contains either the exact literal mapping
     or at least one entry that matches the accepted env-var pattern for the pair.
     """
-    expected_literal = f"{host_port}:{container_port}"
-    if expected_literal in ports_list:
-        return True
     return any(
         _port_mapping_allows_variable_or_literal(p, host_port, container_port)
         for p in ports_list

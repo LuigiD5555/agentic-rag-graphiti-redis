@@ -38,7 +38,7 @@ def process_text_document(pipeline: Any, loader: object) -> None:
         pipeline._current_file_info = None
         return
 
-    prepared_chunks = prepare_embedding_segments(chunks, pipeline.embedding_effective_limit)
+    prepared_chunks = prepare_embedding_segments(chunks, pipeline.embedding_token_limit)
     if not prepared_chunks:
         source = resolve_loader_source(loader)
         logger.warning("Skipping %s; splitting produced no embedding-ready chunks.", source)
