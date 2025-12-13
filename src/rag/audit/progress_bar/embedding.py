@@ -89,34 +89,27 @@ class EmbeddingProgress:
         source: str,
         base_url: str,
     ) -> str:
-        # Prefer file-based progress when the caller has an overall count.
+        # (x/y) + bar: embedding progress
+        self.done += 1
+        embedding_total = self._overall_total()
+        embedding_ratio = progress_ratio(self.done, embedding_total)
+        bar = render_bar(
+            ratio=embedding_ratio,
+            length=self.bar_length,
+            fill_char=self.fill_char,
+            empty_char=self.empty_char,
+        )
+
+        # Percent: file progress (preferred when available)
         if file_total and file_total > 0:
-            ratio = progress_ratio(file_index, file_total)
-            overall_pct = ratio * 100.0
-            bar = render_bar(
-                ratio=ratio,
-                length=self.bar_length,
-                fill_char=self.fill_char,
-                empty_char=self.empty_char,
-            )
-            overall_total = int(file_total)
-            done_value = max(0, min(int(file_index), overall_total))
+            pct_ratio = progress_ratio(file_index, file_total)
+            overall_pct = pct_ratio * 100.0
         else:
-            self.done += 1
-            overall_total = self._overall_total()
-            ratio = progress_ratio(self.done, overall_total)
-            overall_pct = ratio * 100.0
-            bar = render_bar(
-                ratio=ratio,
-                length=self.bar_length,
-                fill_char=self.fill_char,
-                empty_char=self.empty_char,
-            )
-            done_value = self.done
+            overall_pct = embedding_ratio * 100.0
 
         url = base_url.rstrip("/") if base_url else "/v1/objects"
         return (
-            f"({done_value}/{overall_total}) {bar} HTTP Request: POST {url}"
+            f"({self.done}/{embedding_total}) {bar} HTTP Request: POST {url}"
             f' "HTTP/1.1 200 OK" - {overall_pct:.2f}% - {source}'
         )
 
