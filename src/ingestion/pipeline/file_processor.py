@@ -8,7 +8,7 @@ from src.ingestion.loaders import CODE_LOADER_SPECS, TEXT_LOADER_SPECS, PlainTex
 
 from .code_processor import process_code_document
 from .file_metadata import gather_file_metadata
-from .loader_helpers import resolve_loader_source, should_skip_path
+from .loader_helpers import should_skip_path
 from .state_helpers import register_observed_file
 from .text_processor import process_text_document
 
@@ -32,6 +32,8 @@ def process_candidate_file(
         logger.info("Skipping %s; no changes detected.", full_path)
         pipeline._current_file_info = None
         return
+
+    pipeline.progress.register_file(full_path, file_info.get("file_size_bytes"))
 
     pipeline._file_context = {
         "file_index": file_index,

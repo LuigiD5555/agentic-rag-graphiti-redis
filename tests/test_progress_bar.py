@@ -28,7 +28,7 @@ class _Tee:
 
 def test_progress_bar_updates_without_scrolling_and_finishes_with_newline():
     buf = io.StringIO()
-    bar = ProgressBar(total=3, stream=buf, prefix="Test")
+    bar = ProgressBar(total=3, stream=buf, prefix="Test", rewrite=True)
 
     bar.advance()
     bar.advance()
@@ -47,7 +47,7 @@ def test_progress_bar_updates_without_scrolling_and_finishes_with_newline():
 
 def test_progress_bar_track_advances_iterable_and_returns_items():
     buf = io.StringIO()
-    bar = ProgressBar(total=3, stream=buf)
+    bar = ProgressBar(total=3, stream=buf, rewrite=True)
 
     items = list(bar.track([1, 2, 3]))
 
@@ -58,7 +58,7 @@ def test_progress_bar_track_advances_iterable_and_returns_items():
 
 def test_progress_bar_clears_longer_previous_line():
     buf = io.StringIO()
-    bar = ProgressBar(total=3, stream=buf)
+    bar = ProgressBar(total=3, stream=buf, rewrite=True)
 
     bar.update(1, message="long-message")
     bar.update(2, message="short")
@@ -69,7 +69,7 @@ def test_progress_bar_clears_longer_previous_line():
 
 def test_progress_bar_counts_zero_to_twenty():
     buf = io.StringIO()
-    bar = ProgressBar(total=20, stream=buf, prefix="Count")
+    bar = ProgressBar(total=20, stream=buf, prefix="Count", rewrite=True)
 
     for i in range(0, 21):  # inclusive from 0 to 20
         bar.update(i)
@@ -88,7 +88,7 @@ def test_progress_bar_visual_demo(capsys):
     tee = _Tee(sys.stdout, buf)
 
     with capsys.disabled():
-        bar = ProgressBar(total=20, stream=tee, prefix="Demo")
+        bar = ProgressBar(total=20, stream=tee, prefix="Demo", rewrite=True)
 
         for i in range(0, 21):
             bar.update(i, message=f"paso {i}")

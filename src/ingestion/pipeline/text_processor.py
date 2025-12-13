@@ -22,6 +22,7 @@ from .text_utils import generate_hash, sanitize_text, truncate_to_token_limit
 def process_text_document(pipeline: Any, loader: object) -> None:
     documents = call_loader(pipeline, loader, "load")
     if not documents:
+        pipeline.progress.add_total(0, source=resolve_loader_source(loader))
         pipeline._current_file_info = None
         return
 
@@ -29,6 +30,7 @@ def process_text_document(pipeline: Any, loader: object) -> None:
     if not chunks:
         source = resolve_loader_source(loader)
         logger.warning("Skipping %s; no chunks produced after splitting.", source)
+        pipeline.progress.add_total(0, source=source)
         pipeline._current_file_info = None
         return
 
@@ -36,11 +38,13 @@ def process_text_document(pipeline: Any, loader: object) -> None:
     if not prepared_chunks:
         source = resolve_loader_source(loader)
         logger.warning("Skipping %s; splitting produced no embedding-ready chunks.", source)
+        pipeline.progress.add_total(0, source=source)
         pipeline._current_file_info = None
         return
 
     chunk_total = len(prepared_chunks)
     source = resolve_loader_source(loader)
+    pipeline.progress.add_total(chunk_total, source=source)
     file_info = pipeline._current_file_info or gather_file_metadata(source)
     file_context: Dict[str, Optional[Any]] = getattr(pipeline, "_file_context", {}) or {}
     directory_file_index = file_context.get("file_index")
@@ -104,6 +108,15 @@ def process_text_document(pipeline: Any, loader: object) -> None:
                 raise
 
         existing_cache.add(content_hash)
+        base_url = getattr(getattr(pipeline, "vector_store", None), "base_url", None) or ""
+        target_url = f"{base_url.rstrip('/')}/v1/objects" if base_url else "/v1/objects"
+        log_line = pipeline.progress.advance(
+            file_index=chunk_index,
+            file_total=chunk_total,
+            source=source_value,
+            base_url=target_url,
+        )
+        logger.info(log_line)
     finalize_file_ingestion(pipeline, file_info, chunk_total=chunk_total)
 
 

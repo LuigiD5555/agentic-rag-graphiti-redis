@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import logging
 import os
 from typing import Any
 
 from src.ingestion.loaders.errors import LoaderError
+from src.rag.audit import get_logger
 
 from .failures import record_failure
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def call_loader(pipeline: Any, loader: object, method_name: str):
