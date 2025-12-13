@@ -51,6 +51,11 @@ def should_skip_path(path: str) -> bool:
         log.error("Path does not exist: %s", path)
         return True
 
+    basename = os.path.basename(path)
+    if basename.startswith("~$"):
+        log.info("Skipping temporary Office lock file: %s", path)
+        return True
+
     return False
 
 

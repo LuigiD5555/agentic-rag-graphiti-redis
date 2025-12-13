@@ -14,6 +14,9 @@ grpcio>=1.64.0
 # Ingestion
 unstructured
 networkx
+pandas
+openpyxl
+msoffcrypto-tool
 python-docx
 pypdf
 python-pptx
