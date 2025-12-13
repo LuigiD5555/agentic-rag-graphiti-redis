@@ -5,6 +5,8 @@ import sys
 import time
 from typing import Iterable, Iterator, TextIO, TypeVar
 
+from src.ingestion.utils.progress import progress_ratio, render_bar
+
 T = TypeVar("T")
 
 
@@ -74,9 +76,13 @@ class ProgressBar:
                 return
             self._last_render_ts = now
 
-        ratio = self.current / self.total
-        filled = int(self.length * ratio)
-        bar = f"[{self.fill_char * filled}{self.empty_char * (self.length - filled)}]"
+        ratio = progress_ratio(self.current, self.total)
+        bar = render_bar(
+            ratio=ratio,
+            length=self.length,
+            fill_char=self.fill_char,
+            empty_char=self.empty_char,
+        )
         percent_value = ratio * 100
         percent = f"{percent_value:6.2f}%"
 

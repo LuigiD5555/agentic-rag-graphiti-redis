@@ -3,6 +3,7 @@ import sys
 import time
 
 from src.rag.audit import ProgressBar
+from src.rag.audit import EmbeddingProgress
 
 
 def _last_line(buffer: io.StringIO) -> str:
@@ -99,3 +100,10 @@ def test_progress_bar_visual_demo(capsys):
     captured = buf.getvalue()
     assert "(20/20)" in captured
     assert "100.00%" in captured
+
+
+def test_embedding_progress_uses_file_progress_percent():
+    progress = EmbeddingProgress(bar_length=10)
+    line = progress.advance(file_index=5, file_total=10, source="file.pdf", base_url="http://localhost/v1/objects")
+    assert "(5/10)" in line
+    assert "- 50.00% -" in line

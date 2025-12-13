@@ -114,9 +114,11 @@ def process_text_document(pipeline: Any, loader: object) -> None:
         existing_cache.add(content_hash)
         base_url = getattr(getattr(pipeline, "vector_store", None), "base_url", None) or ""
         target_url = f"{base_url.rstrip('/')}/v1/objects" if base_url else "/v1/objects"
+        progress_current = int(directory_file_index or chunk_index or 0)
+        progress_total = int(directory_total_files or chunk_total or 0)
         log_line = pipeline.progress.advance(
-            file_index=chunk_index,
-            file_total=chunk_total,
+            file_index=progress_current,
+            file_total=progress_total,
             source=source_value,
             base_url=target_url,
         )

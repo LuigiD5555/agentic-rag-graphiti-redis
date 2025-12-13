@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from math import ceil
 from typing import Dict
 
+from src.ingestion.utils.progress import progress_ratio, render_bar
+
 
 @dataclass
 class EmbeddingProgress:
@@ -79,10 +81,6 @@ class EmbeddingProgress:
         total = self.total_actual + self.total_estimated
         return total or max(self.done, 1)
 
-    def _bar(self, pct: float) -> str:
-        filled = int(self.bar_length * (pct / 100.0))
-        return f"[{self.fill_char * filled}{self.empty_char * (self.bar_length - filled)}]"
-
     def advance(
         self,
         *,
@@ -91,13 +89,34 @@ class EmbeddingProgress:
         source: str,
         base_url: str,
     ) -> str:
-        self.done += 1
-        overall_total = self._overall_total()
-        overall_pct = (self.done / overall_total) * 100
-        bar = self._bar(overall_pct)
+        # Prefer file-based progress when the caller has an overall count.
+        if file_total and file_total > 0:
+            ratio = progress_ratio(file_index, file_total)
+            overall_pct = ratio * 100.0
+            bar = render_bar(
+                ratio=ratio,
+                length=self.bar_length,
+                fill_char=self.fill_char,
+                empty_char=self.empty_char,
+            )
+            overall_total = int(file_total)
+            done_value = max(0, min(int(file_index), overall_total))
+        else:
+            self.done += 1
+            overall_total = self._overall_total()
+            ratio = progress_ratio(self.done, overall_total)
+            overall_pct = ratio * 100.0
+            bar = render_bar(
+                ratio=ratio,
+                length=self.bar_length,
+                fill_char=self.fill_char,
+                empty_char=self.empty_char,
+            )
+            done_value = self.done
+
         url = base_url.rstrip("/") if base_url else "/v1/objects"
         return (
-            f"({self.done}/{overall_total}) {bar} HTTP Request: POST {url}"
+            f"({done_value}/{overall_total}) {bar} HTTP Request: POST {url}"
             f' "HTTP/1.1 200 OK" - {overall_pct:.2f}% - {source}'
         )
 

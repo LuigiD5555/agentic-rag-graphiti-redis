@@ -117,8 +117,8 @@ class IngestionPipeline:
                         process_candidate_file(
                             self,
                             abs_path,
-                            file_index=1,
-                            total_files=1,
+                            file_index=path_index,
+                            total_files=total_paths,
                             directory_path=directory,
                         )
                         continue

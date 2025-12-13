@@ -84,8 +84,8 @@ def process_code_document(pipeline: Any, code_loader: object) -> None:
     target_url = f"{base_url.rstrip('/')}/v1/objects" if base_url else "/v1/objects"
     source_value = file_info.get("file_path") or source or "code_document"
     log_line = pipeline.progress.advance(
-        file_index=1,
-        file_total=1,
+        file_index=int(file_context.get("file_index") or 1),
+        file_total=int(file_context.get("total_files") or 1),
         source=source_value,
         base_url=target_url,
     )
