@@ -1,8 +1,5 @@
-"""Subpackage that groups ingestion CLI helpers."""
+"""Compatibility shim for legacy imports; ingestion CLI now lives in src.ingestion.cli."""
 
-from .cli import IngestionCLI, main
-from .discovery import FileDiscoveryService
-from .helpers import normalize_extension
-from .orchestrator import IngestionOrchestrator
+from src.ingestion.cli import IngestionCLI, IngestionOrchestrator, FileDiscoveryService, normalize_extension, main
 
 __all__ = ["IngestionCLI", "IngestionOrchestrator", "FileDiscoveryService", "normalize_extension", "main"]

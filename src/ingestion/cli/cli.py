@@ -1,0 +1,152 @@
+"""
+Object-oriented CLI to ingest documents and code into a vector database using embeddings.
+
+This module lives under src.ingestion to centralize ingestion-related logic.
+"""
+
+import argparse
+
+from src.ingestion.cli.helpers import normalize_extension
+from src.ingestion.cli.orchestrator import IngestionOrchestrator
+from src.ingestion.options import IngestionOptions
+from src.rag.audit import configure_logging, get_logger, resolve_level
+from src.settings import Config
+
+
+class IngestionCLI:
+    """CLI facade that parses arguments, configures logging, and executes the orchestrator."""
+
+    def __init__(self) -> None:
+        self._config = Config()
+        self._parser = self._build_parser()
+        self._log = get_logger(__name__)
+
+    def run(self) -> None:
+        """Parse CLI args, configure logging, build options, and run ingestion."""
+        args = self._parser.parse_args()
+        self._configure_logging(args.log_level)
+        options = self._build_options_from_args(args)
+        IngestionOrchestrator(self._config).run(options)
+
+    def _build_parser(self) -> argparse.ArgumentParser:
+        """Create and return the ArgumentParser configured for this CLI."""
+        parser = argparse.ArgumentParser(description="Ingest documents and code into a vector DB.")
+        parser.add_argument(
+            "paths",
+            nargs="*",
+            help="Root directories or files. If omitted, uses DOCS_INCLUDE_DIRS or DOCS_PATH from .env.",
+        )
+        parser.add_argument(
+            "--exts",
+            nargs="+",
+            default=None,
+            help="Extensions to include (e.g., .md .pdf .txt). If omitted, uses DOCS_FILE_EXTS from .env.",
+        )
+        parser.add_argument(
+            "--exclude-dirs",
+            nargs="+",
+            default=None,
+            help="Directory NAMES to exclude (e.g., .git node_modules __pycache__).",
+        )
+        parser.add_argument(
+            "--exclude-patterns",
+            nargs="+",
+            default=None,
+            help="Glob patterns (relative paths) to exclude, e.g. '*.log' 'data/cache/*'.",
+        )
+        parser.add_argument(
+            "--follow-symlinks",
+            action="store_true",
+            help="Follow symlinks while scanning.",
+        )
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Only list what would be ingested; do not call the pipeline.",
+        )
+        parser.add_argument(
+            "--per-file",
+            action="store_true",
+            help="Ingest one file at a time (more logs, slower). Default is batch.",
+        )
+        parser.add_argument(
+            "--max-files",
+            type=int,
+            default=0,
+            help="Limit the number of files to ingest (0 = no limit).",
+        )
+        parser.add_argument(
+            "--scan-progress",
+            type=int,
+            default=0,
+            help="Log a progress line every N visited directories during scan (0 = disabled).",
+        )
+        parser.add_argument(
+            "--log-level",
+            default=None,
+            help="Python log level (DEBUG, INFO, WARNING, ERROR). Defaults to .env INGEST_LOG_LEVEL or INFO.",
+        )
+        return parser
+
+    def _configure_logging(self, level_from_cli: str | None) -> None:
+        """Configure basic logging using CLI or .env fallback."""
+        log_level_name = (level_from_cli or getattr(self._config, "INGEST_LOG_LEVEL", "INFO") or "INFO").upper()
+        level_value = resolve_level(log_level_name)
+        configure_logging(level_value, fmt="%(levelname)s: %(message)s")
+        self._log.debug("Logging configured at level=%s", log_level_name)
+
+    def _build_options_from_args(self, args: argparse.Namespace) -> IngestionOptions:
+        """Derive IngestionOptions from CLI args and Config, with graceful fallbacks."""
+        if args.paths:
+            root_paths = tuple(args.paths)
+        else:
+            include_dirs = getattr(self._config, "DOCS_INCLUDE_DIRS", []) or []
+            if include_dirs:
+                root_paths = tuple(include_dirs)
+            else:
+                root_paths = (getattr(self._config, "DOCS_PATH", "/mnt/Documents/Documents"),)
+
+        if args.exts is not None:
+            allowed_extensions = {normalize_extension(e) for e in args.exts}
+        else:
+            cfg_exts = getattr(self._config, "DOCS_FILE_EXTS", []) or []
+            allowed_extensions = {normalize_extension(e) for e in cfg_exts} if cfg_exts else set()
+
+        if args.exclude_dirs is not None:
+            excluded_directory_names = set(args.exclude_dirs)
+        else:
+            cfg_excludes = getattr(self._config, "DOCS_EXCLUDE_DIRS", ()) or ()
+            excluded_directory_names = set(cfg_excludes)
+
+        if args.exclude_patterns is not None:
+            excluded_path_globs = set(args.exclude_patterns)
+        else:
+            cfg_patterns = getattr(self._config, "DOCS_EXCLUDE_GLOBS", ()) or ()
+            excluded_path_globs = set(cfg_patterns)
+
+        follow_symbolic_links = bool(args.follow_symlinks or getattr(self._config, "DOCS_FOLLOW_SYMLINKS", False))
+
+        return IngestionOptions(
+            root_paths=root_paths,
+            allowed_extensions=allowed_extensions,
+            excluded_directory_names=excluded_directory_names,
+            excluded_path_globs=excluded_path_globs,
+            follow_symbolic_links=follow_symbolic_links,
+            dry_run=bool(args.dry_run),
+            per_file_mode=bool(args.per_file),
+            maximum_files=int(args.max_files or 0),
+            log_level_name=(args.log_level or getattr(self._config, "INGEST_LOG_LEVEL", "INFO") or "INFO"),
+            scan_progress_every=int(args.scan_progress or 0),
+        )
+
+
+def main() -> None:
+    """Entrypoint for `python -m src.main --ingest ...`."""
+    IngestionCLI().run()
+
+
+__all__ = ["IngestionCLI", "main"]
+
+
+if __name__ == "__main__":
+    main()

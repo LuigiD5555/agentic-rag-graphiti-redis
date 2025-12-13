@@ -18,7 +18,7 @@ try:
 except ImportError:
     SemanticChunker = None  # type: ignore
 
-from src.rag.cli.options import PipelineOptions
+from src.ingestion.options import PipelineOptions
 
 
 class SplitterStrategy(str, Enum):

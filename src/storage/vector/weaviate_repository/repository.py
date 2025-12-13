@@ -40,6 +40,7 @@ class WeaviateRepository(VectorInterface):
 
         self._uses_named_vectors: bool = False
         self._target_vector_name: Optional[str] = None
+        self.base_url = str(cfg.WEAVIATE_URL).rstrip("/")
 
         additional = self._build_additional_config()
         self.client = self._retry("connect", lambda: self._init_client_v4(cfg, additional))

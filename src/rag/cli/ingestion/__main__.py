@@ -1,7 +1,6 @@
-"""Entrypoint to run the ingestion CLI as `python -m src.rag.cli.ingestion`."""
+"""Compatibility shim to run `python -m src.rag.cli.ingestion`."""
 
-from .cli import main
+from src.ingestion.cli.__main__ import main
 
-
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

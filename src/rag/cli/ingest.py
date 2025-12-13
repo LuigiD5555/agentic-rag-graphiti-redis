@@ -1,6 +1,6 @@
 """Backward-compatible entry point for `python -m src.rag.cli.ingest`."""
 
-from src.rag.cli.ingestion.cli import main
+from src.ingestion.cli.cli import main
 
 
 if __name__ == "__main__":

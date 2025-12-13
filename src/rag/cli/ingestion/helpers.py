@@ -1,6 +1,5 @@
-"""Shared helper utilities for the ingestion CLI."""
+"""Compatibility shim; use src.ingestion.cli.helpers instead."""
 
-def normalize_extension(ext: str) -> str:
-    """Normalize a CLI extension entry to lowercase and ensure it starts with a dot."""
-    normalized = ext.strip().lower()
-    return normalized if normalized.startswith(".") else f".{normalized}"
+from src.ingestion.cli.helpers import normalize_extension
+
+__all__ = ["normalize_extension"]

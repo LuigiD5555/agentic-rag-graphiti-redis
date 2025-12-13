@@ -1,10 +1,6 @@
 """This module contains the main code for the package and initializes the logger settings."""
-import logging
+from src.rag.audit import configure_logging, get_logger
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-)
-
-logger = logging.getLogger(__name__)
+configure_logging()
+logger = get_logger(__name__)
 logger.info("Logging initialized for package.")
