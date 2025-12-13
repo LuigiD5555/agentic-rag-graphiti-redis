@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from src.interfaces.vector_interface import SupportsExists, VectorInterface
+from src.rag.interfaces.vector_interface import SupportsExists, VectorInterface
 
 
 def vector_store_contains(vector_store: VectorInterface, hash_id: str) -> bool:

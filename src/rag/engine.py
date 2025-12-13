@@ -1,10 +1,10 @@
 """Module that implements a hybrid RAG engine using vector and graph stores."""
 from typing import Optional, Dict, Any, List
-from src.interfaces.embedding_interface import EmbeddingInterface
-from src.interfaces.vector_interface import VectorInterface, ScoredItem
-from src.interfaces.graph_interface import GraphInterface
+from src.rag.interfaces.embedding_interface import EmbeddingInterface
+from src.rag.interfaces.vector_interface import VectorInterface, ScoredItem
+from src.rag.interfaces.graph_interface import GraphInterface
 from src.storage.cache import CacheService
-from src.interfaces.chat_interface import ChatInterface
+from src.rag.interfaces.chat_interface import ChatInterface
 from src import logger
 from src.storage.graph.null_repository import NullGraphRepository
 

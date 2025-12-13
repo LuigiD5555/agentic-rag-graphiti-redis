@@ -1,5 +1,5 @@
 from src.rag.engine import RAGEngine, _build_user_filter
-from src.interfaces.vector_interface import ScoredItem
+from src.rag.interfaces.vector_interface import ScoredItem
 
 
 class DummyEmbedding:

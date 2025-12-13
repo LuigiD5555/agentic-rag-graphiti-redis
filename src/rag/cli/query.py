@@ -2,7 +2,7 @@
 Module for ingesting documents and code into vector database.
 """
 import argparse
-from src.config.settings import Config
+from src.settings import Config
 from src.providers.factory import ProviderFactory
 from src.storage.vector import get_vector_store
 from src.ingestion.pipeline import IngestionPipeline

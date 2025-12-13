@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.config.settings import Config
+from src.settings import Config
 
 
 @pytest.fixture(autouse=True)

@@ -3,12 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from src.config.settings import Config
-from src.interfaces.embedding_interface import EmbeddingInterface
-from src.interfaces.chat_interface import ChatInterface
+from src.settings import Config
+from src.rag.interfaces.embedding_interface import EmbeddingInterface
+from src.rag.interfaces.chat_interface import ChatInterface
 from src.providers.adapters.lmstudio_adapter import LMStudioAdapter
 from src.providers.adapters.openai_adapter import OpenAIAdapter
-from src.interfaces.provider_adapter_interface import ProviderAdapterInterface
+from src.rag.interfaces.provider_adapter_interface import ProviderAdapterInterface
 
 
 @dataclass

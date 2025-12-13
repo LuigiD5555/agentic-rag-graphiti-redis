@@ -2,7 +2,7 @@
 OllamaChat for handling chat completions.
 """
 
-from src.interfaces.chat_interface import ChatInterface
+from src.rag.interfaces.chat_interface import ChatInterface
 
 
 class OllamaChat(ChatInterface):

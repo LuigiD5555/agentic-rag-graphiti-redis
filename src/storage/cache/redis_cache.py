@@ -3,7 +3,7 @@ from typing import Optional, cast
 import json
 import redis
 from src import logger
-from src.interfaces.cache_interface import CacheServiceProtocol
+from src.rag.interfaces.cache_interface import CacheServiceProtocol
 
 
 class CacheService(CacheServiceProtocol):

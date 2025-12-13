@@ -7,8 +7,8 @@ from src import logger
 from src.rag.cli.options import PipelineOptions
 from src.ingestion.catalog import IngestionCatalog
 from src.ingestion.loaders import CODE_LOADER_SPECS, TEXT_LOADER_SPECS, PlainTextLoader
-from src.interfaces.embedding_interface import EmbeddingInterface
-from src.interfaces.vector_interface import VectorInterface
+from src.rag.interfaces.embedding_interface import EmbeddingInterface
+from src.rag.interfaces.vector_interface import VectorInterface
 from src.rag.utils.decorators import logged, timed
 
 from .file_processor import process_candidate_file

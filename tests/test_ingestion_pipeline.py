@@ -8,7 +8,7 @@ import pytest
 
 from src.ingestion.pipeline import IngestionPipeline, SplitterStrategy
 from src.rag.cli.options import PipelineOptions
-from src.interfaces.vector_interface import VectorInterface, SupportsExists
+from src.rag.interfaces.vector_interface import VectorInterface, SupportsExists
 
 
 class DummyEmbedding:

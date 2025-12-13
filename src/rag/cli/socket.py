@@ -1,7 +1,7 @@
 """Module for the RAG socket server."""
 import os
 import socket
-from src.config.settings import Config
+from src.settings import Config
 from src.providers.factory import ProviderFactory
 from src.storage.graph.neo4j_repository import Neo4jRepository
 from src.storage.cache import CacheService

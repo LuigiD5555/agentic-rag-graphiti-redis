@@ -1,4 +1,4 @@
-from src.config.settings import Config
+from src.settings import Config
 
 
 def test_config_defaults():

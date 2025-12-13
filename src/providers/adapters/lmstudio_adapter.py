@@ -1,10 +1,10 @@
 from src.providers.adapters.base import ProviderAdapterBase
-from src.interfaces.embedding_interface import EmbeddingInterface
-from src.interfaces.chat_interface import ChatInterface
+from src.rag.interfaces.embedding_interface import EmbeddingInterface
+from src.rag.interfaces.chat_interface import ChatInterface
 from src.providers.lmstudio.model_manager import ModelManager
 from src.providers.lmstudio.embeddings import EmbeddingService
 from src.providers.lmstudio.client import LLMService
-from src.config.settings import Config
+from src.settings import Config
 
 
 class LMStudioAdapter(ProviderAdapterBase):

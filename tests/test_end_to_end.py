@@ -1,6 +1,6 @@
 from src.rag.agent import Agent
 from src.rag.engine import RAGEngine
-from src.interfaces.vector_interface import ScoredItem
+from src.rag.interfaces.vector_interface import ScoredItem
 
 
 class DummyEmbedding:

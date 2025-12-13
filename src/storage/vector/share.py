@@ -10,7 +10,7 @@ import argparse
 import weaviate
 from weaviate.classes.init import AdditionalConfig, Timeout
 from weaviate.classes.query import Filter
-from src.config.settings import Config
+from src.settings import Config
 from src.rag.audit.logger import audit  # keep your existing audit hook
 
 

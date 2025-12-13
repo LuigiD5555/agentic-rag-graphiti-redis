@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from src.interfaces.embedding_interface import EmbeddingInterface
-from src.interfaces.chat_interface import ChatInterface
+from src.rag.interfaces.embedding_interface import EmbeddingInterface
+from src.rag.interfaces.chat_interface import ChatInterface
 
 
 class ProviderAdapterInterface(ABC):

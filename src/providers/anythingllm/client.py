@@ -1,5 +1,5 @@
 """AnychintLLMChat for interacting with the Anything LLM API."""
-from src.interfaces.chat_interface import ChatInterface
+from src.rag.interfaces.chat_interface import ChatInterface
 
 
 class AnythingLLMChat(ChatInterface):

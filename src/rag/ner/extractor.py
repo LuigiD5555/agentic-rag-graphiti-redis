@@ -12,8 +12,8 @@ decoupled from embedding or ingestion workflows.
 from typing import Any, Dict, List
 import json
 from src import logger
-from src.interfaces.chat_interface import ChatInterface
-from src.interfaces.ner_interface import NERRepository
+from src.rag.interfaces.chat_interface import ChatInterface
+from src.rag.interfaces.ner_interface import NERRepository
 
 
 class NERExtractor:

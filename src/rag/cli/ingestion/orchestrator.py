@@ -5,7 +5,7 @@ import os
 from typing import List
 
 from src.rag.cli.options import DiscoveryOptions, IngestionOptions, PipelineOptions
-from src.config.settings import Config
+from src.settings import Config
 from src.ingestion.pipeline import IngestionPipeline
 from src.providers.factory import ProviderFactory
 from src.storage.vector import get_vector_store

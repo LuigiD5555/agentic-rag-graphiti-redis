@@ -26,7 +26,7 @@ import logging
 from src.rag.cli.ingestion.helpers import normalize_extension
 from src.rag.cli.ingestion.orchestrator import IngestionOrchestrator
 from src.rag.cli.options import IngestionOptions
-from src.config.settings import Config
+from src.settings import Config
 
 
 class IngestionCLI:

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.config.settings import Config
-from src.interfaces.storage_plugin_interface import StoragePluginInterface
-from src.interfaces.vector_interface import VectorInterface
+from src.settings import Config
+from src.rag.interfaces.storage_plugin_interface import StoragePluginInterface
+from src.rag.interfaces.vector_interface import VectorInterface
 from .repository import WeaviateRepository
 
 

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from src.interfaces.provider_adapter_interface import ProviderAdapterInterface
-from src.interfaces.embedding_interface import EmbeddingInterface
-from src.interfaces.chat_interface import ChatInterface
+from src.rag.interfaces.provider_adapter_interface import ProviderAdapterInterface
+from src.rag.interfaces.embedding_interface import EmbeddingInterface
+from src.rag.interfaces.chat_interface import ChatInterface
 
 
 @dataclass

@@ -7,8 +7,8 @@ to which backend is configured (Weaviate by default).
 
 from typing import Any, cast
 
-from src.config.settings import Config
-from src.interfaces.vector_interface import VectorInterface
+from src.settings import Config
+from src.rag.interfaces.vector_interface import VectorInterface
 from src.storage.plugins import create_storage_instance
 
 
