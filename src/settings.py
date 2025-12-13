@@ -100,6 +100,8 @@ class Config(BaseSettings):
 
     # ----- Document ingestion -----
     DOCS_PATH: str = "/mnt/Documents/Documents"
+    # Optional list of root folders/files to ingest (takes precedence over DOCS_PATH when set).
+    DOCS_INCLUDE_DIRS: list[str] = []
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 50
     DOCS_EXCLUDE_FILE: str = ""
@@ -160,6 +162,7 @@ class Config(BaseSettings):
     }
     _USER_SETTING_FIELDS = (
         "DOCS_PATH",
+        "DOCS_INCLUDE_DIRS",
         "DOCS_EXCLUDE_FILE",
         "DOCS_EXCLUDE_DIRS",
         "DOCS_EXCLUDE_GLOBS",
