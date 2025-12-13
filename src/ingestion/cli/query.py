@@ -1,6 +1,4 @@
-"""
-Simple CLI to ingest explicit paths (legacy `src.rag.cli.query` shim points here).
-"""
+"""Simple CLI to ingest explicit paths."""
 import argparse
 
 from src.ingestion.options import PipelineOptions

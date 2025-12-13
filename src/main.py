@@ -20,7 +20,8 @@ Usage examples:
     python -m src.main --ingest /data/docs --dry-run --log-level DEBUG
 """
 
-from src.ingestion.cli import FileDiscoveryService, IngestionCLI, IngestionOrchestrator
+from src.ingestion.discovery import FileDiscoveryService
+from src.ingestion.cli import IngestionCLI, IngestionOrchestrator
 from src.ingestion.cli.cli import main as _ingestion_main
 
 
