@@ -33,7 +33,7 @@ class IngestionCLI:
         parser.add_argument(
             "paths",
             nargs="*",
-            help="Root directories or files. If omitted, uses DOCS_INCLUDE_DIRS or DOCS_PATH from .env.",
+            help="Root directories or files. If omitted, uses DOCS_PATHS from settings/.env.",
         )
         parser.add_argument(
             "--exts",

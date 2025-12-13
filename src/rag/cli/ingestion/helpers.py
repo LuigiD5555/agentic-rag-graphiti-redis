@@ -18,11 +18,8 @@ def build_ingestion_options_from_args(args: argparse.Namespace, config: object) 
     if getattr(args, "paths", None):
         root_paths = tuple(args.paths)
     else:
-        include_dirs = getattr(config, "DOCS_INCLUDE_DIRS", []) or []
-        if include_dirs:
-            root_paths = tuple(include_dirs)
-        else:
-            root_paths = (getattr(config, "DOCS_PATH", "/mnt/Documents/Documents"),)
+        cfg_paths = getattr(config, "DOCS_PATHS", None) or []
+        root_paths = tuple(cfg_paths) if cfg_paths else ("/mnt/Documents/Documents",)
 
     if getattr(args, "exts", None) is not None:
         allowed_extensions = {_normalize_ext(e) for e in args.exts}

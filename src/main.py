@@ -10,7 +10,7 @@ Design goals:
 - Auditable logs and robust defaults.
 
 Usage examples:
-    # Use directories from .env (DOCS_INCLUDE_DIRS or DOCS_PATH)
+    # Use directories from .env/settings (DOCS_PATHS)
     python -m src.main --ingest
 
     # Explicit roots and custom extensions

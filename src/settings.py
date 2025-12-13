@@ -99,9 +99,8 @@ class Config(BaseSettings):
     LITELLM_TARGET_PROVIDER: str = "lmstudio"
 
     # ----- Document ingestion -----
-    DOCS_PATH: str = "/mnt/Documents/Documents"
-    # Optional list of root folders/files to ingest (takes precedence over DOCS_PATH when set).
-    DOCS_INCLUDE_DIRS: list[str] = []
+    # Root folders/files to ingest. This is the canonical multi-root setting.
+    DOCS_PATHS: list[str] = Field(default_factory=lambda: ["/mnt/Documents/Documents"])
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 50
     DOCS_EXCLUDE_FILE: str = ""
@@ -161,8 +160,7 @@ class Config(BaseSettings):
         ".vscode",
     }
     _USER_SETTING_FIELDS = (
-        "DOCS_PATH",
-        "DOCS_INCLUDE_DIRS",
+        "DOCS_PATHS",
         "DOCS_EXCLUDE_FILE",
         "DOCS_EXCLUDE_DIRS",
         "DOCS_EXCLUDE_GLOBS",
@@ -183,6 +181,24 @@ class Config(BaseSettings):
         user_settings_path = Path(getattr(self, "USER_SETTINGS_FILE", "data/settings.json"))
         user_settings = self._load_user_settings(user_settings_path)
 
+        # Migrate legacy user settings keys to the new DOCS_PATHS list.
+        if "DOCS_PATHS" not in user_settings:
+            legacy_dirs = user_settings.get("DOCS_INCLUDE_DIRS")
+            legacy_single = user_settings.get("DOCS_PATH")
+            if legacy_dirs is not None:
+                user_settings["DOCS_PATHS"] = legacy_dirs
+            elif legacy_single is not None:
+                user_settings["DOCS_PATHS"] = [legacy_single]
+
+        # Backwards-compat env support: DOCS_INCLUDE_DIRS / DOCS_PATH -> DOCS_PATHS.
+        if os.getenv("DOCS_PATHS") is None and "DOCS_PATHS" not in fields_set:
+            raw_include_dirs = os.getenv("DOCS_INCLUDE_DIRS")
+            raw_docs_path = os.getenv("DOCS_PATH")
+            legacy_value = raw_include_dirs if raw_include_dirs is not None else raw_docs_path
+            if legacy_value:
+                self.DOCS_PATHS = [p for p in parse_list_env(legacy_value) if p]
+                fields_set.add("DOCS_PATHS")
+
         for key in self._USER_SETTING_FIELDS:
             if os.getenv(key) is not None:
                 continue
@@ -190,6 +206,10 @@ class Config(BaseSettings):
                 continue
             if key in user_settings:
                 setattr(self, key, user_settings[key])
+
+        # Ensure DOCS_PATHS always has at least one entry.
+        if not getattr(self, "DOCS_PATHS", None):
+            self.DOCS_PATHS = ["/mnt/Documents/Documents"]
 
         # Normalize booleans/strings that might come in as env strings
         if isinstance(self.WEAVIATE_MULTI_TENANCY, str):

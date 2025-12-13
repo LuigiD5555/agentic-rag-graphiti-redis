@@ -15,7 +15,8 @@ def test_config_defaults():
     # Ingestion pipeline defaults
     assert isinstance(config.CHUNK_SIZE, int)
     assert isinstance(config.CHUNK_OVERLAP, int)
-    assert isinstance(config.DOCS_INCLUDE_DIRS, list)
+    assert isinstance(config.DOCS_PATHS, list)
+    assert config.DOCS_PATHS
 
     # LM Studio endpoints derived from host/port
     assert config.LM_EMBED_URL.endswith("/v1/embeddings")
