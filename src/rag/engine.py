@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any, List
 from src.rag.interfaces.embedding_interface import EmbeddingInterface
 from src.rag.interfaces.vector_interface import VectorInterface, ScoredItem
 from src.rag.interfaces.graph_interface import GraphInterface
-from src.storage.cache import CacheService
+from src.rag.interfaces.cache_interface import CacheServiceProtocol
 from src.rag.interfaces.chat_interface import ChatInterface
 from src import logger
 from src.storage.graph.null_repository import NullGraphRepository
@@ -38,7 +38,7 @@ class RAGEngine:
         embedding: EmbeddingInterface,
         vector_store: VectorInterface,
         graph_store: GraphInterface | None,
-        cache: CacheService,
+        cache: CacheServiceProtocol,
         llm: ChatInterface,
         mark_cache: bool = True,
         default_top_k: int = 5,

@@ -2,7 +2,9 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import Any
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.storage.vector.ingestion.excludes import (
@@ -28,6 +30,22 @@ class Config(BaseSettings):
 
     # ----- Vector DB backend selection -----
     VECTOR_BACKEND: str = "weaviate"
+
+    # ------------------------------------------------------------------
+    # Django-like backend registries (user-configurable data, fixed logic)
+    # ------------------------------------------------------------------
+    # These dicts mirror Django's approach: users configure data in settings,
+    # while the framework owns the resolution logic (whitelist of backends).
+    #
+    # Each mapping supports multiple aliases (like Django's DATABASES/CACHES),
+    # e.g. VECTOR_STORES["default"], VECTOR_STORES["analytics"], etc.
+    VECTOR_STORES: dict[str, dict[str, Any]] = Field(
+        default_factory=lambda: {"default": {"BACKEND": "weaviate"}}
+    )
+    CACHES: dict[str, dict[str, Any]] = Field(default_factory=lambda: {"default": {"BACKEND": "redis"}})
+    GRAPH_STORES: dict[str, dict[str, Any]] = Field(
+        default_factory=lambda: {"default": {"BACKEND": "neo4j"}}
+    )
 
     # ----- Weaviate configuration -----
     WEAVIATE_URL: str = "http://localhost:8080"
@@ -127,6 +145,9 @@ class Config(BaseSettings):
         "DOCS_EXCLUDE_DIRS",
         "DOCS_EXCLUDE_GLOBS",
         "DOCS_FILE_EXTS",
+        "VECTOR_STORES",
+        "CACHES",
+        "GRAPH_STORES",
         "CHUNK_SIZE",
         "CHUNK_OVERLAP",
         "EMBEDDING_MAX_TOKENS",

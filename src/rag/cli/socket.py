@@ -3,8 +3,8 @@ import os
 import socket
 from src.settings import Config
 from src.providers.factory import ProviderFactory
-from src.storage.graph.neo4j_repository import Neo4jRepository
-from src.storage.cache import CacheService
+from src.storage.graph import get_graph_store
+from src.storage.cache import get_cache
 from src.rag.engine import RAGEngine
 from src.rag.cli.agent import Agent
 from src.storage.vector import get_vector_store
@@ -17,8 +17,8 @@ def main():
     embed = provider.embeddings()
     chat = provider.chat()
     vector = get_vector_store(cfg)
-    graph = Neo4jRepository(cfg)
-    cache = CacheService(cfg)
+    graph = get_graph_store(cfg)
+    cache = get_cache(cfg)
 
     rag_engine = RAGEngine(
         embed,

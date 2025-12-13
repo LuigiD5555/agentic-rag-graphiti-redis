@@ -3,61 +3,81 @@ Vector storage factory and default backend resolution.
 
 This module centralizes creation of the vector store so callers can stay agnostic
 to which backend is configured (Weaviate by default).
+
+Design note (Django-style):
+- Users can configure multiple aliases via Config.VECTOR_STORES (data-only).
+- Backend resolution logic is internal and whitelisted (not user-extensible).
 """
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Mapping
 
 from src.rag.interfaces.vector_interface import VectorInterface
-from src.storage.plugins import create_storage_instance
 
 if TYPE_CHECKING:  # pragma: no cover
     from src.settings import Config
 
 
-def _build_default_vector_storage_config(config: "Config") -> dict[str, Any]:
-    """
-    Build a default storage config dict for the vector backend.
-    """
-    backend = (getattr(config, "VECTOR_BACKEND", "weaviate") or "weaviate").lower()
-
-    if backend == "weaviate":
-        # ENGINE points to the plugin class; additional options could be passed
-        # here in the future if needed.
-        return {
-            "ENGINE": "src.storage.vector.weaviate_repository.plugin.WeaviateVectorPlugin",
-            "BACKEND": backend,
-        }
-
-    raise ValueError(f"Unsupported VECTOR_BACKEND: {backend}")
+def _vector_store_settings(config: "Config", alias: str) -> Mapping[str, Any]:
+    stores = getattr(config, "VECTOR_STORES", None) or {}
+    if not isinstance(stores, dict):
+        raise TypeError("Config.VECTOR_STORES must be a dict mapping aliases to dict settings")
+    if alias not in stores:
+        available = ", ".join(sorted(stores.keys())) or "<none>"
+        raise KeyError(f"Unknown VECTOR_STORES alias '{alias}'. Available: {available}")
+    store_cfg = stores[alias]
+    if not isinstance(store_cfg, dict):
+        raise TypeError(f"Config.VECTOR_STORES['{alias}'] must be a dict of settings")
+    return store_cfg
 
 
-def get_vector_store(config: "Config") -> VectorInterface:
+def _config_with_overrides(config: "Config", overrides: Mapping[str, Any], key_map: Mapping[str, str]) -> "Config":
+    update: dict[str, Any] = {}
+    for raw_key, raw_value in overrides.items():
+        if raw_key == "BACKEND":
+            continue
+        if raw_key == "ENGINE":
+            raise ValueError("Use BACKEND (whitelisted) instead of ENGINE (import path)")
+        if raw_key not in key_map:
+            raise ValueError(f"Unsupported vector store setting '{raw_key}'")
+        update[key_map[raw_key]] = raw_value
+
+    return config.model_copy(update=update) if update else config
+
+
+def get_vector_store(config: "Config", alias: str = "default") -> VectorInterface:
     """
     Create the vector store backend selected in settings.
 
-    Supported values today:
-        - "weaviate"  (default)
-
-    Future backends can be added by introducing new plugins and mapping VECTOR_BACKEND
-    values to their ENGINE strings.
-    """
-    storage_cfg = _build_default_vector_storage_config(config)
-
-    # Pass the Config instance explicitly so plugins can reuse it.
-    plugin = create_storage_instance(
-        {
-            **storage_cfg,
-            "config": config,
+    Django-like usage:
+        VECTOR_STORES = {
+            "default": {"BACKEND": "weaviate"},
+            "analytics": {"BACKEND": "weaviate", "URL": "..."},
         }
-    )
+    """
+    store_cfg = _vector_store_settings(config, alias)
+    backend = (store_cfg.get("BACKEND") or getattr(config, "VECTOR_BACKEND", "weaviate") or "weaviate").lower()
 
-    # Prefer an explicit get_client() method on the plugin, if present.
-    client = getattr(plugin, "get_client", None)
-    if callable(client):
-        return cast(VectorInterface, client())
+    if backend == "weaviate":
+        from src.storage.vector.weaviate_repository.repository import WeaviateRepository
 
-    # Fallback to a '_repo' attribute or the plugin itself.
-    return cast(VectorInterface, getattr(plugin, "_repo", plugin))
+        cfg = _config_with_overrides(
+            config,
+            store_cfg,
+            {
+                "URL": "WEAVIATE_URL",
+                "API_KEY": "WEAVIATE_API_KEY",
+                "CLASS": "WEAVIATE_CLASS",
+                "MULTI_TENANCY": "WEAVIATE_MULTI_TENANCY",
+                "DEFAULT_TENANT": "WEAVIATE_DEFAULT_TENANT",
+                "TIMEOUT": "WEAVIATE_TIMEOUT",
+                "GRPC_PORT": "WEAVIATE_GRPC_PORT",
+                "CONNECT_RETRIES": "WEAVIATE_CONNECT_RETRIES",
+                "CONNECT_BACKOFF": "WEAVIATE_CONNECT_BACKOFF",
+            },
+        )
+        return WeaviateRepository(cfg)
+
+    raise ValueError(f"Unsupported vector BACKEND: {backend}")
 
 
 __all__ = ["get_vector_store"]

@@ -12,7 +12,7 @@ from requests import RequestException
 from src import logger
 from src.settings import Config
 from src.providers.factory import ProviderFactory
-from src.storage.graph.neo4j_repository import Neo4jRepository
+from src.storage.graph import get_graph_store
 from src.storage.graph.ner.extractor import NERExtractor
 from src.storage.vector import get_vector_store
 
@@ -37,7 +37,7 @@ class NERBulkProcessor:
         provider = ProviderFactory(cfg)
         self.llm = provider.chat()
         self.vector = get_vector_store(cfg)
-        self.ner_repo = Neo4jRepository(cfg)
+        self.ner_repo = get_graph_store(cfg)
         self.extractor = NERExtractor(self.llm, self.ner_repo)
 
     def _iter_payloads(self):
