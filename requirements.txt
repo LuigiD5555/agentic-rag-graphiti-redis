@@ -8,14 +8,15 @@ langchain-experimental
 # Storage / graph / cache
 redis
 neo4j
-weaviate-client>=4.6.4
-grpcio>=1.64.0
+weaviate-client
+grpcio
 
 # Ingestion
 unstructured
 networkx
 pandas
 openpyxl
+xlrd
 msoffcrypto-tool
 python-docx
 pypdf
@@ -26,5 +27,5 @@ tiktoken
 python-dotenv
 requests
 pytest
-pydantic>=2.5.0
-pydantic-settings>=2.1.0
+pydantic
+pydantic-settings
