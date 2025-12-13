@@ -41,8 +41,9 @@ def truncate_to_token_limit(text: str, limit: int, model_name: Optional[str]) ->
     if limit <= 0:
         return text
 
-    # For very small limits, prefer whitespace tokens to avoid BPE collisions.
-    if limit <= 8 or tiktoken is None:
+    # If we don't know the tokenizer model, be conservative and use whitespace tokens.
+    # This avoids under-counting vs GGUF/llama tokenizers.
+    if model_name is None or limit <= 8 or tiktoken is None:
         tokens = text.split()
         if len(tokens) <= limit:
             return text
