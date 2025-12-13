@@ -392,6 +392,47 @@ class WeaviateRepository(VectorInterface):
 
         return archive_filter & combined
 
+    def exists(self, point_id: str, tenant_id: Optional[str] = None) -> bool:
+        """
+        Check whether a record exists in Weaviate.
+
+        We normalize point_id into the UUID used for storage. The v4 client has
+        slightly different APIs across versions, so we probe for supported methods.
+        """
+        coll = self._coll(tenant_id)
+        uuid_id = self._normalize_uuid(point_id)
+
+        data_api = getattr(coll, "data", None)
+        if data_api is not None:
+            exists_fn = getattr(data_api, "exists", None)
+            if callable(exists_fn):
+                try:
+                    return bool(exists_fn(uuid=uuid_id))
+                except TypeError:
+                    try:
+                        return bool(exists_fn(uuid_id))
+                    except Exception:
+                        pass
+
+            get_fn = getattr(data_api, "get_by_id", None) or getattr(data_api, "get", None)
+            if callable(get_fn):
+                try:
+                    obj = get_fn(uuid=uuid_id)
+                except TypeError:
+                    obj = get_fn(uuid_id)
+                return obj is not None
+
+        query_api = getattr(coll, "query", None)
+        fetch_fn = getattr(query_api, "fetch_object_by_id", None) if query_api is not None else None
+        if callable(fetch_fn):
+            try:
+                obj = fetch_fn(uuid=uuid_id)
+            except TypeError:
+                obj = fetch_fn(uuid_id)
+            return obj is not None
+
+        return False
+
     @staticmethod
     def _normalize_uuid(value: Any) -> str:
         import uuid
