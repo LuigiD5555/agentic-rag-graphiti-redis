@@ -1,4 +1,4 @@
-from src.rag.ner.extractor import NERExtractor
+from src.ner.extractor import NERExtractor
 
 
 class DummyLLM:

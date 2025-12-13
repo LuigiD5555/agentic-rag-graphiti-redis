@@ -13,7 +13,7 @@ from src import logger
 from src.settings import Config
 from src.providers.factory import ProviderFactory
 from src.storage.graph.neo4j_repository import Neo4jRepository
-from src.rag.ner.extractor import NERExtractor
+from src.ner.extractor import NERExtractor
 from src.storage.vector import get_vector_store
 
 
