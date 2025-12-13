@@ -8,7 +8,7 @@ from pathlib import PurePosixPath
 from typing import List, Set, Tuple
 
 from src.rag.cli.options import DiscoveryOptions
-from src.rag.utils.decorators import logged, timed
+from src.rag.audit.decorators import logged, timed
 
 
 class FileDiscoveryService:
