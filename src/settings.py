@@ -5,6 +5,13 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from src.ingestion.excludes import (
+    classify_exclude_entries,
+    load_excludes_from_files,
+    parse_list_env,
+    value_as_list,
+)
+
 
 class Config(BaseSettings):
     """
@@ -164,7 +171,7 @@ class Config(BaseSettings):
         ext_values: list[str]
         raw_exts = self.DOCS_FILE_EXTS
         if isinstance(raw_exts, str):
-            ext_values = self._parse_list_env(raw_exts)
+            ext_values = parse_list_env(raw_exts)
         elif isinstance(raw_exts, tuple):
             ext_values = list(raw_exts)
         else:
@@ -263,76 +270,14 @@ class Config(BaseSettings):
 
     def _build_exclude_configuration(self):
         raw_entries = list(self._DEFAULT_EXCLUDED_DIRS)
-        raw_entries.extend(self._value_as_list(self.DOCS_EXCLUDE_DIRS))
-        raw_entries.extend(self._parse_list_env(os.getenv("DOCS_EXCLUDE_DIRS", "")))
-        raw_entries.extend(self._parse_list_env(os.getenv("DOCS_EXCLUDE_PATTERNS", "")))
-        raw_entries.extend(self._value_as_list(self.DOCS_EXCLUDE_GLOBS))
-        raw_entries.extend(self._load_excludes_from_files())
+        raw_entries.extend(value_as_list(self.DOCS_EXCLUDE_DIRS))
+        raw_entries.extend(parse_list_env(os.getenv("DOCS_EXCLUDE_DIRS", "")))
+        raw_entries.extend(parse_list_env(os.getenv("DOCS_EXCLUDE_PATTERNS", "")))
+        raw_entries.extend(value_as_list(self.DOCS_EXCLUDE_GLOBS))
+        raw_entries.extend(load_excludes_from_files(self.DOCS_EXCLUDE_FILE))
 
-        dirnames, globs = self._classify_exclude_entries(raw_entries)
+        dirnames, globs = classify_exclude_entries(raw_entries)
         return dirnames, globs
-
-    @staticmethod
-    def _parse_list_env(raw_value: str | None):
-        if not raw_value:
-            return []
-
-        value = raw_value.strip()
-        if not value:
-            return []
-
-        if value.startswith("["):
-            try:
-                parsed = json.loads(value)
-            except json.JSONDecodeError:
-                parsed = []
-            else:
-                if isinstance(parsed, list):
-                    return [str(item).strip() for item in parsed if str(item).strip()]
-                if isinstance(parsed, dict):
-                    collected = []
-                    for key in ("directories", "patterns", "paths"):
-                        items = parsed.get(key, [])
-                        if isinstance(items, list):
-                            collected.extend(str(item).strip() for item in items if str(item).strip())
-                    return collected
-                return []
-
-        tokens = [token.strip() for token in re.split(r"[,\n]", value) if token.strip()]
-        return tokens
-
-    @staticmethod
-    def _value_as_list(value: tuple[str, ...] | list[str] | str | None):
-        if value is None:
-            return []
-        if isinstance(value, (list, tuple)):
-            return [str(item).strip() for item in value if str(item).strip()]
-        if isinstance(value, str):
-            return Config._parse_list_env(value)
-        return []
-
-    def _load_excludes_from_files(self):
-        entries = []
-
-        requested = self.DOCS_EXCLUDE_FILE
-        candidates = [requested] if requested else []
-        if not candidates:
-            candidates.extend([".ragignore", ".rag-ingest-ignore", "rag-ingest-ignore.txt"])
-
-        seen = set()
-        for candidate in candidates:
-            if not candidate:
-                continue
-            candidate_path = Path(candidate).expanduser()
-            if not candidate_path.is_absolute():
-                candidate_path = Path(os.getcwd()) / candidate_path
-            try_path = candidate_path.resolve()
-            if try_path in seen or not try_path.is_file():
-                continue
-            seen.add(try_path)
-            entries.extend(self._read_exclude_file(try_path))
-
-        return entries
 
     def _load_user_settings(self, path: Path) -> dict:
         if not path.is_file():
@@ -367,58 +312,3 @@ class Config(BaseSettings):
         except OSError:
             # Silent failure; do not block app startup on settings persistence
             return
-
-    @staticmethod
-    def _read_exclude_file(path: Path):
-        try:
-            text = path.read_text(encoding="utf-8")
-        except OSError:
-            return []
-
-        if path.suffix.lower() == ".json":
-            try:
-                parsed = json.loads(text)
-            except json.JSONDecodeError:
-                parsed = None
-            if isinstance(parsed, list):
-                return [str(item).strip() for item in parsed if str(item).strip()]
-            if isinstance(parsed, dict):
-                collected = []
-                for key in ("directories", "patterns", "paths"):
-                    items = parsed.get(key, [])
-                    if isinstance(items, list):
-                        collected.extend(str(item).strip() for item in items if str(item).strip())
-                return collected
-            # Fall through to treat JSON text as newline separated if unexpected structure.
-
-        lines = []
-        for line in text.splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
-                continue
-            lines.append(stripped)
-        return lines
-
-    @staticmethod
-    def _classify_exclude_entries(entries):
-        dirnames = set()
-        globs = set()
-
-        for entry in entries:
-            candidate = str(entry).strip()
-            if not candidate:
-                continue
-            normalized = candidate.replace("\\", "/").strip()
-            normalized = normalized.rstrip("/")
-            if not normalized:
-                continue
-            if Config._is_glob_like(normalized) or "/" in normalized:
-                globs.add(normalized)
-            else:
-                dirnames.add(normalized)
-
-        return dirnames, globs
-
-    @staticmethod
-    def _is_glob_like(entry: str):
-        return any(char in entry for char in "*?[]")
