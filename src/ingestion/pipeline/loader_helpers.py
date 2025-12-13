@@ -47,13 +47,13 @@ def should_skip_path(path: str) -> bool:
             log.warning("Skipping broken symlink: %s", path)
         return True
 
-    if not os.path.exists(path):
-        log.error("Path does not exist: %s", path)
+    basename = os.path.basename(path)
+    if basename.strip().startswith("~$"):
+        log.info("Skipping temporary Office lock file: %s", path)
         return True
 
-    basename = os.path.basename(path)
-    if basename.startswith("~$"):
-        log.info("Skipping temporary Office lock file: %s", path)
+    if not os.path.exists(path):
+        log.error("Path does not exist: %s", path)
         return True
 
     return False
