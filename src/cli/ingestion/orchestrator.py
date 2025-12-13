@@ -8,7 +8,7 @@ from src.cli.options import DiscoveryOptions, IngestionOptions, PipelineOptions
 from src.config.settings import Config
 from src.ingestion.pipeline import IngestionPipeline
 from src.providers.factory import ProviderFactory
-from src.vectorstores import get_vector_store
+from src.storage.vector import get_vector_store
 
 from .discovery import FileDiscoveryService
 

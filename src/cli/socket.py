@@ -7,7 +7,7 @@ from src.storage.graph.neo4j_repository import Neo4jRepository
 from src.cache.redis_cache import CacheService
 from src.rag.engine import RAGEngine
 from src.rag.agent import Agent
-from src.vectorstores import get_vector_store
+from src.storage.vector import get_vector_store
 
 
 def main():
