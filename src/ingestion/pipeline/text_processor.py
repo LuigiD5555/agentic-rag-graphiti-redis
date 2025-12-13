@@ -47,6 +47,7 @@ def process_text_document(pipeline: Any, loader: object) -> None:
     directory_total_files = file_context.get("total_files")
     directory_path = file_context.get("directory_path") or file_info.get("parent_directory")
     ingested_at = datetime.now(timezone.utc).isoformat()
+    existing_cache = getattr(pipeline, "_existing_hash_cache", set())
 
     for chunk_index, (segment_text, chunk_meta) in enumerate(prepared_chunks, start=1):
         sanitized_text = sanitize_text(segment_text)
@@ -56,7 +57,10 @@ def process_text_document(pipeline: Any, loader: object) -> None:
             pipeline.tokenizer_model_name,
         )
         content_hash = generate_hash(sanitized_text)
+        if content_hash in existing_cache:
+            continue
         if vector_store_contains(pipeline.vector_store, content_hash):
+            existing_cache.add(content_hash)
             continue
 
         embedding = pipeline.embedding_service.generate(sanitized_text)
@@ -99,6 +103,7 @@ def process_text_document(pipeline: Any, loader: object) -> None:
             else:
                 raise
 
+        existing_cache.add(content_hash)
     finalize_file_ingestion(pipeline, file_info, chunk_total=chunk_total)
 
 

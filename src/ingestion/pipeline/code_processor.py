@@ -21,8 +21,14 @@ def process_code_document(pipeline: Any, code_loader: object) -> None:
     summary_text = truncate_to_token_limit(summary_text, pipeline.embedding_effective_limit, pipeline.tokenizer_model_name)
     summary_hash = generate_hash(summary_text)
     file_info = pipeline._current_file_info or gather_file_metadata(getattr(code_loader, "path", None))
+    existing_cache = getattr(pipeline, "_existing_hash_cache", set())
+
+    if summary_hash in existing_cache:
+        finalize_file_ingestion(pipeline, file_info, chunk_total=1)
+        return
 
     if vector_store_contains(pipeline.vector_store, summary_hash):
+        existing_cache.add(summary_hash)
         finalize_file_ingestion(pipeline, file_info, chunk_total=1)
         return
 
@@ -62,6 +68,7 @@ def process_code_document(pipeline: Any, code_loader: object) -> None:
     except TypeError:
         pipeline.vector_store.upsert(summary_hash, embedding, metadata)
 
+    existing_cache.add(summary_hash)
     finalize_file_ingestion(pipeline, file_info, chunk_total=1)
 
 

@@ -44,7 +44,10 @@ class IngestionPipeline:
         self.chunk_size = options.chunk_size
         self.chunk_overlap = options.chunk_overlap
         self.splitter_strategy = options.splitter_strategy or SplitterStrategy.TOKEN
-        self.tokenizer_model_name = options.tokenizer_model_name
+        # Prefer explicit tokenizer model, otherwise reuse embedding model name if available.
+        self.tokenizer_model_name = options.tokenizer_model_name or getattr(
+            embedding_service, "model_name", None
+        ) or getattr(embedding_service, "_model_name", None)
         self.markdown_levels = options.markdown_levels
         self.semantic_embeddings = options.semantic_embeddings
 
@@ -58,6 +61,8 @@ class IngestionPipeline:
             "directory_path": None,
         }
         self._current_file_info: Optional[Dict[str, Any]] = None
+        # Cache of hashes seen/known to exist to avoid duplicate embeddings within a run.
+        self._existing_hash_cache: Set[str] = set()
         self.embedding_token_limit = max(0, getattr(options, "embedding_token_limit", 0))
         self.embedding_effective_limit = effective_limit(self.embedding_token_limit)
 
@@ -79,6 +84,7 @@ class IngestionPipeline:
     def ingest_paths(self, paths: List[str]) -> None:
         self._observed_files = set()
         self._observed_directories = set()
+        self._existing_hash_cache = set()
         try:
             for path in paths:
                 abs_path = os.path.abspath(path)
