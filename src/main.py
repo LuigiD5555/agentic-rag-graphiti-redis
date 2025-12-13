@@ -21,7 +21,8 @@ Usage examples:
 """
 
 from src.ingestion.discovery import FileDiscoveryService
-from src.ingestion.cli import IngestionCLI, IngestionOrchestrator
+from src.ingestion.cli import IngestionCLI
+from src.ingestion.orchestrator import IngestionOrchestrator
 from src.ingestion.cli.cli import main as _ingestion_main
 
 

@@ -3,6 +3,7 @@
 import os
 from typing import List
 
+from src.ingestion.discovery import FileDiscoveryService
 from src.ingestion.options import DiscoveryOptions, IngestionOptions, PipelineOptions
 from src.ingestion.pipeline import IngestionPipeline
 from src.providers.factory import ProviderFactory
@@ -10,9 +11,8 @@ from src.rag.audit import get_logger
 from src.settings import Config
 from src.storage.vector import get_vector_store
 
-from src.ingestion.discovery import FileDiscoveryService
-
 log = get_logger(__name__)
+
 
 class IngestionOrchestrator:
     """Wires services (LM Studio, embeddings, vector store, pipeline) and executes ingestion."""

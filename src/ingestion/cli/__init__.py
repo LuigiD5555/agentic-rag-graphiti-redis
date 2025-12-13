@@ -2,6 +2,5 @@
 
 from .cli import IngestionCLI, main
 from .helpers import normalize_extension
-from .orchestrator import IngestionOrchestrator
 
-__all__ = ["IngestionCLI", "IngestionOrchestrator", "normalize_extension", "main"]
+__all__ = ["IngestionCLI", "normalize_extension", "main"]

@@ -7,8 +7,8 @@ This module lives under src.ingestion to centralize ingestion-related logic.
 import argparse
 
 from src.ingestion.cli.helpers import normalize_extension
-from src.ingestion.cli.orchestrator import IngestionOrchestrator
 from src.ingestion.options import IngestionOptions
+from src.ingestion.orchestrator import IngestionOrchestrator
 from src.rag.audit import configure_logging, get_logger, resolve_level
 from src.settings import Config
 
