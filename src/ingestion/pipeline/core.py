@@ -4,7 +4,7 @@ import os
 from typing import Any, Dict, List, Optional, Set
 
 from src import logger
-from src.cli.options import PipelineOptions
+from src.rag.cli.options import PipelineOptions
 from src.ingestion.catalog import IngestionCatalog
 from src.ingestion.loaders import CODE_LOADER_SPECS, TEXT_LOADER_SPECS, PlainTextLoader
 from src.interfaces.embedding_interface import EmbeddingInterface

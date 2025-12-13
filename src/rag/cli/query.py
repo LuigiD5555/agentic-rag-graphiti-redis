@@ -6,7 +6,7 @@ from src.config.settings import Config
 from src.providers.factory import ProviderFactory
 from src.storage.vector import get_vector_store
 from src.ingestion.pipeline import IngestionPipeline
-from src.cli.options import PipelineOptions
+from src.rag.cli.options import PipelineOptions
 
 
 def main():

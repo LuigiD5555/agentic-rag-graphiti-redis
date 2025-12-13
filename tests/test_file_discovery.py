@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from src.main import FileDiscoveryService
-from src.cli.options import DiscoveryOptions
+from src.rag.cli.options import DiscoveryOptions
 
 
 def test_file_discovery_respects_directory_and_glob_excludes(tmp_path):

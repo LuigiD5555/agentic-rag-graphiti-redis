@@ -4,7 +4,7 @@ import logging
 import os
 from typing import List
 
-from src.cli.options import DiscoveryOptions, IngestionOptions, PipelineOptions
+from src.rag.cli.options import DiscoveryOptions, IngestionOptions, PipelineOptions
 from src.config.settings import Config
 from src.ingestion.pipeline import IngestionPipeline
 from src.providers.factory import ProviderFactory

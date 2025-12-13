@@ -7,7 +7,7 @@ import os
 from pathlib import PurePosixPath
 from typing import List, Set, Tuple
 
-from src.cli.options import DiscoveryOptions
+from src.rag.cli.options import DiscoveryOptions
 from src.utils.decorators import logged, timed
 
 

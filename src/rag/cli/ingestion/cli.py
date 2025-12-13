@@ -23,9 +23,9 @@ Usage examples:
 import argparse
 import logging
 
-from src.cli.ingestion.helpers import normalize_extension
-from src.cli.ingestion.orchestrator import IngestionOrchestrator
-from src.cli.options import IngestionOptions
+from src.rag.cli.ingestion.helpers import normalize_extension
+from src.rag.cli.ingestion.orchestrator import IngestionOrchestrator
+from src.rag.cli.options import IngestionOptions
 from src.config.settings import Config
 
 

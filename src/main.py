@@ -20,8 +20,8 @@ Usage examples:
     python -m src.main --ingest /data/docs --dry-run --log-level DEBUG
 """
 
-from src.cli.ingestion import FileDiscoveryService, IngestionCLI, IngestionOrchestrator
-from src.cli.ingestion.cli import main as _ingestion_main
+from src.rag.cli.ingestion import FileDiscoveryService, IngestionCLI, IngestionOrchestrator
+from src.rag.cli.ingestion.cli import main as _ingestion_main
 
 
 __all__ = ["FileDiscoveryService", "IngestionCLI", "IngestionOrchestrator", "main"]

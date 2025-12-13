@@ -7,7 +7,7 @@ from typing import Dict, Any, Iterator, List, Optional
 import pytest
 
 from src.ingestion.pipeline import IngestionPipeline, SplitterStrategy
-from src.cli.options import PipelineOptions
+from src.rag.cli.options import PipelineOptions
 from src.interfaces.vector_interface import VectorInterface, SupportsExists
 
 
