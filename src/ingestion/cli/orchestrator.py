@@ -10,7 +10,7 @@ from src.rag.audit import get_logger
 from src.settings import Config
 from src.storage.vector import get_vector_store
 
-from .discovery import FileDiscoveryService
+from src.ingestion.discovery import FileDiscoveryService
 
 log = get_logger(__name__)
 

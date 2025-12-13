@@ -1,5 +1,5 @@
-"""Compatibility shim; use src.ingestion.cli.discovery instead."""
+"""Compatibility shim; discovery now lives in src.ingestion.discovery."""
 
-from src.ingestion.cli.discovery import FileDiscoveryService
+from src.ingestion.discovery import FileDiscoveryService
 
 __all__ = ["FileDiscoveryService"]
