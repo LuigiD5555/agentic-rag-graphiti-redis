@@ -6,7 +6,7 @@ from src.providers.factory import ProviderFactory
 from src.storage.graph.neo4j_repository import Neo4jRepository
 from src.storage.cache import CacheService
 from src.rag.engine import RAGEngine
-from src.rag.agent import Agent
+from src.rag.cli.agent import Agent
 from src.storage.vector import get_vector_store
 
 
