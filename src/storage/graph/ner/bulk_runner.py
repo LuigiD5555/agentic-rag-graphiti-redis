@@ -10,7 +10,7 @@ from json import JSONDecodeError
 from neo4j.exceptions import Neo4jError
 from requests import RequestException
 from src import logger
-from src.settings import Config
+from src.rag.conf import Config
 from src.providers.factory import ProviderFactory
 from src.storage.graph import get_graph_store
 from src.storage.graph.ner.extractor import NERExtractor

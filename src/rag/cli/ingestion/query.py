@@ -4,7 +4,7 @@ import argparse
 from src.storage.vector.ingestion.options import PipelineOptions
 from src.storage.vector.ingestion.pipeline import IngestionPipeline
 from src.providers.factory import ProviderFactory
-from src.settings import Config
+from src.rag.conf import Config
 from src.storage.vector import get_vector_store
 
 

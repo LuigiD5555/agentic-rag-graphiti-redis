@@ -9,7 +9,7 @@ import argparse
 from .helpers import build_ingestion_options_from_args
 from src.storage.vector.ingestion.orchestrator import IngestionOrchestrator
 from src.rag.audit import configure_logging, get_logger, resolve_level
-from src.settings import Config
+from src.rag.conf import Config
 
 
 class IngestionCLI:

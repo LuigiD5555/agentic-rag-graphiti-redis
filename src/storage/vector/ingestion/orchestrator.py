@@ -8,8 +8,9 @@ from src.storage.vector.ingestion.options import DiscoveryOptions, IngestionOpti
 from src.storage.vector.ingestion.pipeline import IngestionPipeline
 from src.providers.factory import ProviderFactory
 from src.rag.audit import get_logger
-from src.settings import Config
+from src.rag.conf import Config
 from src.storage.vector import get_vector_store
+from src.storage.vector.utils import sort_paths_by_size_desc
 
 log = get_logger(__name__)
 
@@ -30,6 +31,7 @@ class IngestionOrchestrator:
 
         self._log_discovery_intro(options)
         candidates, visited_dirs = self._discover_files(options)
+        candidates = sort_paths_by_size_desc(candidates)
         candidates = self._cap_candidates(candidates, options.maximum_files)
 
         log.info("Visited directories: %d", visited_dirs)

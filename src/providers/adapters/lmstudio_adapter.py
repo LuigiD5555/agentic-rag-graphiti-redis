@@ -4,7 +4,7 @@ from src.rag.interfaces.chat_interface import ChatInterface
 from src.providers.lmstudio.model_manager import ModelManager
 from src.providers.lmstudio.embeddings import EmbeddingService
 from src.providers.lmstudio.client import LLMService
-from src.settings import Config
+from src.rag.conf import Config
 
 
 class LMStudioAdapter(ProviderAdapterBase):

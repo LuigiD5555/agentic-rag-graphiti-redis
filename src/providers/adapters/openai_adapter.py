@@ -1,7 +1,7 @@
 from src.providers.adapters.base import ProviderAdapterBase
 from src.rag.interfaces.embedding_interface import EmbeddingInterface
 from src.rag.interfaces.chat_interface import ChatInterface
-from src.settings import Config
+from src.rag.conf import Config
 
 
 class OpenAIEmbeddings(EmbeddingInterface):

@@ -5,7 +5,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from weaviate.classes.config import Configure, Property, DataType, Tokenization
 
-from src.settings import Config
+from src.rag.conf import Config
 from src import logger
 
 

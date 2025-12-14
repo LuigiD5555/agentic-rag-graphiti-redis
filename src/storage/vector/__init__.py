@@ -9,12 +9,13 @@ Design note (Django-style):
 - Backend resolution logic is internal and whitelisted (not user-extensible).
 """
 
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping, Iterable
+from urllib.parse import urlparse
 
 from src.rag.interfaces.vector_interface import VectorInterface
 
 if TYPE_CHECKING:  # pragma: no cover
-    from src.settings import Config
+    from src.rag.conf import Config
 
 
 def _vector_store_settings(config: "Config", alias: str) -> Mapping[str, Any]:
@@ -30,18 +31,63 @@ def _vector_store_settings(config: "Config", alias: str) -> Mapping[str, Any]:
     return store_cfg
 
 
-def _config_with_overrides(config: "Config", overrides: Mapping[str, Any], key_map: Mapping[str, str]) -> "Config":
+def _config_with_overrides(
+    config: "Config",
+    overrides: Mapping[str, Any],
+    key_map: Mapping[str, str],
+    allowed_passthrough: Iterable[str] | None = None,
+) -> "Config":
     update: dict[str, Any] = {}
+    allowed = set(allowed_passthrough or ())
     for raw_key, raw_value in overrides.items():
-        if raw_key == "BACKEND":
+        key_upper = str(raw_key or "").upper()
+        if key_upper in {"BACKEND", "ENGINE"}:
             continue
-        if raw_key == "ENGINE":
-            raise ValueError("Use BACKEND (whitelisted) instead of ENGINE (import path)")
-        if raw_key not in key_map:
+        if key_upper in allowed:
+            continue
+        if key_upper not in key_map:
             raise ValueError(f"Unsupported vector store setting '{raw_key}'")
-        update[key_map[raw_key]] = raw_value
+        update[key_map[key_upper]] = raw_value
 
     return config.model_copy(update=update) if update else config
+
+
+def _normalize_vector_store_cfg(store_cfg: Mapping[str, Any], config: "Config") -> Mapping[str, Any]:
+    """
+    Accept Django-like keys (ENGINE/HOST/PORT/OPTIONS) and synthesize URL when needed.
+    """
+    normalized = dict(store_cfg)
+    options = normalized.get("OPTIONS") or {}
+    if isinstance(options, dict):
+        # Bubble up common options into top-level keys when missing.
+        normalized.setdefault("GRPC_PORT", options.get("GRPC_PORT"))
+        normalized.setdefault("CONNECT_RETRIES", options.get("CONNECT_RETRIES"))
+        normalized.setdefault("CONNECT_BACKOFF", options.get("CONNECT_BACKOFF"))
+        normalized.setdefault("MULTI_TENANCY", options.get("MULTI_TENANCY"))
+        normalized.setdefault("DEFAULT_TENANT", options.get("DEFAULT_TENANT"))
+
+    if "URL" not in normalized:
+        host = normalized.get("HOST")
+        port = normalized.get("PORT")
+        scheme = normalized.get("SCHEME") or "http"
+        path = normalized.get("PATH") or ""
+        if host or port:
+            host = host or "localhost"
+            port = port or 8080
+            url = f"{scheme}://{host}:{port}"
+            if path:
+                url = f"{url}/{str(path).lstrip('/')}"
+            normalized["URL"] = url
+        else:
+            # If the configured URL is present in config, parse to infer host/port for logging/consistency.
+            parsed = urlparse(getattr(config, "WEAVIATE_URL", ""))
+            if parsed.scheme and parsed.hostname:
+                normalized.setdefault("HOST", parsed.hostname)
+                normalized.setdefault("PORT", parsed.port)
+                normalized.setdefault("SCHEME", parsed.scheme)
+    if "NAME" in normalized and "CLASS" not in normalized:
+        normalized["CLASS"] = normalized["NAME"]
+    return normalized
 
 
 def get_vector_store(config: "Config", alias: str = "default") -> VectorInterface:
@@ -50,12 +96,17 @@ def get_vector_store(config: "Config", alias: str = "default") -> VectorInterfac
 
     Django-like usage:
         VECTOR_STORES = {
-            "default": {"BACKEND": "weaviate"},
-            "analytics": {"BACKEND": "weaviate", "URL": "..."},
+            "default": {"ENGINE": "weaviate"},
+            "analytics": {"ENGINE": "weaviate", "URL": "..."},
         }
     """
-    store_cfg = _vector_store_settings(config, alias)
-    backend = (store_cfg.get("BACKEND") or getattr(config, "VECTOR_BACKEND", "weaviate") or "weaviate").lower()
+    store_cfg = _normalize_vector_store_cfg(_vector_store_settings(config, alias), config)
+    backend = (
+        store_cfg.get("BACKEND")
+        or store_cfg.get("ENGINE")
+        or getattr(config, "VECTOR_BACKEND", "weaviate")
+        or "weaviate"
+    ).lower()
 
     if backend == "weaviate":
         from src.storage.vector.weaviate_repository.repository import WeaviateRepository
@@ -73,6 +124,23 @@ def get_vector_store(config: "Config", alias: str = "default") -> VectorInterfac
                 "GRPC_PORT": "WEAVIATE_GRPC_PORT",
                 "CONNECT_RETRIES": "WEAVIATE_CONNECT_RETRIES",
                 "CONNECT_BACKOFF": "WEAVIATE_CONNECT_BACKOFF",
+            },
+            allowed_passthrough={
+                "OPTIONS",
+                "HOST",
+                "PORT",
+                "SCHEME",
+                "PATH",
+                "NAME",
+                "USER",
+                "PASSWORD",
+                "LOCATION",
+                "AUTOCOMMIT",
+                "ATOMIC_REQUESTS",
+                "CONN_MAX_AGE",
+                "CONN_HEALTH_CHECKS",
+                "TIME_ZONE",
+                "TEST",
             },
         )
         return WeaviateRepository(cfg)

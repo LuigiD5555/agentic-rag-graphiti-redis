@@ -14,7 +14,7 @@ from weaviate.classes.config import Configure, Property, DataType, Tokenization
 from weaviate.classes.query import Filter
 from weaviate.exceptions import UnexpectedStatusCodeError
 
-from src.settings import Config
+from src.rag.conf import Config
 from src.rag.interfaces.vector_interface import ScoredItem, VectorInterface
 from src import logger
 from src.rag.audit.decorators import logged, timed

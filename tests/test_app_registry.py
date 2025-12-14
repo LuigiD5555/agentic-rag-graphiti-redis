@@ -3,7 +3,7 @@ from __future__ import annotations
 from src.providers.registry import list_providers, reset_provider_registry
 from src.rag.registry import ensure_apps_loaded, reset_app_registry
 from src.rag.providers import _reset_for_tests as reset_builtin_providers
-from src.settings import Config
+from src.rag.conf import Config
 
 
 def test_installed_apps_populate_provider_registry():

@@ -1,4 +1,4 @@
-from src.settings import Config
+from src.rag.conf import Config
 
 
 def test_config_defaults():

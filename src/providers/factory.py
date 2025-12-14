@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from src.settings import Config
+from src.rag.conf import Config
 from src.rag.interfaces.embedding_interface import EmbeddingInterface
 from src.rag.interfaces.chat_interface import ChatInterface
 from src.rag.interfaces.provider_adapter_interface import ProviderAdapterInterface

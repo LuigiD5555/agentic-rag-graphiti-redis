@@ -31,23 +31,32 @@ def get_cache(config, alias: str = "default") -> CacheServiceProtocol:
     Create the cache backend selected in settings.
 
     Django-like usage:
-        CACHES = {"default": {"BACKEND": "redis"}}
+        CACHES = {"default": {"BACKEND": "redis", "LOCATION": "redis://host:port/0", "OPTIONS": {}}}
     """
     cache_cfg = _cache_settings(config, alias)
-    backend = (cache_cfg.get("BACKEND") or "redis").lower()
+    backend = (cache_cfg.get("BACKEND") or cache_cfg.get("ENGINE") or "redis").lower()
 
     if backend == "redis":
-        if "ENGINE" in cache_cfg:
-            raise ValueError("Use BACKEND (whitelisted) instead of ENGINE (import path)")
         update: dict[str, Any] = {}
         for key, value in cache_cfg.items():
-            if key == "BACKEND":
+            if key in {"BACKEND", "ENGINE", "OPTIONS", "TIMEOUT", "KEY_PREFIX", "VERSION"}:
                 continue
             if key == "HOST":
                 update["REDIS_HOST"] = value
                 continue
             if key == "PORT":
                 update["REDIS_PORT"] = value
+                continue
+            if key == "LOCATION":
+                loc = str(value or "").strip()
+                if loc.startswith("redis://"):
+                    try:
+                        host_port = loc.split("://", 1)[1].split("/", 1)[0]
+                        host, port = host_port.split(":", 1)
+                        update["REDIS_HOST"] = host
+                        update["REDIS_PORT"] = int(port)
+                    except Exception:
+                        pass
                 continue
             raise ValueError(f"Unsupported cache setting '{key}'")
         cfg = config.model_copy(update=update) if update else config

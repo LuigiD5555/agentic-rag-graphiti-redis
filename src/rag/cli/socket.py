@@ -1,7 +1,7 @@
 """Module for the RAG socket server."""
 import os
 import socket
-from src.settings import Config
+from src.rag.conf import Config
 from src.providers.factory import ProviderFactory
 from src.storage.graph import get_graph_store
 from src.storage.cache import get_cache

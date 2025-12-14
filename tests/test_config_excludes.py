@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.settings import Config
+from src.rag.conf import Config
 
 
 @pytest.fixture(autouse=True)

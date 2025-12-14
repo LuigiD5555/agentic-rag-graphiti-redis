@@ -39,6 +39,7 @@ class ProgressBar:
         self._last_line_length = 0
         self._min_interval_seconds = max(0.0, float(min_interval_seconds or 0.0))
         self._last_render_ts = 0.0
+        self._last_render_current = None
         # Auto-disable single-line rewrite when the stream is not a TTY (e.g., docker logs).
         self._rewrite = stream.isatty() if rewrite is None else bool(rewrite)
         self._render()
@@ -72,8 +73,11 @@ class ProgressBar:
     def _render(self, message: str | None = None) -> None:
         now = time.monotonic()
         if not self._rewrite and self._min_interval_seconds:
-            if self.current < self.total and (now - self._last_render_ts) < self._min_interval_seconds:
-                return
+            # Always render when the position changes; otherwise throttle noisy updates.
+            position_changed = self.current != self._last_render_current
+            if not position_changed and self.current < self.total:
+                if (now - self._last_render_ts) < self._min_interval_seconds:
+                    return
             self._last_render_ts = now
 
         ratio = progress_ratio(self.current, self.total)
@@ -96,3 +100,4 @@ class ProgressBar:
             print(f"\r{padded}", end="", file=self.stream, flush=True)
         else:
             print(line, file=self.stream, flush=True)
+        self._last_render_current = self.current
