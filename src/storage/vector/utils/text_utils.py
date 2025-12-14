@@ -1,15 +1,10 @@
-from __future__ import annotations
-
 import hashlib
 import unicodedata
 from typing import Optional
 
 from src import logger
 
-try:
-    import tiktoken  # type: ignore
-except ImportError:  # pragma: no cover - optional dependency
-    tiktoken = None
+import tiktoken  # type: ignore
 
 
 def sanitize_text(text: str) -> str:
@@ -43,7 +38,7 @@ def truncate_to_token_limit(text: str, limit: int, model_name: Optional[str]) ->
 
     # If we don't know the tokenizer model, be conservative and use whitespace tokens.
     # This avoids under-counting vs GGUF/llama tokenizers.
-    if model_name is None or limit <= 8 or tiktoken is None:
+    if model_name is None or limit <= 8:
         tokens = text.split()
         if len(tokens) <= limit:
             return text

@@ -1,6 +1,4 @@
 """Centralized logging helpers for the project."""
-from __future__ import annotations
-
 import logging
 
 DEFAULT_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"

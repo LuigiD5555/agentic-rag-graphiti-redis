@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
-
 import time
 from typing import Any, Callable, Dict, Iterator, List, Optional, TypeVar
 from urllib.parse import urlparse
@@ -10,7 +8,7 @@ import weaviate
 from weaviate import WeaviateClient, connect_to_custom
 from weaviate.classes.init import Auth
 from weaviate.config import AdditionalConfig, Timeout
-from weaviate.classes.config import Configure, Property, DataType, Tokenization
+from weaviate.classes.config import Property, DataType, Tokenization
 from weaviate.classes.query import Filter
 from weaviate.exceptions import UnexpectedStatusCodeError
 
@@ -38,8 +36,6 @@ class WeaviateRepository(VectorInterface):
         self._connect_retries = max(1, int(getattr(cfg, "WEAVIATE_CONNECT_RETRIES", 5)))
         self._connect_backoff = max(0.1, float(getattr(cfg, "WEAVIATE_CONNECT_BACKOFF", 2.0)))
 
-        self._uses_named_vectors: bool = False
-        self._target_vector_name: Optional[str] = None
         self.base_url = str(cfg.WEAVIATE_URL).rstrip("/")
 
         additional = self._build_additional_config()
@@ -50,7 +46,6 @@ class WeaviateRepository(VectorInterface):
             class_name=self._class,
             multitenant_enabled=self._mt,
             default_tenant=self._default_tenant,
-            vector_config_builder=self._build_vector_config_kwargs,
             class_properties_provider=self._class_properties,
         )
         self._retry("wait for readiness", lambda: self._wait_for_cluster_ready(cfg))
@@ -79,13 +74,10 @@ class WeaviateRepository(VectorInterface):
         assert last_exc is not None
         raise last_exc
 
-    def _build_additional_config(self) -> Optional[AdditionalConfig]:
-        try:
-            return AdditionalConfig(
-                timeout=Timeout(init=self._timeout, query=self._timeout, insert=self._timeout)
-            )
-        except Exception:
-            return None
+    def _build_additional_config(self) -> AdditionalConfig:
+        return AdditionalConfig(
+            timeout=Timeout(init=self._timeout, query=self._timeout, insert=self._timeout)
+        )
 
     def _nodes_payload_has_leader(self, payload: Any) -> bool:
         try:
@@ -236,19 +228,6 @@ class WeaviateRepository(VectorInterface):
             Property(name="archived", data_type=DataType.BOOL),
         ]
 
-    def _build_vector_config_kwargs(self) -> Dict[str, Any]:
-        vectorizer_none = Configure.Vectorizer.none()
-        self._uses_named_vectors = True
-        self._target_vector_name = "default"
-        return {
-            "vector_config": [
-                {
-                    "name": self._target_vector_name,
-                    "vectorizer": vectorizer_none,
-                }
-            ]
-        }
-
     def _coll(self, tenant_id: Optional[str]):
         return self.schema.coll(tenant_id)
 
@@ -397,42 +376,11 @@ class WeaviateRepository(VectorInterface):
         """
         Check whether a record exists in Weaviate.
 
-        We normalize point_id into the UUID used for storage. The v4 client has
-        slightly different APIs across versions, so we probe for supported methods.
+        We normalize point_id into the UUID used for storage.
         """
         coll = self._coll(tenant_id)
         uuid_id = self._normalize_uuid(point_id)
-
-        data_api = getattr(coll, "data", None)
-        if data_api is not None:
-            exists_fn = getattr(data_api, "exists", None)
-            if callable(exists_fn):
-                try:
-                    return bool(exists_fn(uuid=uuid_id))
-                except TypeError:
-                    try:
-                        return bool(exists_fn(uuid_id))
-                    except Exception:
-                        pass
-
-            get_fn = getattr(data_api, "get_by_id", None) or getattr(data_api, "get", None)
-            if callable(get_fn):
-                try:
-                    obj = get_fn(uuid=uuid_id)
-                except TypeError:
-                    obj = get_fn(uuid_id)
-                return obj is not None
-
-        query_api = getattr(coll, "query", None)
-        fetch_fn = getattr(query_api, "fetch_object_by_id", None) if query_api is not None else None
-        if callable(fetch_fn):
-            try:
-                obj = fetch_fn(uuid=uuid_id)
-            except TypeError:
-                obj = fetch_fn(uuid_id)
-            return obj is not None
-
-        return False
+        return bool(coll.data.exists(uuid=uuid_id))
 
     @staticmethod
     def _normalize_uuid(value: Any) -> str:
@@ -456,13 +404,6 @@ class WeaviateRepository(VectorInterface):
         where = self._build_where(filters, include_archived=False)
 
         def _run_query(active_filters: Optional[Filter]):
-            if self._uses_named_vectors and self._target_vector_name:
-                return coll.query.near_vector(
-                    vector=vector,
-                    limit=top_k,
-                    filters=active_filters,
-                    target_vector=self._target_vector_name,
-                )
             return coll.query.near_vector(
                 vector=vector,
                 limit=top_k,

@@ -1,6 +1,4 @@
 """Lightweight, reusable terminal progress bar."""
-from __future__ import annotations
-
 import sys
 import time
 from typing import Iterable, Iterator, TextIO, TypeVar

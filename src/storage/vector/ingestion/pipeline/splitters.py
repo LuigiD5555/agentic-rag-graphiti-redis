@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from enum import Enum
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, cast
 
@@ -8,15 +6,9 @@ from langchain_text_splitters import (
     RecursiveCharacterTextSplitter,
     TokenTextSplitter,
 )
-try:
-    from langchain_core.documents import Document
-except ImportError:
-    from langchain.schema import Document  # type: ignore
+from langchain_core.documents import Document
 
-try:
-    from langchain_experimental.text_splitter import SemanticChunker  # type: ignore
-except ImportError:
-    SemanticChunker = None  # type: ignore
+from langchain_experimental.text_splitter import SemanticChunker  # type: ignore
 
 from src.storage.vector.ingestion.options import PipelineOptions
 
@@ -66,10 +58,8 @@ def build_text_splitter(
         SplitterStrategy.MARKDOWN_HEADERS: lambda: MarkdownHeaderTextSplitter(
             headers_to_split_on=md_levels,
         ),
+        SplitterStrategy.SEMANTIC: lambda: build_semantic_splitter(options),
     }
-
-    if SemanticChunker is not None:
-        builders[SplitterStrategy.SEMANTIC] = lambda: build_semantic_splitter(options)
 
     builder = builders.get(strategy)
     if builder is None:
@@ -78,9 +68,6 @@ def build_text_splitter(
 
 
 def build_semantic_splitter(options: PipelineOptions) -> Any:
-    if SemanticChunker is None:
-        raise RuntimeError("SemanticChunker is unavailable; install langchain_experimental.")
-
     embeddings = options.semantic_embeddings
     if embeddings is None:
         raise ValueError("semantic_embeddings must be provided for semantic splitting.")

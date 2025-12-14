@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """File discovery helpers for ingestion."""
 
 import os

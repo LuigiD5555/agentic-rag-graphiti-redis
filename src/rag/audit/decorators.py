@@ -1,6 +1,4 @@
 """Reusable decorators for logging and timing cross-cutting concerns."""
-from __future__ import annotations
-
 import logging
 import time
 from functools import wraps

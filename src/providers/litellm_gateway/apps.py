@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from src.rag.apps import AppConfig
 from src.providers.registry import register_provider
 

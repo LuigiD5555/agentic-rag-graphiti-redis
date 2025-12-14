@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from src.providers.registry import register_provider
 
 _builtin_registered = False
@@ -24,4 +22,3 @@ def ensure_builtin_providers_loaded() -> None:
 def _reset_for_tests() -> None:  # pragma: no cover
     global _builtin_registered
     _builtin_registered = False
-

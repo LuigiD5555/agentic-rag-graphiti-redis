@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from src.rag.audit import get_logger, resolve_level
 from src.rag.interfaces.vector_interface import SupportsExists, VectorInterface
 

@@ -3,7 +3,6 @@ Model auto-selection utilities for LM Studio (OpenAI-compatible).
 Uses only `requests` and environment variables already present.
 """
 
-from __future__ import annotations
 import json
 import os
 import requests

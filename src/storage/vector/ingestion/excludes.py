@@ -1,6 +1,4 @@
 """Helpers to load and classify file discovery exclusion rules for ingestion."""
-from __future__ import annotations
-
 import json
 import os
 import re

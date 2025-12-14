@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import pytest
 
 
@@ -13,4 +11,3 @@ def isolate_user_settings_file(tmp_path, monkeypatch):
     """
     monkeypatch.setenv("USER_SETTINGS_FILE", str(tmp_path / "settings.json"))
     yield
-

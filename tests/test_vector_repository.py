@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from src.storage.vector.weaviate_repository import WeaviateRepository
 
 

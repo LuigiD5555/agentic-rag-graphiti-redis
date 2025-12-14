@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from src.rag.apps import AppConfig
 from src.providers.registry import register_provider
 
@@ -12,4 +10,3 @@ class LMStudioProviderAppConfig(AppConfig):
         from src.providers.adapters.lmstudio_adapter import LMStudioAdapter
 
         register_provider("lmstudio", lambda cfg: LMStudioAdapter(cfg))
-

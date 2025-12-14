@@ -41,7 +41,7 @@ def main():
 
     # Find object by external_id or hash
     where = Filter.by_property("external_id").equal(args.id) | Filter.by_property("hash").equal(args.id)
-    res = coll.query.fetch_objects(where=where, limit=2)
+    res = coll.query.fetch_objects(filters=where, limit=2)
     objs = getattr(res, "objects", []) or []  # type: ignore
     if not objs:
         print("No object found with that id/hash")

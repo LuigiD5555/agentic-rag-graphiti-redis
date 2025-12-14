@@ -1,6 +1,4 @@
 """Loader registry helpers."""
-from __future__ import annotations
-
 from typing import Any, Sequence, Tuple, Type
 
 from .csv_loader import CSVLoader

@@ -2,10 +2,7 @@
 from typing import List
 from zipfile import BadZipFile
 
-try:
-    from langchain_core.documents import Document
-except ImportError:  # pragma: no cover
-    from langchain.schema import Document  # type: ignore
+from langchain_core.documents import Document
 
 from langchain_community.document_loaders import UnstructuredExcelLoader as _Loader
 from unstructured.errors import UnprocessableEntityError
@@ -16,10 +13,7 @@ from src.storage.vector.ingestion.loaders.errors import (
     ensure_file_exists,
 )
 
-try:  # pragma: no cover - optional dependency, handled defensively
-    from msoffcrypto.exceptions import FileFormatError as _CryptoFileFormatError
-except Exception:  # pragma: no cover - broad by design to catch missing dependency
-    _CryptoFileFormatError = None
+from msoffcrypto.exceptions import FileFormatError as _CryptoFileFormatError
 
 
 class ExcelLoader:
@@ -51,7 +45,5 @@ class ExcelLoader:
             raise LoaderInvalidFormatError(self._path, expected="XLSX", detail=str(exc)) from exc
         except BadZipFile as exc:
             raise LoaderInvalidFormatError(self._path, expected="XLSX", detail=str(exc)) from exc
-        except Exception as exc:  # pragma: no cover - guarded to keep TypeErrors visible
-            if _CryptoFileFormatError and isinstance(exc, _CryptoFileFormatError):
-                raise LoaderInvalidFormatError(self._path, expected="XLSX", detail=str(exc)) from exc
-            raise
+        except _CryptoFileFormatError as exc:  # pragma: no cover
+            raise LoaderInvalidFormatError(self._path, expected="XLSX", detail=str(exc)) from exc

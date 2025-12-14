@@ -1,18 +1,13 @@
-from __future__ import annotations
+"""
+Declarative defaults for app settings.
 
-from src.rag.utils.config_loader import ConfigFactory
+This module keeps settings as plain module constants.
+"""
 
-# Declarative defaults (Django-like: plain module variables, no class definition)
+# Path for user-editable settings persisted by the app (JSON).
 USER_SETTINGS_FILE = "data/settings.json"
 
-# ----- Vector DB backend selection -----
-VECTOR_BACKEND = "weaviate"
-PROVIDER = "lmstudio"
-
-# ------------------------------------------------------------------
-# Django-like backend registries (user-configurable data, fixed logic)
-# ------------------------------------------------------------------
-# DATABASES-style (ENGINE, NAME, USER, PASSWORD, HOST, PORT, OPTIONS, TEST, etc.)
+# Vector store registry (aliases -> connection/config dict).
 VECTOR_STORES = {
     "default": {
         "ENGINE": "weaviate",
@@ -39,6 +34,8 @@ VECTOR_STORES = {
         "TEST": {},
     }
 }
+
+# Graph store registry (aliases -> connection/config dict).
 GRAPH_STORES = {
     "default": {
         "ENGINE": "neo4j",
@@ -57,6 +54,8 @@ GRAPH_STORES = {
         "TEST": {},
     }
 }
+
+# Cache backend registry (aliases -> cache backend config dict).
 CACHES = {
     "default": {
         "BACKEND": "redis",
@@ -68,9 +67,10 @@ CACHES = {
     }
 }
 
-# Providers for LLM/embedding adapters
+# Provider adapters registry (aliases -> provider config dict).
 PROVIDERS = {
     "default": {
+        # Adapter name registered in the provider registry (not an import path).
         "ENGINE": "lmstudio",
         "HOST": "host.containers.internal",
         "PORT": 1234,
@@ -104,9 +104,7 @@ PROVIDERS = {
     },
 }
 
-# ------------------------------------------------------------------
-# External apps (Django-like INSTALLED_APPS, plus optional entry points)
-# ------------------------------------------------------------------
+# App registry (providers are registered by these AppConfig entries).
 INSTALLED_APPS = [
     "src.providers.lmstudio.apps.LMStudioProviderAppConfig",
     "src.providers.openai.apps.OpenAIProviderAppConfig",
@@ -117,14 +115,14 @@ INSTALLED_APPS = [
 AUTOLOAD_APP_ENTRYPOINTS = False
 APP_ENTRYPOINT_GROUP = "rag_agentic_graphiti.apps"
 
-# ----- Embeddings -----
+# Embeddings settings (used by ingestion/pipeline token limits and embedding size).
 EMBEDDING_DIM = 768
 EMBEDDING_MAX_TOKENS = 512
 
-# ----- LiteLLM gateway simulation -----
+# LiteLLM gateway setting (used by the LiteLLM adapter).
 LITELLM_TARGET_PROVIDER = "lmstudio"
 
-# ----- Document ingestion -----
+# Ingestion settings (discovery + splitting).
 DOCS_PATHS = [
     "/mnt/Documents/Documents",
     "/mnt/resources/Libros/Aprendizaje",
@@ -171,10 +169,10 @@ DOCS_FILE_EXTS = (
     ".cpp",
 )
 
-# ----- Cache TTL -----
+# Default cache TTL for application-level caching (seconds).
 CACHE_TTL = 3600
 
-# Defaults for excluded files/entries (basenames) to skip during discovery
+# Default excluded basenames for discovery (fast-prune + common junk folders).
 _DEFAULT_EXCLUDED_FILES = {
     ".git",
     "__pycache__",
@@ -185,6 +183,8 @@ _DEFAULT_EXCLUDED_FILES = {
     ".idea",
     ".vscode",
 }
+
+# Keys that can be persisted/overridden via the user settings JSON file.
 _USER_SETTING_FIELDS = (
     "DOCS_PATHS",
     "DOCS_EXCLUDE_FILE",
@@ -194,18 +194,10 @@ _USER_SETTING_FIELDS = (
     "VECTOR_STORES",
     "CACHES",
     "GRAPH_STORES",
+    "PROVIDERS",
     "INSTALLED_APPS",
     "AUTOLOAD_APP_ENTRYPOINTS",
     "CHUNK_SIZE",
     "CHUNK_OVERLAP",
     "EMBEDDING_MAX_TOKENS",
 )
-
-# Frozen defaults mapping used by the ConfigFactory
-# Callable factory exported as Config/get_config to preserve API.
-# It reads ONLY the ALL-CAPS variables above (plus our private _FOO constants),
-# just like Django does.
-Config = ConfigFactory(globals())
-get_config = Config
-
-__all__ = ["Config", "get_config"]

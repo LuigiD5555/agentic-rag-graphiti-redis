@@ -2,8 +2,6 @@
 Cache backends (Redis by default).
 """
 
-from __future__ import annotations
-
 from typing import Any, Mapping
 
 from src.rag.interfaces.cache_interface import CacheServiceProtocol
@@ -59,7 +57,7 @@ def get_cache(config, alias: str = "default") -> CacheServiceProtocol:
                         pass
                 continue
             raise ValueError(f"Unsupported cache setting '{key}'")
-        cfg = config.model_copy(update=update) if update else config
+        cfg = config.copy(update=update) if update else config
         return RedisCacheService(cfg)
 
     raise ValueError(f"Unsupported cache BACKEND: {backend}")

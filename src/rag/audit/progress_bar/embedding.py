@@ -1,6 +1,4 @@
 """Helpers to track global embedding progress and format log lines."""
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from math import ceil
 from typing import Dict
@@ -53,11 +51,6 @@ class EmbeddingProgress:
                 self.total_estimated -= previous
         if count > 0:
             self.total_actual += count
-
-    def set_total(self, count: int) -> None:
-        """Retained for backwards compatibility; prefer add_total."""
-        if count > 0:
-            self.total_actual = count
 
     def register_file(self, source: str, file_size_bytes: int | None) -> None:
         if not source:

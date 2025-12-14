@@ -1,6 +1,4 @@
 """Null object implementation for GraphInterface."""
-from __future__ import annotations
-
 from typing import Optional, List
 
 

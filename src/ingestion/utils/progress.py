@@ -1,6 +1,3 @@
-from __future__ import annotations
-
-
 def clamp_int(value: int, *, minimum: int, maximum: int) -> int:
     return max(minimum, min(int(value), maximum))
 
@@ -28,4 +25,3 @@ def render_bar(
     safe_ratio = max(0.0, min(float(ratio), 1.0))
     filled = int(safe_length * safe_ratio)
     return f"[{fill_char * filled}{empty_char * (safe_length - filled)}]"
-

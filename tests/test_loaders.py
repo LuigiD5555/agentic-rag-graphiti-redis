@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import pytest
 
 from src.storage.vector.ingestion.loaders.errors import LoaderFileNotFoundError, LoaderInvalidFormatError

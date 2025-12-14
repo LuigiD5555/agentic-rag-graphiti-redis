@@ -1,6 +1,4 @@
 """Validation helpers for translating CLI args into ingestion options."""
-from __future__ import annotations
-
 import argparse
 
 from src.storage.vector.ingestion.options import IngestionOptions

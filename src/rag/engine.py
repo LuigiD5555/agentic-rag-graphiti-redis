@@ -99,9 +99,9 @@ class ConfigLogic:
     src/settings.py, per the Django-like expectations.
     """
 
-    def model_post_init(self, __context) -> None:  # type: ignore[override]
+    def normalize(self) -> None:
         # Apply user settings (GUI-editable) unless overridden by environment variables
-        fields_set = set(getattr(self, "model_fields_set", set()) or set())
+        fields_set = set(getattr(self, "_fields_set", set()) or set())
         user_settings_path = Path(getattr(self, "USER_SETTINGS_FILE", "data/settings.json"))
         user_settings = self._load_user_settings(user_settings_path)
 
@@ -165,15 +165,14 @@ class ConfigLogic:
 
     def _hydrate_backend_settings(self, fields_set: set[str]) -> None:
         """
-        Populate legacy per-backend attributes from Django-like registries.
+        Populate derived per-backend attributes from Django-like registries.
 
         Canonical config lives in:
         - VECTOR_STORES (weaviate)
         - GRAPH_STORES (neo4j)
         - CACHES (redis)
 
-        We keep derived attributes (WEAVIATE_*, NEO4J_*, REDIS_*) for code paths
-        that still read them directly.
+        We expose derived attributes (WEAVIATE_*, NEO4J_*, REDIS_*) for convenience.
         """
 
         def _set_if_unset(key: str, value: Any) -> None:
@@ -193,6 +192,7 @@ class ConfigLogic:
         if isinstance(default_vector, dict):
             engine = default_vector.get("ENGINE") or default_vector.get("BACKEND") or "weaviate"
             if str(engine).lower() == "weaviate":
+                _set_if_unset("VECTOR_BACKEND", "weaviate")
                 options = default_vector.get("OPTIONS") if isinstance(default_vector.get("OPTIONS"), dict) else {}
 
                 host = default_vector.get("HOST") or "localhost"
@@ -283,28 +283,40 @@ class ConfigLogic:
         # Providers (LM Studio et al.)
         # -------------------------
         providers = getattr(self, "PROVIDERS", None) or {}
-        selected_provider = (
-            os.getenv("PROVIDER")
-            or getattr(self, "PROVIDER", None)
-            or "lmstudio"
-        )
-        default_provider_cfg = providers.get(selected_provider) if isinstance(providers, dict) else None
-        if isinstance(default_provider_cfg, dict):
-            engine = default_provider_cfg.get("ENGINE") or default_provider_cfg.get("BACKEND") or selected_provider
-            if str(engine).lower() == "lmstudio":
-                host = os.getenv("LMSTUDIO_HOST") or default_provider_cfg.get("HOST") or "host.containers.internal"
-                port = int(os.getenv("LMSTUDIO_PORT") or default_provider_cfg.get("PORT") or 1234)
-                extra_hosts = default_provider_cfg.get("EXTRA_HOSTS") or []
+        provider_cfg = None
+        selected_alias = (os.getenv("PROVIDER_ALIAS") or os.getenv("PROVIDER") or "").strip()
+        if isinstance(providers, dict):
+            if selected_alias and selected_alias in providers:
+                provider_cfg = providers.get(selected_alias)
+            elif selected_alias:
+                # Interpret PROVIDER as an engine name and find the first matching entry.
+                for candidate in providers.values():
+                    if not isinstance(candidate, dict):
+                        continue
+                    engine = (candidate.get("ENGINE") or candidate.get("BACKEND") or "").strip().lower()
+                    if engine and engine == selected_alias.lower():
+                        provider_cfg = candidate
+                        break
+            if provider_cfg is None:
+                provider_cfg = providers.get("default")
+
+        if isinstance(provider_cfg, dict):
+            engine = (provider_cfg.get("ENGINE") or provider_cfg.get("BACKEND") or "lmstudio").strip().lower()
+            _set_if_unset("PROVIDER", engine)
+
+            if engine == "lmstudio":
+                host = os.getenv("LMSTUDIO_HOST") or provider_cfg.get("HOST") or "host.containers.internal"
+                port = int(os.getenv("LMSTUDIO_PORT") or provider_cfg.get("PORT") or 1234)
+                extra_hosts = provider_cfg.get("EXTRA_HOSTS") or []
                 if isinstance(extra_hosts, str):
                     extra_hosts = [h.strip() for h in extra_hosts.split(",") if h.strip()]
-                chat_model = os.getenv("LMSTUDIO_CHAT_MODEL") or default_provider_cfg.get("CHAT_MODEL") or ""
-                require_server = os.getenv("LMSTUDIO_REQUIRE_SERVER")
-                if require_server is not None:
-                    require_server = str(require_server).lower() in ("1", "true", "yes", "on")
+                chat_model = os.getenv("LMSTUDIO_CHAT_MODEL") or provider_cfg.get("CHAT_MODEL") or ""
+                require_server_env = os.getenv("LMSTUDIO_REQUIRE_SERVER")
+                if require_server_env is not None:
+                    require_server = str(require_server_env).lower() in ("1", "true", "yes", "on")
                 else:
-                    require_server = bool(default_provider_cfg.get("REQUIRE_SERVER"))
+                    require_server = bool(provider_cfg.get("REQUIRE_SERVER"))
 
-                _set_if_unset("PROVIDER", engine)
                 _set_if_unset("LMSTUDIO_HOST", host)
                 _set_if_unset("LMSTUDIO_PORT", port)
                 _set_if_unset("LMSTUDIO_EXTRA_HOSTS", extra_hosts)
@@ -430,23 +442,19 @@ class ConfigLogic:
             # Silent failure; do not block app startup on settings persistence
             return
 
-    def model_copy(self, update: dict[str, Any] | None = None):
-        """
-        Lightweight clone to mimic the old Pydantic API surface.
-
-        Re-runs normalization hooks to keep derived fields consistent.
-        """
+    def copy(self, update: Mapping[str, Any] | None = None) -> "ConfigLogic":
+        """Clone the current config, applying optional updates and re-normalizing."""
         data = {k: copy.deepcopy(v) for k, v in self.__dict__.items()}
-        new_obj = self.__class__() if isinstance(self, ConfigLogic) else ConfigLogic()
+        new_obj = ConfigLogic()
         for key, value in data.items():
             setattr(new_obj, key, value)
-        fields_set = set(getattr(self, "model_fields_set", set()) or set())
+        fields_set = set(getattr(self, "_fields_set", set()) or set())
         if update:
             for key, value in update.items():
                 setattr(new_obj, key, value)
             fields_set.update(update.keys())
-        new_obj.model_fields_set = fields_set
-        new_obj.model_post_init(None)
+        new_obj._fields_set = fields_set
+        new_obj.normalize()
         return new_obj
 
 
@@ -479,8 +487,8 @@ class ConfigFactory:
         cfg = ConfigLogic()
         for key, value in values.items():
             setattr(cfg, key, copy.deepcopy(value))
-        cfg.model_fields_set = fields_set
-        cfg.model_post_init(None)
+        cfg._fields_set = fields_set
+        cfg.normalize()
         return cfg
 
 

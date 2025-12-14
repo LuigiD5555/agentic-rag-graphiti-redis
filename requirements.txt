@@ -1,5 +1,4 @@
 # LangChain stack
-langchain
 langchain-core
 langchain-community
 langchain-text-splitters
@@ -8,7 +7,7 @@ langchain-experimental
 # Storage / graph / cache
 redis
 neo4j
-weaviate-client
+weaviate-client>=4,<5
 grpcio
 
 # Ingestion
@@ -27,5 +26,3 @@ tiktoken
 python-dotenv
 requests
 pytest
-pydantic
-pydantic-settings

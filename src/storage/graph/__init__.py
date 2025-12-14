@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Any, Mapping
 from urllib.parse import urlparse
 
@@ -84,7 +82,7 @@ def get_graph_store(config, alias: str = "default") -> GraphInterface:
                 continue
             raise ValueError(f"Unsupported graph setting '{key}'")
 
-        cfg = config.model_copy(update=update) if update else config
+        cfg = config.copy(update=update) if update else config
         return Neo4jRepository(cfg)
 
     if backend in {"null", "noop", "disabled"}:

@@ -2,11 +2,9 @@
 Settings loader similar in spirit to Django's LazySettings.
 
 It builds a single ConfigLogic instance from src.settings (ALL-CAPS only),
-applying env/.env overrides via ConfigFactory. Call Config(**overrides) to
-get a copy with updates, or use the module-level `settings` singleton.
+applying env/.env overrides via ConfigFactory. Call get_settings(**overrides)
+to get a copy with updates, or use the module-level `settings` singleton.
 """
-from __future__ import annotations
-
 from importlib import import_module
 from typing import Any
 
@@ -23,11 +21,9 @@ settings = _factory()
 def Config(**overrides: Any):
     """
     Return the canonical settings object, optionally cloning with overrides.
-
-    This keeps compatibility with previous Config() usage.
     """
     if overrides:
-        return settings.model_copy(update=overrides)
+        return settings.copy(update=overrides)
     return settings
 
 

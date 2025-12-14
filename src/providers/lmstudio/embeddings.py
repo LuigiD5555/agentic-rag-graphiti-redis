@@ -8,8 +8,6 @@ Key behaviors:
     with exact dimensionality (from Config), and only finite values.
 """
 
-from __future__ import annotations
-
 import math
 from typing import Any, Dict, List, Sequence, Optional
 import requests

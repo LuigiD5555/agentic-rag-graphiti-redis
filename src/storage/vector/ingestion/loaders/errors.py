@@ -1,6 +1,4 @@
 """Shared exceptions and helpers for ingestion loaders."""
-from __future__ import annotations
-
 import os
 from typing import Optional
 

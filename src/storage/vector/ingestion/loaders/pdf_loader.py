@@ -2,10 +2,7 @@ from typing import List
 
 from pypdf.errors import PdfReadError, PdfStreamError
 
-try:
-    from langchain_core.documents import Document
-except ImportError:  # pragma: no cover
-    from langchain.schema import Document  # type: ignore
+from langchain_core.documents import Document
 
 from langchain_community.document_loaders import PyPDFLoader as _Loader
 

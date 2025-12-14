@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from src.rag.interfaces.provider_adapter_interface import ProviderAdapterInterface
 from src.providers.registry import get_provider_factory
 
@@ -26,4 +24,3 @@ class LiteLLMGatewayAdapter(ProviderAdapterInterface):
 
     def chat(self):
         return self._delegate.chat()
-

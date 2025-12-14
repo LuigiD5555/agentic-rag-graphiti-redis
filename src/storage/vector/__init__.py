@@ -49,7 +49,7 @@ def _config_with_overrides(
             raise ValueError(f"Unsupported vector store setting '{raw_key}'")
         update[key_map[key_upper]] = raw_value
 
-    return config.model_copy(update=update) if update else config
+    return config.copy(update=update) if update else config
 
 
 def _normalize_vector_store_cfg(store_cfg: Mapping[str, Any], config: "Config") -> Mapping[str, Any]:
@@ -101,12 +101,9 @@ def get_vector_store(config: "Config", alias: str = "default") -> VectorInterfac
         }
     """
     store_cfg = _normalize_vector_store_cfg(_vector_store_settings(config, alias), config)
-    backend = (
-        store_cfg.get("BACKEND")
-        or store_cfg.get("ENGINE")
-        or getattr(config, "VECTOR_BACKEND", "weaviate")
-        or "weaviate"
-    ).lower()
+    backend = (store_cfg.get("BACKEND") or store_cfg.get("ENGINE") or "").strip().lower()
+    if not backend:
+        backend = (getattr(config, "VECTOR_BACKEND", None) or "weaviate").strip().lower()
 
     if backend == "weaviate":
         from src.storage.vector.weaviate_repository.repository import WeaviateRepository

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import os
 from collections import deque
 from typing import Dict, Any, Iterator, List, Optional

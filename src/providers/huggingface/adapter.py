@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from src.providers.adapters.base import ProviderAdapterBase
 from src.providers.huggingface.client import HuggingFaceChat
 from src.rag.interfaces.embedding_interface import EmbeddingInterface
@@ -14,4 +12,3 @@ class HuggingFaceAdapter(ProviderAdapterBase):
     def __init__(self, config) -> None:
         _ = config
         super().__init__(HuggingFaceEmbeddings(), HuggingFaceChat())
-

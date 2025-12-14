@@ -1,19 +1,12 @@
 """Module for email message loaders (.eml/.msg)."""
 from typing import List
 
-try:
-    from langchain_core.documents import Document
-except ImportError:  # pragma: no cover
-    from langchain.schema import Document  # type: ignore
+from langchain_core.documents import Document
 
 from langchain_community.document_loaders import (
+    OutlookMessageLoader,
     UnstructuredEmailLoader,
 )
-
-try:  # Outlook loader may be optional.
-    from langchain_community.document_loaders import OutlookMessageLoader
-except ImportError:  # pragma: no cover
-    OutlookMessageLoader = None  # type: ignore
 
 
 class EmailLoader:
@@ -37,7 +30,7 @@ class EmailLoader:
         if path.lower().endswith(".eml"):
             return UnstructuredEmailLoader(file_path=path)
 
-        if path.lower().endswith(".msg") and OutlookMessageLoader is not None:
+        if path.lower().endswith(".msg"):
             return OutlookMessageLoader(file_path=path)
 
         # Fallback: attempt generic email loader even if extension is uncommon.

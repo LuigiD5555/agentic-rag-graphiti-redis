@@ -1,9 +1,6 @@
 from typing import Protocol, List
 
-try:
-    from langchain_core.documents import Document
-except ImportError:  # pragma: no cover
-    from langchain.schema import Document  # type: ignore
+from langchain_core.documents import Document
 
 
 class DocumentLoader(Protocol):

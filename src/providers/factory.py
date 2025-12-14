@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+import os
 from dataclasses import dataclass
 from typing import Optional
 
@@ -30,7 +29,13 @@ class ProviderFactory:
     def _select_adapter(self) -> ProviderAdapterInterface:
         if self._adapter is None:
             ensure_apps_loaded(self.config)
-            provider = (getattr(self.config, "PROVIDER", None) or "lmstudio").lower()
+            provider = (os.getenv("PROVIDER") or getattr(self.config, "PROVIDER", None) or "").strip().lower()
+            if not provider:
+                providers = getattr(self.config, "PROVIDERS", None) or {}
+                default_cfg = providers.get("default") if isinstance(providers, dict) else None
+                if isinstance(default_cfg, dict):
+                    provider = (default_cfg.get("ENGINE") or default_cfg.get("BACKEND") or "").strip().lower()
+            provider = provider or "lmstudio"
             factory = get_provider_factory(provider)
             self._adapter = factory(self.config)
         return self._adapter

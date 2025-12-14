@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from datetime import datetime, timezone
 from typing import Any, Dict
 
@@ -69,15 +67,12 @@ def process_code_document(pipeline: Any, code_loader: object) -> None:
     metadata = prune_metadata(metadata)
 
     pipeline.progress.add_total(1, source=source)
-    try:
-        pipeline.vector_store.upsert(
-            summary_hash,
-            embedding,
-            metadata,
-            tenant_id=pipeline.tenant_id,  # type: ignore[arg-type]
-        )
-    except TypeError:
-        pipeline.vector_store.upsert(summary_hash, embedding, metadata)
+    pipeline.vector_store.upsert(
+        summary_hash,
+        embedding,
+        metadata,
+        tenant_id=pipeline.tenant_id,  # type: ignore[arg-type]
+    )
 
     existing_cache.add(summary_hash)
     base_url = getattr(getattr(pipeline, "vector_store", None), "base_url", None) or ""

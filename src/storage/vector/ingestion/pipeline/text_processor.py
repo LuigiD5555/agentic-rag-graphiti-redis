@@ -1,13 +1,8 @@
-from __future__ import annotations
-
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from src import logger
-try:
-    from langchain_core.documents import Document
-except ImportError:
-    from langchain.schema import Document  # type: ignore
+from langchain_core.documents import Document
 
 from .loader_helpers import call_loader, resolve_loader_source
 from .splitters import split_documents
@@ -97,19 +92,12 @@ def process_text_document(pipeline: Any, loader: object) -> None:
         }
         metadata = prune_metadata(metadata)
 
-        try:
-            pipeline.vector_store.upsert(
-                content_hash,
-                embedding,
-                metadata,
-                tenant_id=pipeline.tenant_id,  # type: ignore[arg-type]
-            )
-        except TypeError as exc:
-            # Backends without tenant_id support raise TypeError for unexpected kwarg.
-            if "tenant_id" in str(exc) or "unexpected keyword" in str(exc).lower():
-                pipeline.vector_store.upsert(content_hash, embedding, metadata)
-            else:
-                raise
+        pipeline.vector_store.upsert(
+            content_hash,
+            embedding,
+            metadata,
+            tenant_id=pipeline.tenant_id,  # type: ignore[arg-type]
+        )
 
         existing_cache.add(content_hash)
         base_url = getattr(getattr(pipeline, "vector_store", None), "base_url", None) or ""

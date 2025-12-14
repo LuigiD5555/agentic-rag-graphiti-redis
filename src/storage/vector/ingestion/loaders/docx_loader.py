@@ -1,23 +1,20 @@
 """Module for docx files loader."""
-from __future__ import annotations
-
-from typing import Callable, List
+from typing import List
 from zipfile import BadZipFile
 
-try:
-    from langchain_core.documents import Document
-except ImportError:  # pragma: no cover
-    from langchain.schema import Document  # type: ignore
+from docx import Document as DocxDocument
+from docx.opc.exceptions import PackageNotFoundError
+from langchain_core.documents import Document
+from langchain_community.document_loaders import UnstructuredWordDocumentLoader
 
 from src.storage.vector.ingestion.loaders.errors import (
     LoaderInvalidFormatError,
-    dependency_missing,
     ensure_file_exists,
 )
 
 
 class DocxLoader:
-    """Docx document loader with a fallback that avoids docx2txt."""
+    """Docx document loader."""
 
     def __init__(self, path: str):
         self._path = path
@@ -30,35 +27,10 @@ class DocxLoader:
             List[Document]: Loaded documents.
         """
         ensure_file_exists(self._path)
-        loader = self._get_loader()
-        return loader()
-
-    def _get_loader(self) -> Callable[[], List[Document]]:
-        """Pick the best available loader implementation."""
-        try:
-            from langchain_community.document_loaders import Docx2txtLoader as _Loader
-        except ImportError:  # pragma: no cover - langchain handles this
-            return self._python_docx_loader
-
-        try:
-            import docx2txt  # noqa: F401
-        except ImportError:  # pragma: no cover
-            return self._python_docx_loader
-
-        return lambda: _Loader(self._path).load()
+        return self._python_docx_loader()
 
     def _python_docx_loader(self) -> List[Document]:
-        """Fallback loader that relies on python-docx."""
-        try:
-            from docx import Document as DocxDocument
-            from docx.opc.exceptions import PackageNotFoundError
-        except ImportError:  # pragma: no cover
-            dependency_missing(
-                "python-docx",
-                "Install it to process .docx files when docx2txt is unavailable.",
-            )
-            raise  # unreachable, dependency_missing raises
-
+        """Loader that relies on python-docx."""
         try:
             doc = DocxDocument(self._path)
         except (PackageNotFoundError, BadZipFile) as exc:
@@ -92,15 +64,6 @@ class DocxLoader:
 
     def _unstructured_loader(self, original_exc: Exception) -> List[Document]:
         """Fallback loader that leverages unstructured for oddball docx files."""
-        try:
-            from langchain_community.document_loaders import UnstructuredWordDocumentLoader
-        except ImportError:  # pragma: no cover
-            dependency_missing(
-                "unstructured",
-                "Required to process Word files that use a non-standard format.",
-            )
-            raise  # pragma: no cover
-
         try:
             return UnstructuredWordDocumentLoader(self._path).load()
         except ValueError as exc:

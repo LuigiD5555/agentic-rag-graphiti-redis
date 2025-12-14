@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from src.rag.apps import AppConfig
 from src.providers.registry import register_provider
 
@@ -12,4 +10,3 @@ class AnythingLLMProviderAppConfig(AppConfig):
         from src.providers.anythingllm.adapter import AnythingLLMAdapter
 
         register_provider("anythingllm", lambda cfg: AnythingLLMAdapter(cfg))
-

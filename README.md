@@ -19,7 +19,7 @@ This system is built for scenarios that require **document ingestion**, **code i
 
 ## Requirements
 
-- **Python** 3.11+
+- **Python** 3.12
 - **LM Studio** running locally with:
 	- At least one **embedding model** loaded
 	- At least one **language model** loaded

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from src.main import FileDiscoveryService
 from src.rag.cli.options import DiscoveryOptions
 

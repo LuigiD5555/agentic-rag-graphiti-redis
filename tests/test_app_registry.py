@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from src.providers.registry import list_providers, reset_provider_registry
 from src.rag.registry import ensure_apps_loaded, reset_app_registry
 from src.rag.providers import _reset_for_tests as reset_builtin_providers
@@ -11,7 +9,7 @@ def test_installed_apps_populate_provider_registry():
     reset_provider_registry()
     reset_builtin_providers()
 
-    cfg = Config().model_copy(
+    cfg = Config().copy(
         update={
             "INSTALLED_APPS": [
                 "src.providers.lmstudio.apps.LMStudioProviderAppConfig",

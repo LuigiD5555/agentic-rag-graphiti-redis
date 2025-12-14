@@ -1,12 +1,7 @@
-from __future__ import annotations
-
 from typing import Any, Dict, List, Tuple
 
 from src import logger
-try:
-    from langchain_core.documents import Document
-except ImportError:
-    from langchain.schema import Document  # type: ignore
+from langchain_core.documents import Document
 
 from .text_utils import effective_limit
 
