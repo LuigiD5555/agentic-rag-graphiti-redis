@@ -1,11 +1,11 @@
-"""
-Declarative defaults for app settings.
+from pathlib import Path
 
-This module keeps settings as plain module constants.
-"""
+# Base path for resolving project-relative files (.env, data/settings.json, etc.).
+BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Path for user-editable settings persisted by the app (JSON).
-USER_SETTINGS_FILE = "data/settings.json"
+# Paths for environment file and user-editable settings (JSON).
+ENV_FILE = BASE_DIR / ".env"
+USER_SETTINGS_FILE = BASE_DIR / "data/settings.json"
 
 # Vector store registry (aliases -> connection/config dict).
 VECTOR_STORES = {

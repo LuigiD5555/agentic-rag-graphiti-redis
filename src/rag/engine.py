@@ -3,7 +3,7 @@ import copy
 import json
 import os
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Mapping
+from typing import Optional, Dict, Any, List, Mapping, Iterable
 from src.rag.interfaces.embedding_interface import EmbeddingInterface
 from src.rag.interfaces.vector_interface import VectorInterface, ScoredItem
 from src.rag.interfaces.graph_interface import GraphInterface
@@ -102,16 +102,23 @@ class ConfigLogic:
     def normalize(self) -> None:
         # Apply user settings (GUI-editable) unless overridden by environment variables
         fields_set = set(getattr(self, "_fields_set", set()) or set())
+        env_fields = set(getattr(self, "_env_fields", set()) or set())
+        override_fields = set(getattr(self, "_override_fields", set()) or set())
         user_settings_path = Path(getattr(self, "USER_SETTINGS_FILE", "data/settings.json"))
         user_settings = self._load_user_settings(user_settings_path)
 
         for key in getattr(self, "_USER_SETTING_FIELDS", ()):
-            if os.getenv(key) is not None:
-                continue
-            if key in fields_set:
+            if key in override_fields:
+                # Explicit overrides stay highest priority.
                 continue
             if key in user_settings:
+                # User JSON wins over env/defaults for allowed fields.
                 setattr(self, key, user_settings[key])
+                fields_set.add(key)
+                continue
+            if key in env_fields:
+                # Keep env value applied earlier.
+                continue
 
         self._hydrate_backend_settings(fields_set)
 
@@ -461,13 +468,31 @@ class ConfigLogic:
 class ConfigFactory:
     """Callable factory that produces ConfigLogic instances from declarative defaults."""
 
-    def __init__(self, defaults: Mapping[str, Any], env_path: str = ".env") -> None:
+    def __init__(self, defaults: Mapping[str, Any], env_path: str | Path | None = None) -> None:
         self._defaults = _extract_settings_defaults(defaults)
-        self._env_path = env_path
+        # Prefer explicit env_path, else settings.ENV_FILE, else ".env"
+        chosen_env = env_path or self._defaults.get("ENV_FILE") or ".env"
+        self._env_path = self._resolve_env_path(chosen_env)
+
+    @staticmethod
+    def _resolve_env_path(env_path: str | Path) -> Path:
+        """Return an absolute path to the .env file, resilient to CWD changes."""
+        candidate = Path(env_path)
+        if candidate.is_absolute():
+            return candidate
+        # Try repo root (two parents up from src/rag/)
+        repo_root = Path(__file__).resolve().parents[2]
+        repo_candidate = repo_root / candidate
+        if repo_candidate.is_file():
+            return repo_candidate
+        # Fallback to current working directory
+        return candidate
 
     def __call__(self, **overrides: Any) -> "ConfigLogic":
         values = copy.deepcopy(dict(self._defaults))
         fields_set: set[str] = set()
+        env_fields: set[str] = set()
+        override_fields: set[str] = set()
 
         env_file_values = _load_env_file(Path(self._env_path))
         env_values = {**env_file_values, **os.environ}
@@ -479,15 +504,19 @@ class ConfigFactory:
                 continue
             values[key] = _coerce_env_value(str(raw_env), default_value)
             fields_set.add(key)
+            env_fields.add(key)
 
         for key, value in overrides.items():
             values[key] = value
             fields_set.add(key)
+            override_fields.add(key)
 
         cfg = ConfigLogic()
         for key, value in values.items():
             setattr(cfg, key, copy.deepcopy(value))
         cfg._fields_set = fields_set
+        cfg._env_fields = env_fields
+        cfg._override_fields = override_fields
         cfg.normalize()
         return cfg
 
