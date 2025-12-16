@@ -106,7 +106,11 @@ def get_vector_store(config: "Config", alias: str = "default") -> VectorInterfac
         backend = (getattr(config, "VECTOR_BACKEND", None) or "weaviate").strip().lower()
 
     if backend == "weaviate":
+        import weaviate
+        from weaviate.classes.config import Configure, Property, DataType
+        from weaviate.classes.init import AdditionalConfig, Timeout
         from src.storage.vector.weaviate_repository.repository import WeaviateRepository
+        from src.storage.vector.weaviate_repository.schema import SchemaManager
 
         cfg = _config_with_overrides(
             config,
@@ -140,7 +144,79 @@ def get_vector_store(config: "Config", alias: str = "default") -> VectorInterfac
                 "TEST",
             },
         )
-        return WeaviateRepository(cfg)
+
+        # Create Weaviate client using v4 API
+        additional = AdditionalConfig(
+            timeout=Timeout(init=cfg.WEAVIATE_TIMEOUT, query=cfg.WEAVIATE_TIMEOUT)
+        )
+
+        # Parse URL to extract host and port
+        parsed_url = urlparse(cfg.WEAVIATE_URL)
+        host = parsed_url.hostname or "localhost"
+        port = parsed_url.port or (443 if parsed_url.scheme == "https" else 8080)
+        use_https = parsed_url.scheme == "https"
+
+        # Determine GRPC port
+        grpc_port = cfg.WEAVIATE_GRPC_PORT or (50051 if not use_https else 443)
+
+        if cfg.WEAVIATE_API_KEY:
+            client = weaviate.connect_to_custom(
+                http_host=host,
+                http_port=port,
+                http_secure=use_https,
+                grpc_host=host,
+                grpc_port=grpc_port,
+                grpc_secure=use_https,
+                auth_credentials=weaviate.auth.AuthApiKey(api_key=cfg.WEAVIATE_API_KEY),
+                additional_config=additional,
+            )
+        else:
+            client = weaviate.connect_to_custom(
+                http_host=host,
+                http_port=port,
+                http_secure=use_https,
+                grpc_host=host,
+                grpc_port=grpc_port,
+                grpc_secure=use_https,
+                additional_config=additional,
+            )
+
+        # Define class properties
+        def _get_class_properties():
+            return [
+                Property(name="external_id", data_type=DataType.TEXT),
+                Property(name="hash", data_type=DataType.TEXT),
+                Property(name="content", data_type=DataType.TEXT),
+                Property(name="structure_summary", data_type=DataType.TEXT),
+                Property(name="file_path", data_type=DataType.TEXT),
+                Property(name="file_type", data_type=DataType.TEXT),
+                Property(name="file_size", data_type=DataType.INT),
+                Property(name="created_at", data_type=DataType.DATE),
+                Property(name="modified_at", data_type=DataType.DATE),
+                Property(name="indexed_at", data_type=DataType.DATE),
+                Property(name="chunk_index", data_type=DataType.INT),
+                Property(name="total_chunks", data_type=DataType.INT),
+                Property(name="visibility", data_type=DataType.TEXT),
+                Property(name="allowed_user_ids", data_type=DataType.TEXT_ARRAY),
+                Property(name="tags", data_type=DataType.TEXT_ARRAY),
+                Property(name="metadata", data_type=DataType.TEXT),
+                Property(name="source", data_type=DataType.TEXT),
+            ]
+
+        # Create SchemaManager
+        schema = SchemaManager(
+            client=client,
+            cfg=cfg,
+            class_name=cfg.WEAVIATE_CLASS,
+            multitenant_enabled=bool(cfg.WEAVIATE_MULTI_TENANCY),
+            default_tenant=cfg.WEAVIATE_DEFAULT_TENANT if cfg.WEAVIATE_MULTI_TENANCY else None,
+            class_properties_provider=_get_class_properties,
+        )
+
+        # Ensure schema exists
+        schema.ensure()
+
+        return WeaviateRepository(schema)
 
     raise ValueError(f"Unsupported vector BACKEND: {backend}")
 

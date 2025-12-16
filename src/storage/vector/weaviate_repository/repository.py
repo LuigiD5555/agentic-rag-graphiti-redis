@@ -1,232 +1,28 @@
-# -*- coding: utf-8 -*-
-import time
-from typing import Any, Callable, Dict, Iterator, List, Optional, TypeVar
-from urllib.parse import urlparse
+from dataclasses import dataclass
+from typing import Any, Dict, Iterator, List, Optional
 
-import requests
 import weaviate
-from weaviate import WeaviateClient, connect_to_custom
-from weaviate.classes.init import Auth
-from weaviate.config import AdditionalConfig, Timeout
-from weaviate.classes.config import Property, DataType, Tokenization
-from weaviate.classes.query import Filter
+from weaviate.collections.classes.filters import Filter
 from weaviate.exceptions import UnexpectedStatusCodeError
 
-from src.rag.conf import Config
-from src.rag.interfaces.vector_interface import ScoredItem, VectorInterface
 from src import logger
 from src.rag.audit.decorators import logged, timed
 
-from .schema import SchemaManager
 
-T = TypeVar("T")
+WeaviateFilter = Any
 
 
-class WeaviateRepository(VectorInterface):
-    """Weaviate adapter that conforms to VectorInterface (Python client v4 only)."""
+@dataclass
+class ScoredItem:
+    id: str
+    score: Optional[float]
+    payload: Dict[str, Any]
 
-    def __init__(self, config: Optional[Config] = None) -> None:
-        cfg = config or Config()
-        self._class = cfg.WEAVIATE_CLASS
-        self._mt = bool(cfg.WEAVIATE_MULTI_TENANCY)
-        raw_default_tenant = getattr(cfg, "WEAVIATE_DEFAULT_TENANT", "") or ""
-        self._default_tenant = str(raw_default_tenant).strip() or None
-        self._timeout = int(cfg.WEAVIATE_TIMEOUT)
-        self._grpc_port = int(getattr(cfg, "WEAVIATE_GRPC_PORT", 50051))
-        self._connect_retries = max(1, int(getattr(cfg, "WEAVIATE_CONNECT_RETRIES", 5)))
-        self._connect_backoff = max(0.1, float(getattr(cfg, "WEAVIATE_CONNECT_BACKOFF", 2.0)))
 
-        self.base_url = str(cfg.WEAVIATE_URL).rstrip("/")
-
-        additional = self._build_additional_config()
-        self.client = self._retry("connect", lambda: self._init_client_v4(cfg, additional))
-        self.schema = SchemaManager(
-            client=self.client,
-            cfg=cfg,
-            class_name=self._class,
-            multitenant_enabled=self._mt,
-            default_tenant=self._default_tenant,
-            class_properties_provider=self._class_properties,
-        )
-        self._retry("wait for readiness", lambda: self._wait_for_cluster_ready(cfg))
-        self._retry("ensure schema", lambda: self.schema.ensure_class())
-
-    # -------------------------------------------------------------------------
-    # Internal helpers
-    # -------------------------------------------------------------------------
-
-    def _retry(self, name: str, func: Callable[[], T]) -> T:
-        last_exc: Optional[Exception] = None
-        for attempt in range(1, self._connect_retries + 1):
-            try:
-                return func()
-            except Exception as exc:
-                last_exc = exc
-                logger.warning(
-                    "Weaviate %s attempt %s/%s failed: %s",
-                    name,
-                    attempt,
-                    self._connect_retries,
-                    exc,
-                )
-                if attempt < self._connect_retries:
-                    time.sleep(self._connect_backoff)
-        assert last_exc is not None
-        raise last_exc
-
-    def _build_additional_config(self) -> AdditionalConfig:
-        return AdditionalConfig(
-            timeout=Timeout(init=self._timeout, query=self._timeout, insert=self._timeout)
-        )
-
-    def _nodes_payload_has_leader(self, payload: Any) -> bool:
-        try:
-            nodes = payload if isinstance(payload, list) else payload.get("nodes")
-        except Exception:
-            nodes = None
-        if not nodes:
-            return False
-        for node in nodes:
-            if not isinstance(node, dict):
-                continue
-            low = {str(k).lower(): v for k, v in node.items()}
-            role = str(low.get("role", "")).lower()
-            if role == "leader":
-                return True
-            if str(low.get("is_leader", "")).lower() in ("true", "1"):
-                return True
-            raft = low.get("raft") or low.get("raft_info") or {}
-            if isinstance(raft, dict):
-                rlow = {str(k).lower(): v for k, v in raft.items()}
-                if str(rlow.get("state", "")).lower() == "leader":
-                    return True
-            if "leader" in str(node).lower():
-                return True
-        return False
-
-    def _wait_for_cluster_ready(self, cfg: Config) -> None:
-        base_url = cfg.WEAVIATE_URL.rstrip("/")
-        deadline = time.time() + max(float(self._timeout) * 6.0, 60.0)
-        last_error: Optional[Exception] = None
-
-        while time.time() < deadline:
-            for path in ("/.well-known/ready", "/v1/.well-known/ready", "/v1/nodes"):
-                resp = self._health_check(base_url, path)
-                if resp is None:
-                    continue
-
-                if resp.status_code in (200, 204):
-                    if path.endswith("/nodes") and not self._nodes_ready_with_leader(resp):
-                        last_error = RuntimeError("Weaviate nodes not ready or leader missing")
-                        continue
-                    return
-
-                unhealthy = self._explain_unhealthy(resp)
-                if unhealthy is not None:
-                    last_error = unhealthy
-                    continue
-
-                try:
-                    resp.raise_for_status()
-                except requests.RequestException as exc:
-                    last_error = exc
-            time.sleep(self._connect_backoff)
-
-        if last_error:
-            raise last_error
-        raise TimeoutError("Timed out waiting for Weaviate readiness")
-
-    def _health_check(self, base_url: str, path: str):
-        try:
-            return requests.get(f"{base_url}{path}", timeout=self._timeout)
-        except requests.RequestException:
-            return None
-
-    def _nodes_ready_with_leader(self, resp: requests.Response) -> bool:
-        try:
-            payload = resp.json()
-        except ValueError:
-            return False
-        nodes = payload if isinstance(payload, list) else payload.get("nodes")
-        if not nodes:
-            return False
-        all_ready = True
-        for node in nodes:
-            if not isinstance(node, dict):
-                continue
-            status = str(node.get("status", "")).lower()
-            if status not in ("ready", "healthy"):
-                all_ready = False
-                break
-        if len(nodes) == 1:
-            n0 = nodes[0] if isinstance(nodes[0], dict) else {}
-            return str(n0.get("status", "")).lower() in ("ready", "healthy")
-        return all_ready and self._nodes_payload_has_leader(payload)
-
-    def _explain_unhealthy(self, resp: requests.Response) -> Optional[Exception]:
-        if resp.status_code in (401, 403, 500, 503):
-            text = resp.text.strip() if isinstance(resp.text, str) else str(resp.text)
-            if resp.status_code == 403 and "leader not found" in text.lower():
-                return RuntimeError("Weaviate readiness: leader not found – waiting for election")
-            return RuntimeError(f"Weaviate readiness probe returned {resp.status_code}: {text}")
-        return None
-
-    def _init_client_v4(self, cfg: Config, additional: Optional[AdditionalConfig]) -> WeaviateClient:
-        parsed = urlparse(cfg.WEAVIATE_URL)
-        scheme = (parsed.scheme or "http").lower()
-        host = parsed.hostname or cfg.WEAVIATE_URL
-        http_port = parsed.port or (443 if scheme == "https" else 8080)
-        grpc_port = self._grpc_port or 50051
-        secure = scheme == "https"
-
-        auth_credentials = None
-        api_key = getattr(cfg, "WEAVIATE_API_KEY", "") or None
-        if api_key:
-            auth_credentials = Auth.api_key(api_key)
-
-        kwargs: Dict[str, Any] = {
-            "http_host": host,
-            "http_port": http_port,
-            "grpc_host": host,
-            "grpc_port": grpc_port,
-            "http_secure": secure,
-            "grpc_secure": secure,
-            "skip_init_checks": True,
-        }
-        if auth_credentials is not None:
-            kwargs["auth_credentials"] = auth_credentials
-        if additional is not None:
-            kwargs["additional_config"] = additional
-
-        client = connect_to_custom(**kwargs)
-        if not client:
-            raise RuntimeError("Failed to initialize Weaviate v4 client")
-        return client
-
-    def _class_properties(self) -> List[Property]:
-        return [
-            Property(name="external_id", data_type=DataType.TEXT, tokenization=Tokenization.WORD),
-            Property(name="content", data_type=DataType.TEXT, tokenization=Tokenization.WORD),
-            Property(name="structure_summary", data_type=DataType.TEXT),
-            Property(name="visibility", data_type=DataType.TEXT),
-            Property(name="owner_id", data_type=DataType.TEXT),
-            Property(name="allowed_user_ids", data_type=DataType.TEXT_ARRAY),
-            Property(name="hash", data_type=DataType.TEXT),
-            Property(name="source", data_type=DataType.TEXT),
-            Property(name="file_path", data_type=DataType.TEXT),
-            Property(name="file_name", data_type=DataType.TEXT),
-            Property(name="file_extension", data_type=DataType.TEXT),
-            Property(name="parent_directory", data_type=DataType.TEXT),
-            Property(name="file_size_bytes", data_type=DataType.INT),
-            Property(name="file_modified_at", data_type=DataType.TEXT),
-            Property(name="file_id", data_type=DataType.TEXT),
-            Property(name="chunk_index", data_type=DataType.INT),
-            Property(name="chunk_total", data_type=DataType.INT),
-            Property(name="ingested_at", data_type=DataType.TEXT),
-            Property(name="directory_file_index", data_type=DataType.INT),
-            Property(name="directory_total_files", data_type=DataType.INT),
-            Property(name="archived", data_type=DataType.BOOL),
-        ]
+class WeaviateRepository:
+    def __init__(self, schema):
+        self.schema = schema
+        self.client: weaviate.WeaviateClient = schema.client
 
     def _coll(self, tenant_id: Optional[str]):
         return self.schema.coll(tenant_id)
@@ -260,39 +56,126 @@ class WeaviateRepository(VectorInterface):
         records: List[Dict[str, Any]],
         tenant_id: Optional[str] = None,
     ) -> None:
-        coll = self._coll(tenant_id)
-        for rec in records:
-            key = rec.get("key")
-            vector = rec.get("vector")
-            metadata = dict(rec.get("metadata") or {})
-            raw_id = key or metadata.get("hash") or metadata.get("external_id")
-            if not raw_id:
-                raise ValueError("batch_upsert record requires key/external_id/hash")
-            uuid_id = self._normalize_uuid(raw_id)
-            properties = dict(metadata)
-            text_content = properties.pop("content", None) or properties.get("structure_summary") or ""
-            properties["external_id"] = key or metadata.get("external_id") or metadata.get("hash") or raw_id
-            self._upsert_record(coll, uuid_id, vector, properties, text_content)
-
-    def _upsert_record(self, coll, uuid_id: str, vector: List[float], properties: Dict[str, Any], text: str) -> None:
-        payload = {**properties, "content": text}
-        try:
-            coll.data.insert(uuid=uuid_id, properties=payload, vector=vector)
+        """True batch upsert using Weaviate v4 batch API for maximum performance."""
+        if not records:
             return
-        except UnexpectedStatusCodeError as exc:
-            if self._is_duplicate_insert_error(exc):
-                logger.info(
-                    "Weaviate insert detected existing object. Updating uuid=%s source=%s",
-                    uuid_id,
-                    properties.get("path") or properties.get("source"),
+
+        coll = self._coll(tenant_id)
+
+        with coll.batch.dynamic() as batch:
+            for rec in records:
+                key = rec.get("key")
+                vector = rec.get("vector")
+                metadata = dict(rec.get("metadata") or {})
+                raw_id = key or metadata.get("hash") or metadata.get("external_id")
+
+                if not raw_id:
+                    logger.warning("Skipping batch record without key/hash/external_id")
+                    continue
+
+                uuid_id = self._normalize_uuid(raw_id)
+                properties = dict(metadata)
+                text_content = properties.pop("content", None) or properties.get("structure_summary") or ""
+                properties["external_id"] = key or metadata.get("external_id") or metadata.get("hash") or raw_id
+                properties["content"] = text_content
+
+                batch.add_object(
+                    properties=properties,
+                    uuid=uuid_id,
+                    vector=vector,
                 )
-                self._update_existing(coll, uuid_id, payload, vector)
+
+        if hasattr(coll.batch, "failed_objects") and coll.batch.failed_objects:
+            failed_count = len(coll.batch.failed_objects)
+            logger.warning("Batch upsert had %d failures", failed_count)
+            for i, failure in enumerate(coll.batch.failed_objects[:5]):
+                logger.warning("Batch failure %d: %s", i + 1, failure)
+
+    def _upsert_record(
+        self,
+        coll,
+        uuid_id: str,
+        vector: List[float],
+        properties: Dict[str, Any],
+        text: str,
+    ) -> None:
+        """Optimized upsert for Weaviate collections.
+
+        Strategy:
+            1) Check if the object exists first (avoids unnecessary 422 errors)
+            2) If exists, use `replace` directly
+            3) If not exists, use `insert`
+            4) Handle edge cases with fallback logic
+
+        This approach minimizes HTTP errors in logs and improves performance
+        by avoiding the INSERT-422-REPLACE pattern.
+        """
+        payload = {**properties, "content": text}
+
+        # Check if object exists first
+        try:
+            exists = coll.data.exists(uuid=uuid_id)
+        except Exception as check_exc:
+            logger.debug("Failed to check existence for uuid=%s: %s, falling back to insert-first", uuid_id, check_exc)
+            exists = False
+
+        if exists:
+            # Object exists, use replace
+            try:
+                coll.data.replace(uuid=uuid_id, properties=payload, vector=vector)
                 return
-            logger.exception("Weaviate insert failed for uuid=%s", uuid_id)
-            raise
-        except Exception:
-            logger.exception("Weaviate insert errored unexpectedly, attempting update for uuid=%s", uuid_id)
-            self._update_existing(coll, uuid_id, payload, vector)
+            except UnexpectedStatusCodeError as replace_exc:
+                if self._is_not_found_error(replace_exc):
+                    # Race condition: object was deleted between check and replace
+                    logger.debug("Object was deleted during replace for uuid=%s, inserting instead", uuid_id)
+                    coll.data.insert(uuid=uuid_id, properties=payload, vector=vector)
+                    return
+                logger.exception("Replace operation failed for uuid=%s", uuid_id)
+                raise
+            except Exception as exc:
+                logger.exception("Unexpected error during replace for uuid=%s: %s", uuid_id, exc)
+                raise
+        else:
+            # Object doesn't exist, use insert
+            try:
+                coll.data.insert(uuid=uuid_id, properties=payload, vector=vector)
+                return
+            except UnexpectedStatusCodeError as insert_exc:
+                if self._is_duplicate_insert_error(insert_exc):
+                    # Race condition: object was created between check and insert
+                    logger.debug("Object was created during insert for uuid=%s, replacing instead", uuid_id)
+                    coll.data.replace(uuid=uuid_id, properties=payload, vector=vector)
+                    return
+                logger.exception("Insert operation failed for uuid=%s", uuid_id)
+                raise
+            except Exception as exc:
+                logger.exception("Unexpected error during insert for uuid=%s: %s", uuid_id, exc)
+                raise
+
+    @staticmethod
+    def _is_not_found_error(exc: UnexpectedStatusCodeError) -> bool:
+        """Return True when Weaviate indicates a missing object/UUID.
+
+        Handles both:
+            - status_code == 404
+            - status_code == 500 with body/message including "no object with id '<uuid>'"
+        """
+        status = getattr(exc, "status_code", None)
+        if status == 404:
+            return True
+
+        # Try to extract a meaningful error text from the exception.
+        text = ""
+        for attr in ("message", "body", "response", "response_text", "error"):
+            value = getattr(exc, attr, None)
+            if value:
+                text = str(value)
+                break
+        if not text:
+            text = str(exc)
+
+        low = text.lower()
+        return ("no object with id" in low) or ("not found" in low)
 
     @staticmethod
     def _is_duplicate_insert_error(exc: UnexpectedStatusCodeError) -> bool:
@@ -307,7 +190,6 @@ class WeaviateRepository(VectorInterface):
         if status != 422:
             return False
 
-        # Try to extract a meaningful error text from the exception.
         text = ""
         for attr in ("message", "body", "response", "response_text", "error"):
             value = getattr(exc, attr, None)
@@ -332,9 +214,9 @@ class WeaviateRepository(VectorInterface):
         try:
             coll.data.update(uuid=uuid_id, properties=payload, vector=vector)
         except UnexpectedStatusCodeError as exc:
-            if getattr(exc, "status_code", None) == 404:
+            if self._is_not_found_error(exc):
                 logger.warning(
-                    "Weaviate reported 404 while updating existing uuid=%s; reinserting payload.",
+                    "Weaviate reported not-found while updating uuid=%s; reinserting payload.",
                     uuid_id,
                 )
                 coll.data.insert(uuid=uuid_id, properties=payload, vector=vector)
@@ -345,13 +227,28 @@ class WeaviateRepository(VectorInterface):
             logger.exception("Weaviate update failed for uuid=%s", uuid_id)
             raise
 
-    def _build_where(self, filters: Optional[Dict[str, Any]], include_archived: bool = False) -> Optional[Filter]:
-        archive_filter = Filter.by_property("archived").equal(include_archived)
+    def _build_where(
+        self, filters: Optional[Dict[str, Any]], 
+        include_archived: bool = False
+    ) -> Optional[WeaviateFilter]:
+        """Build a Weaviate filter expression for collection queries.
+
+        Typing note:
+            The Weaviate v4 client returns an internal filter chain type (e.g. `_Filters`)
+            from methods like `Filter.by_property(...).equal(...)`. That internal type is
+            runtime-compatible with the SDK operators (`&`, `|`) but does not match the
+            public `Filter` class in type checkers (Pylance/Mypy).
+
+            We therefore expose the return type as `Optional[Any]` via `WeaviateFilter`
+            to avoid false positives while preserving correct runtime behavior.
+        """
+        archive_filter: WeaviateFilter = Filter.by_property("archived").equal(include_archived)
         if not filters:
             return archive_filter
 
-        shoulds: List[Filter] = []
+        shoulds: List[WeaviateFilter] = []
 
+        # Keep your existing logic (always filtering to public in current implementation).
         if filters.get("visibility") == "public":
             shoulds.append(Filter.by_property("visibility").equal("public"))
         else:
@@ -366,18 +263,14 @@ class WeaviateRepository(VectorInterface):
             shoulds.append(Filter.by_property("allowed_user_ids").contains_any([user_id]))
             shoulds.append(Filter.by_property("owner_id").equal(user_id))
 
-        combined = shoulds[0]
+        combined: WeaviateFilter = shoulds[0]
         for s in shoulds[1:]:
             combined = combined | s
 
         return archive_filter & combined
 
     def exists(self, point_id: str, tenant_id: Optional[str] = None) -> bool:
-        """
-        Check whether a record exists in Weaviate.
-
-        We normalize point_id into the UUID used for storage.
-        """
+        """Check whether a record exists in Weaviate."""
         coll = self._coll(tenant_id)
         uuid_id = self._normalize_uuid(point_id)
         return bool(coll.data.exists(uuid=uuid_id))
@@ -426,11 +319,7 @@ class WeaviateRepository(VectorInterface):
             output.append(ScoredItem(id=str(obj.uuid), score=score, payload=props))
         return output
 
-    def iter_payloads(
-        self,
-        batch_size: int = 256,
-        tenant_id: Optional[str] = None
-    ) -> Iterator[Dict[str, Any]]:
+    def iter_payloads(self, batch_size: int = 256, tenant_id: Optional[str] = None) -> Iterator[Dict[str, Any]]:
         coll = self._coll(tenant_id)
         cursor: Optional[str] = None
 

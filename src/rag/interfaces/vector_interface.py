@@ -63,3 +63,20 @@ class SupportsExists(Protocol):
     """Optional protocol for vector repositories that support checking if a point exists."""
     def exists(self, point_id: str, tenant_id: Optional[str] = None) -> bool:
         ...
+
+
+@runtime_checkable
+class SupportsBatchExists(Protocol):
+    """Optional protocol for vector repositories that support batch exists checking."""
+    def batch_exists(self, point_ids: List[str], tenant_id: Optional[str] = None) -> Dict[str, bool]:
+        """
+        Check if multiple points exist in a single batch operation.
+
+        Args:
+            point_ids: List of point IDs to check
+            tenant_id: Optional tenant/namespace
+
+        Returns:
+            Dictionary mapping point_id -> exists (bool)
+        """
+        ...
