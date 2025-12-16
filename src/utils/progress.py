@@ -1,4 +1,9 @@
-"""Lightweight, reusable terminal progress bar."""
+"""Progress tracking and reporting utilities.
+
+This module provides progress bars and stage reporters for tracking
+long-running operations in the ingestion pipeline.
+"""
+
 import sys
 import time
 from typing import Iterable, Iterator, TextIO, TypeVar
@@ -7,21 +12,44 @@ T = TypeVar("T")
 
 
 def progress_ratio(current: int, total: int) -> float:
-    """Calculate progress as a ratio between 0.0 and 1.0."""
+    """Calculate progress as a ratio between 0.0 and 1.0.
+
+    Args:
+        current: Current progress value.
+        total: Total progress value.
+
+    Returns:
+        Progress ratio clamped between 0.0 and 1.0.
+    """
     if total <= 0:
         return 0.0
     return min(1.0, max(0.0, current / total))
 
 
 def render_bar(ratio: float, length: int, fill_char: str = "▮", empty_char: str = "·") -> str:
-    """Render a progress bar string based on the given ratio."""
+    """Render a progress bar string based on the given ratio.
+
+    Args:
+        ratio: Progress ratio (0.0 to 1.0).
+        length: Length of the progress bar in characters.
+        fill_char: Character to use for filled portion.
+        empty_char: Character to use for empty portion.
+
+    Returns:
+        Rendered progress bar string.
+    """
     filled_length = int(length * ratio)
     bar = fill_char * filled_length + empty_char * (length - filled_length)
     return bar
 
 
 class ProgressBar:
-    """Render a progress bar to stdout/stderr for long-running processes."""
+    """Render a progress bar to stdout/stderr for long-running processes.
+
+    The progress bar automatically detects TTY environments and adjusts its
+    behavior accordingly. In TTY environments, it rewrites the same line.
+    In non-TTY environments (e.g., Docker logs), it prints new lines.
+    """
 
     def __init__(
         self,
@@ -35,6 +63,22 @@ class ProgressBar:
         rewrite: bool | None = None,
         min_interval_seconds: float = 0.0,
     ) -> None:
+        """Initialize the progress bar.
+
+        Args:
+            total: Total number of items to process.
+            length: Length of the progress bar in characters.
+            stream: Output stream (default: stdout).
+            prefix: String to display before the progress bar.
+            suffix: String to display after the progress bar.
+            fill_char: Character for filled portion.
+            empty_char: Character for empty portion.
+            rewrite: Whether to rewrite the same line (auto-detect if None).
+            min_interval_seconds: Minimum interval between updates to throttle rendering.
+
+        Raises:
+            ValueError: If total is not greater than zero.
+        """
         if total <= 0:
             raise ValueError("total must be greater than zero")
         self.total = total
@@ -55,23 +99,44 @@ class ProgressBar:
         self._render()
 
     def update(self, current: int, message: str | None = None) -> None:
-        """Update the bar with an absolute position."""
+        """Update the bar with an absolute position.
+
+        Args:
+            current: New current position.
+            message: Optional message to display.
+        """
         self.current = max(0, min(current, self.total))
         self._render(message)
 
     def advance(self, step: int = 1, message: str | None = None) -> None:
-        """Advance the bar by the given step."""
+        """Advance the bar by the given step.
+
+        Args:
+            step: Number of steps to advance.
+            message: Optional message to display.
+        """
         self.update(self.current + step, message)
 
     def track(self, iterable: Iterable[T]) -> Iterator[T]:
-        """Wrap an iterable and advance the bar for each item."""
+        """Wrap an iterable and advance the bar for each item.
+
+        Args:
+            iterable: Iterable to wrap.
+
+        Yields:
+            Items from the iterable.
+        """
         for item in iterable:
             yield item
             self.advance()
         self.finish()
 
     def finish(self, message: str | None = None) -> None:
-        """Mark the bar as complete and move to a new line."""
+        """Mark the bar as complete and move to a new line.
+
+        Args:
+            message: Optional final message to display.
+        """
         if self._finished:
             return
         self.current = self.total
@@ -81,6 +146,7 @@ class ProgressBar:
         self._finished = True
 
     def _render(self, message: str | None = None) -> None:
+        """Render the progress bar to the output stream."""
         now = time.monotonic()
         if not self._rewrite and self._min_interval_seconds:
             # Always render when the position changes; otherwise throttle noisy updates.
@@ -111,3 +177,10 @@ class ProgressBar:
         else:
             print(line, file=self.stream, flush=True)
         self._last_render_current = self.current
+
+
+__all__ = [
+    "progress_ratio",
+    "render_bar",
+    "ProgressBar",
+]

@@ -1,15 +1,30 @@
+"""Document splitting and chunking utilities.
+
+This module provides utilities for splitting documents into chunks for embedding,
+with support for various splitting strategies and progress tracking.
+"""
+
 from typing import Any, Dict, List, Tuple
 
-from src import logger
 from langchain_core.documents import Document
 
-from .text_utils import effective_limit
+from src.rag.audit import get_logger
+
+logger = get_logger(__name__)
 
 
 def prepare_embedding_segments(chunks: List[Document], limit: int) -> List[Tuple[str, Dict[str, Any]]]:
+    """Split oversized chunks into smaller segments before embedding.
+
+    Args:
+        chunks: List of document chunks.
+        limit: Token limit for each segment.
+
+    Returns:
+        List of (text, metadata) tuples ready for embedding.
     """
-    Optionally split oversized chunks into smaller segments before embedding.
-    """
+    from .text import effective_limit
+
     effective = effective_limit(limit)
     if effective <= 0:
         return [

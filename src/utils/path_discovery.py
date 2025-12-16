@@ -1,4 +1,9 @@
-"""Helpers to load and classify file discovery exclusion rules for ingestion."""
+"""Path discovery and filtering utilities.
+
+This module provides utilities for loading exclusion rules from configuration files,
+parsing path patterns, and classifying paths for file discovery operations.
+"""
+
 import json
 import os
 import re
@@ -11,6 +16,19 @@ DEFAULT_ENABLED_PATHS_FILES: tuple[str, ...] = (".enabledpaths",)
 
 
 def parse_list_env(raw_value: str | None) -> list[str]:
+    """Parse list from environment variable.
+
+    Supports multiple formats:
+    - JSON array: ["item1", "item2"]
+    - JSON object: {"directories": [...], "patterns": [...]}
+    - Comma/newline separated: "item1,item2" or "item1\\nitem2"
+
+    Args:
+        raw_value: Raw environment variable value.
+
+    Returns:
+        List of parsed strings.
+    """
     if not raw_value:
         return []
 
@@ -40,6 +58,14 @@ def parse_list_env(raw_value: str | None) -> list[str]:
 
 
 def value_as_list(value: tuple[str, ...] | list[str] | str | None) -> list[str]:
+    """Convert various types to list of strings.
+
+    Args:
+        value: Value to convert (tuple, list, string, or None).
+
+    Returns:
+        List of strings.
+    """
     if value is None:
         return []
     if isinstance(value, (list, tuple)):
@@ -50,6 +76,15 @@ def value_as_list(value: tuple[str, ...] | list[str] | str | None) -> list[str]:
 
 
 def load_excludes_from_files(exclude_file: str | None, *, cwd: str | None = None) -> list[str]:
+    """Load exclusion rules from .ingestignore or custom file.
+
+    Args:
+        exclude_file: Optional path to a custom exclusion file.
+        cwd: Working directory for resolving relative paths.
+
+    Returns:
+        List of exclusion patterns.
+    """
     entries: list[str] = []
 
     candidates: list[str] = []
@@ -75,6 +110,14 @@ def load_excludes_from_files(exclude_file: str | None, *, cwd: str | None = None
 
 
 def read_exclude_file(path: Path) -> list[str]:
+    """Read and parse exclusion file (JSON or text).
+
+    Args:
+        path: Path to the exclusion file.
+
+    Returns:
+        List of exclusion patterns.
+    """
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
@@ -105,6 +148,14 @@ def read_exclude_file(path: Path) -> list[str]:
 
 
 def classify_exclude_entries(entries: Iterable[object]) -> tuple[set[str], set[str]]:
+    """Classify exclusion entries as directory names or glob patterns.
+
+    Args:
+        entries: Iterable of exclusion entries.
+
+    Returns:
+        Tuple of (directory_names, glob_patterns).
+    """
     dirnames: set[str] = set()
     globs: set[str] = set()
 
@@ -129,6 +180,14 @@ def classify_exclude_entries(entries: Iterable[object]) -> tuple[set[str], set[s
 
 
 def is_glob_like(entry: str) -> bool:
+    """Check if entry contains glob characters.
+
+    Args:
+        entry: Entry to check.
+
+    Returns:
+        True if entry contains glob characters (*, ?, [, ]).
+    """
     return any(char in entry for char in "*?[]")
 
 
@@ -136,11 +195,11 @@ def load_enabled_paths_from_files(enabled_paths_file: str | None, *, cwd: str | 
     """Load enabled paths from .enabledpaths or custom file.
 
     Args:
-        enabled_paths_file: Optional path to a custom enabled paths file
-        cwd: Working directory for resolving relative paths
+        enabled_paths_file: Optional path to a custom enabled paths file.
+        cwd: Working directory for resolving relative paths.
 
     Returns:
-        List of enabled path patterns
+        List of enabled path patterns.
     """
     entries: list[str] = []
 

@@ -11,7 +11,7 @@ from src.rag.interfaces.cache_interface import CacheServiceProtocol
 from src.rag.interfaces.chat_interface import ChatInterface
 from src import logger
 from src.storage.graph.null_repository import NullGraphRepository
-from src.rag.ingestion.excludes import (
+from src.utils.path_discovery import (
     classify_exclude_entries,
     load_excludes_from_files,
     load_enabled_paths_from_files,

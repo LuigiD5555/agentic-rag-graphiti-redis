@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     import redis
 
 from .redis_operations import RedisOperations
-from .hash_utils import compute_directory_hash
+from src.utils.hashing import compute_directory_hash
 
 
 class DirectoryCacheOperations(RedisOperations):

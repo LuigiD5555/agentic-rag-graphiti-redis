@@ -1,18 +1,17 @@
 """Helpers for preparing documents and metadata before persisting to storage."""
 
-from .chunking import prepare_embedding_segments
-from .file_metadata import gather_file_metadata, coerce_datetime
-from .file_ordering import sort_paths_by_size_desc
-from .metadata_utils import prune_metadata
-from .storage_utils import vector_store_contains, vector_store_batch_contains
-from .text_utils import (
+from src.utils.splitting import prepare_embedding_segments
+from src.utils.file_operations import gather_file_metadata, sort_paths_by_size_desc
+from src.utils.text import (
+    coerce_datetime,
     sanitize_text,
-    generate_hash,
     generate_hash_presanitized,
     truncate_to_token_limit,
     truncate_to_token_limit_presanitized,
     effective_limit,
 )
+from src.utils.hashing import generate_hash
+from src.utils.metadata import prune_metadata, vector_store_contains, vector_store_batch_contains
 
 __all__ = [
     "prepare_embedding_segments",

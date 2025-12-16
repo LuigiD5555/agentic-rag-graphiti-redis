@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from math import ceil
 from typing import Dict
 
-from src.rag.audit.progress_bar.progress import progress_ratio, render_bar
+from src.utils.progress import progress_ratio, render_bar
 
 
 @dataclass

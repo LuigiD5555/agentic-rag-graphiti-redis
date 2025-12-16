@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 from src.rag.audit import get_logger
 from .models import FileMetadata
 from .redis_operations import RedisOperations
-from .hash_utils import compute_file_hash
+from src.utils.hashing import compute_file_hash
 
 log = get_logger(__name__)
 

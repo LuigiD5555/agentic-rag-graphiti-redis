@@ -14,7 +14,7 @@ except ImportError:
 from src.rag.audit import get_logger
 from .file_cache import FileCacheOperations
 from .directory_cache import DirectoryCacheOperations
-from .hash_utils import compute_file_hash, compute_directory_hash
+from src.utils.hashing import compute_file_hash, compute_directory_hash
 
 log = get_logger(__name__)
 

@@ -12,7 +12,7 @@ This package provides a modular cache management system with the following compo
 
 from .models import FileMetadata, DirectoryMetadata
 from .manager import IngestionCacheManager
-from .hash_utils import compute_file_hash, compute_directory_hash
+from src.utils.hashing import compute_file_hash, compute_directory_hash
 
 __all__ = [
     "IngestionCacheManager",

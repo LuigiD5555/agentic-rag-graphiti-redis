@@ -1,8 +1,14 @@
+"""Language and script detection utilities for text splitting.
+
+This module provides script detection and language-specific splitting policies
+for optimal chunk sizing based on text characteristics.
+"""
+
 import re
 import unicodedata
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
 class ScriptFamily(str, Enum):
@@ -99,6 +105,7 @@ class TextProfiler:
         return normalized.replace("\r\n", "\n").replace("\r", "\n")
 
     def _classify_char(self, character: str) -> ScriptFamily:
+        """Classify a character into a script family."""
         code = ord(character)
 
         # CJK Unified Ideographs + extensions (rough)
@@ -123,11 +130,13 @@ class TextProfiler:
         return ScriptFamily.OTHER
 
     def _to_shares(self, counts: Dict[ScriptFamily, int], total: int) -> Dict[ScriptFamily, float]:
+        """Convert counts to percentage shares."""
         if total <= 0:
             return {}
         return {script: (count / total) for script, count in counts.items()}
 
     def _dominant(self, shares: Dict[ScriptFamily, float]) -> ScriptFamily:
+        """Find the dominant script family."""
         if not shares:
             return ScriptFamily.UNKNOWN
         return max(shares.items(), key=lambda item: item[1])[0]
@@ -212,3 +221,12 @@ class CjkTextSplitter:
             overlapped.append((overlap_text + chunk).strip())
 
         return overlapped
+
+
+__all__ = [
+    "ScriptFamily",
+    "TextProfile",
+    "SplitPolicy",
+    "TextProfiler",
+    "CjkTextSplitter",
+]
