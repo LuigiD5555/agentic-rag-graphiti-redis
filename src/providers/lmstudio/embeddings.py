@@ -121,6 +121,77 @@ class EmbeddingService:
             )
         return self._dummy_vector()
 
+    def generate_batch(self, texts: List[str]) -> List[List[float]]:
+        """
+        Generate embeddings for multiple texts in a single API call.
+
+        This method batches multiple embedding requests into one HTTP call,
+        significantly reducing network overhead and improving throughput.
+
+        Args:
+            texts: List of text strings to embed.
+
+        Returns:
+            List of embedding vectors, one per input text, in the same order.
+
+        Behavior:
+            -   If no model is available, returns dummy vectors.
+            -   If batch API call fails, automatically falls back to sequential
+                individual calls for robustness.
+            -   Validates all returned embeddings.
+        """
+        if not texts:
+            return []
+
+        if self._use_dummy:
+            if self._require_live:
+                raise RuntimeError("LM Studio embeddings required but service is in dummy mode.")
+            return [self._dummy_vector() for _ in texts]
+
+        payload = {"model": self._model_name, "input": texts}
+
+        for root in self._candidate_roots:
+            url = f"{root}/v1/embeddings"
+            try:
+                resp = self._post_json(url, payload, timeout=30)  # Longer timeout for batch
+                data = self._to_json(resp)
+
+                # Extract all embeddings from batch response
+                if "data" not in data:
+                    raise ValueError("Batch embedding response missing 'data' field")
+
+                # Sort by index to ensure correct order
+                embeddings_data = sorted(data["data"], key=lambda x: x.get("index", 0))
+
+                results = []
+                for item in embeddings_data:
+                    if not isinstance(item, dict) or "embedding" not in item:
+                        raise ValueError(f"Invalid embedding item in batch response: {item}")
+                    raw_vector = item["embedding"]
+                    vector = self._normalize_and_validate_vector(raw_vector)
+                    results.append(vector)
+
+                if len(results) != len(texts):
+                    raise ValueError(
+                        f"Batch embedding count mismatch: expected {len(texts)}, got {len(results)}"
+                    )
+
+                self._api_root = root
+                self._embed_url = url
+                return results
+
+            except requests.exceptions.RequestException as exc:
+                logger.warning("Batch embedding HTTP error (%s); attempting next endpoint: %s", root, exc)
+                continue
+            except (ValueError, TypeError) as exc:
+                logger.warning("Batch embedding failed (%s); falling back to sequential generation", exc)
+                # Fallback to sequential generation for robustness
+                return [self.generate(text) for text in texts]
+
+        # All endpoints failed, fall back to sequential
+        logger.warning("All batch embedding endpoints failed; falling back to sequential generation")
+        return [self.generate(text) for text in texts]
+
     # ------------- Internals -------------
 
     def _post_json(self, url: str, payload: Dict[str, Any], timeout: float) -> Response:
