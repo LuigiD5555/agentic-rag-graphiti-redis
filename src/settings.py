@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 # Base path for resolving project-relative files (.env, data/settings.json, etc.).
@@ -56,10 +57,13 @@ GRAPH_STORES = {
 }
 
 # Cache backend registry (aliases -> cache backend config dict).
+# Note: LOCATION is intentionally left empty here because it will be resolved
+# from environment variables (REDIS_HOST/REDIS_PORT or REDIS_URL) at runtime.
+# See src/storage/cache/__init__.py:_resolve_redis_endpoint for the resolution logic.
 CACHES = {
     "default": {
         "BACKEND": "redis",
-        "LOCATION": "redis://redis:6379/0",
+        "LOCATION": "",
         "TIMEOUT": None,
         "KEY_PREFIX": "",
         "VERSION": 1,
@@ -129,6 +133,8 @@ DOCS_PATHS = [
 ]
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
+DOCS_ENABLED_PATHS_FILE = ""
+DOCS_ENABLED_PATHS = ()
 DOCS_EXCLUDE_FILE = ""
 DOCS_EXCLUDE_DIRS = ()
 DOCS_EXCLUDE_GLOBS = ()
@@ -172,24 +178,82 @@ DOCS_FILE_EXTS = (
 # Default cache TTL for application-level caching (seconds).
 CACHE_TTL = 3600
 
+# If provided (via user settings JSON), this list REPLACES _DEFAULT_EXCLUDED_FILES.
+# GUI can manage this list to fully control fast-prune directory basenames.
+DOCS_EXCLUDE_DIRS_BUILTINS_OVERRIDE = None
+
 # Default excluded basenames for discovery (fast-prune + common junk folders).
 _DEFAULT_EXCLUDED_FILES = {
+    # VCS / editor / tooling
     ".git",
+    ".hg",
+    ".svn",
+    ".idea",
+    ".vscode",
+    ".vs",
+
+    # Python / type-checker / test caches
     "__pycache__",
-    "node_modules",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".tox",
+    ".nox",
+    ".hypothesis",
+    ".ipynb_checkpoints",
+
+    # Virtual environments / package dirs
     ".venv",
     "venv",
     "env",
-    ".idea",
-    ".vscode",
+    "__pypackages__",
+    "site-packages",
+
+    # Node / web build artifacts
+    "node_modules",
+    ".next",
+    ".nuxt",
+    ".svelte-kit",
+    ".parcel-cache",
+
+    # Generic build outputs
+    "build",
+    "dist",
+    "target",
+    "out",
+    "coverage",
+
+    # Misc common caches
+    ".cache",
+    ".gradle",
+    ".terraform",
+
+    # Metadata/bundles (may be files or directories)
+    ".DS_Store",
+    "*.egg-info",
+    ".eggs",
+    ".coverage",
+
+    # Compressed archives
+    "__MACOSX",
+    "*.zip",
+    "*.tar",
+    "*.tar.gz",
+    "*.rar",
+    "*.7z",
+    "*.gz",
+    "*.tar.xz"
 }
 
 # Keys that can be persisted/overridden via the user settings JSON file.
 _USER_SETTING_FIELDS = (
     "DOCS_PATHS",
+    "DOCS_ENABLED_PATHS_FILE",
+    "DOCS_ENABLED_PATHS",
     "DOCS_EXCLUDE_FILE",
     "DOCS_EXCLUDE_DIRS",
     "DOCS_EXCLUDE_GLOBS",
+    "DOCS_EXCLUDE_DIRS_BUILTINS_OVERRIDE",
     "DOCS_FILE_EXTS",
     "VECTOR_STORES",
     "CACHES",

@@ -1,33 +1,23 @@
-"""
-Settings loader similar in spirit to Django's LazySettings.
+"""Settings loader - provides global config instance."""
+from src.rag.engine import config
 
-It builds a single ConfigLogic instance from src.settings (ALL-CAPS only),
-applying env/.env overrides via ConfigFactory. Call get_settings(**overrides)
-to get a copy with updates, or use the module-level `settings` singleton.
-"""
-from importlib import import_module
-from typing import Any
-
-from src.rag.engine import ConfigFactory
+# Singleton settings object
+settings = config
 
 
-_settings_module = import_module("src.settings")
-_factory = ConfigFactory(_settings_module.__dict__)
+def Config(**overrides):
+    """Return the canonical settings object.
 
-# Singleton settings object (canonical)
-settings = _factory()
-
-
-def Config(**overrides: Any):
-    """
-    Return the canonical settings object, optionally cloning with overrides.
+    Note: Pydantic settings are immutable by default.
+    For overrides, create a new instance with model_copy(update=overrides).
     """
     if overrides:
-        return settings.copy(update=overrides)
+        return settings.model_copy(update=overrides)
     return settings
 
 
-def get_settings(**overrides: Any):
+def get_settings(**overrides):
+    """Alias for Config()."""
     return Config(**overrides)
 
 
