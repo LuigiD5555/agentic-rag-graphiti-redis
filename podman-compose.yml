@@ -53,7 +53,7 @@ services:
       NEO4J_server_memory_heap_max__size: "${NEO4J_HEAP_MAX:-2G}"
       NEO4J_server_memory_pagecache_size: "${NEO4J_PAGECACHE:-1G}"
       NEO4J_dbms_usage__report_enabled: "${NEO4J_USAGE_REPORT:-false}"
-      NEO4J_clients_allow__telemetry: "${NEO4J_TELEMETRY:-false}"
+      NEO4J_client_allow__telemetry: "${NEO4J_TELEMETRY:-false}"
       NEO4J_server_config_strict__validation_enabled: "${NEO4J_STRICT_VALIDATION:-false}"
     volumes:
       - ${HOST_NEO4J_DATA:-neo4j_data}:/data:Z
@@ -72,11 +72,15 @@ services:
     image: "docker.io/library/redis:${REDIS_IMAGE_TAG:?REDIS_IMAGE_TAG is required}"
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
-    # Bind ONLY to localhost so it's not exposed to LAN
     ports:
       - "127.0.0.1:${HOST_REDIS_TCP_PORT:-6379}:6379"
     volumes:
       - ${HOST_REDIS_DATA:-redis_data}:/data:Z
+    hostname: redis
+    networks:
+      default:
+        aliases:
+          - redis
     stop_grace_period: 20s
     ulimits:
       nofile: { soft: 65536, hard: 65536 }
@@ -137,7 +141,10 @@ services:
 
     volumes:
       - ${HOST_DOCS_DIR:?HOST_DOCS_DIR is required}:/mnt/Documents/Documents:Z
+      - ${HOST_LIBROS_DIR:-/mnt/resources/Libros}:/mnt/resources/Libros:Z
       - ${HOST_DATA_DIR:-./data}:/data:Z
+      - ./.enabledpaths:/app/.enabledpaths:ro,Z
+      - ./.ingestignore:/app/.ingestignore:ro,Z
 
     # Do NOT publish container ports; app binds to 127.0.0.1 via host network
     command: ["python", "-m", "src.main"]

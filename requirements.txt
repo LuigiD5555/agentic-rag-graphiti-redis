@@ -20,9 +20,10 @@ msoffcrypto-tool
 python-docx
 pypdf
 python-pptx
-tiktoken
 
 # Utils
 python-dotenv
 requests
 pytest
+pydantic
+pydantic-settings

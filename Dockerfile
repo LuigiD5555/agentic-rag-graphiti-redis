@@ -1,7 +1,7 @@
 ########################
 # Base (dependencies)
 ########################
-FROM python:3.14-slim AS base
+FROM python:3.12-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -42,6 +42,14 @@ RUN if [ "$RUN_TESTS" = "1" ]; then pytest -q; fi
 # Runtime (production)
 ########################
 FROM base AS runtime
+
+# Copy configuration files for ingestion
+COPY .ingestignore /app/.ingestignore
+COPY .enabledpaths /app/.enabledpaths
+
+# Set environment variables for default paths
+ENV DOCS_EXCLUDE_FILE=/app/.ingestignore
+ENV DOCS_ENABLED_PATHS_FILE=/app/.enabledpaths
 
 # Copy only the application code required at runtime
 COPY src/ src/

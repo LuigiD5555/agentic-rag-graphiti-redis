@@ -45,7 +45,8 @@ Thumbs.db
 *.sublime-project
 .cspell/
 .lh/
-
+.claude
+docs
 
 # -----------------------------
 # Logs & temp files
@@ -90,6 +91,13 @@ build/
 # Notebook checkpoints
 # -----------------------------
 .ipynb_checkpoints/
+
+# -----------------------------
+# Ingestion configuration (optional: user-specific)
+# -----------------------------
+# Uncomment these if you want to keep ingestion configs private:
+# .enabledpaths
+# .ingestignore
 
 # -----------------------------
 # Other
