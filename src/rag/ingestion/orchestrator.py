@@ -4,7 +4,7 @@ import os
 from typing import List
 
 from src.rag.ingestion.discovery import FileDiscoveryService
-from src.rag.ingestion.cache_manager import IngestionCacheManager
+from src.storage.cache.ingestion import IngestionCacheManager
 from src.rag.ingestion.options import DiscoveryOptions, IngestionOptions, PipelineOptions
 from src.rag.ingestion.pipeline import IngestionPipeline
 from src.providers.factory import ProviderFactory

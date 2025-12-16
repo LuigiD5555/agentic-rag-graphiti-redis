@@ -188,3 +188,20 @@ def get_cache(config: Any, alias: str = "default") -> CacheServiceProtocol:
 
 
 __all__ = ["get_cache", "CacheFactory", "RedisCacheService"]
+
+# Re-export ingestion cache components for convenience
+from .ingestion import (
+    IngestionCacheManager,
+    FileMetadata,
+    DirectoryMetadata,
+    compute_file_hash,
+    compute_directory_hash,
+)
+
+__all__ += [
+    "IngestionCacheManager",
+    "FileMetadata",
+    "DirectoryMetadata",
+    "compute_file_hash",
+    "compute_directory_hash",
+]

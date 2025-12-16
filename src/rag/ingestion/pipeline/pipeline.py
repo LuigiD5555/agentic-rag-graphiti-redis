@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Set
 from src import logger
 from src.rag.ingestion.options import PipelineOptions
 from src.rag.ingestion.catalog import IngestionCatalog
-from src.rag.ingestion.cache_manager import IngestionCacheManager
+from src.storage.cache.ingestion import IngestionCacheManager
 from src.rag.interfaces.embedding_interface import EmbeddingInterface
 from src.rag.interfaces.vector_interface import VectorInterface
 from src.rag.audit.decorators import logged, timed

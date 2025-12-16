@@ -61,7 +61,7 @@ def _update_file_cache(
         stat = Path(full_path).stat()
 
         # Import FileMetadata
-        from src.rag.ingestion.cache_manager import FileMetadata
+        from src.storage.cache.ingestion import FileMetadata
 
         # Create metadata
         metadata = FileMetadata(
@@ -155,7 +155,7 @@ def process_candidate_file(
 
                 # Cache this file with the same processing results
                 stat = Path(full_path).stat()
-                from src.rag.ingestion.cache_manager import FileMetadata
+                from src.storage.cache.ingestion import FileMetadata
                 new_metadata = FileMetadata(
                     file_path=full_path,
                     content_hash=content_hash,
