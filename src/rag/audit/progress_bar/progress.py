@@ -3,9 +3,21 @@ import sys
 import time
 from typing import Iterable, Iterator, TextIO, TypeVar
 
-from src.ingestion.utils.progress import progress_ratio, render_bar
-
 T = TypeVar("T")
+
+
+def progress_ratio(current: int, total: int) -> float:
+    """Calculate progress as a ratio between 0.0 and 1.0."""
+    if total <= 0:
+        return 0.0
+    return min(1.0, max(0.0, current / total))
+
+
+def render_bar(ratio: float, length: int, fill_char: str = "▮", empty_char: str = "·") -> str:
+    """Render a progress bar string based on the given ratio."""
+    filled_length = int(length * ratio)
+    bar = fill_char * filled_length + empty_char * (length - filled_length)
+    return bar
 
 
 class ProgressBar:
