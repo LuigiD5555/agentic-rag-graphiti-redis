@@ -139,6 +139,8 @@ an external gateway/provider would integrate.
 ### Local GPU Embeddings
 
 Set `EMBEDDING_BACKEND=local_gpu` to run sentence-transformers embeddings locally while LM Studio continues to handle chat completions.
+Install optional deps with `pip install -r requirements-local-gpu.txt`.
+For containers, build with `--build-arg INSTALL_LOCAL_GPU_DEPS=1`.
 Tune `LOCAL_GPU_DEVICE` (`cuda`, `cuda:0`, `auto`, `cpu`), `LOCAL_GPU_EMBED_MODEL` (sentence-transformers model name), and `LOCAL_GPU_BATCH_SIZE` (default 32) via `.env`.
 The helper lives in `src/utils/local_gpu`: it wraps the CUDA-aware encoder with an optional Redis cache, so embeddings stay on the GPU while LM Studio is only used for chat. Ensure `torch` and `sentence-transformers` are installed and a CUDA driver is available.
 

@@ -7,13 +7,15 @@ from src import logger
 from src.providers.lmstudio.cached_embeddings import CachedEmbeddingService
 from src.rag.conf import Config
 from src.rag.interfaces.embedding_interface import EmbeddingInterface
-from src.utils.local_gpu.embedding_service import LocalGPUEmbeddingService
 
 
 def build_local_gpu_embedding_service(config: Config) -> EmbeddingInterface:
     """
     Create a LocalGPUEmbeddingService with optional Redis caching.
     """
+    # Lazy import so torch/sentence-transformers stay optional unless needed.
+    from src.utils.local_gpu.embedding_service import LocalGPUEmbeddingService
+
     base_service = LocalGPUEmbeddingService(config)
 
     cache_enabled = os.environ.get("RAG_EMBED_CACHE_ENABLED", "true").lower() in ("true", "1", "yes")

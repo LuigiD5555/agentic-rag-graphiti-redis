@@ -16,8 +16,11 @@ WORKDIR /app
 
 # Leverage Docker layer caching: install deps first
 COPY requirements.txt .
+COPY requirements-local-gpu.txt .
+ARG INSTALL_LOCAL_GPU_DEPS=0
 RUN python -m pip install --upgrade pip \
- && pip install --no-cache-dir -r requirements.txt
+ && pip install --no-cache-dir -r requirements.txt \
+ && if [ "$INSTALL_LOCAL_GPU_DEPS" = "1" ]; then pip install --no-cache-dir -r requirements-local-gpu.txt; fi
 
 ########################
 # Test stage (optional)

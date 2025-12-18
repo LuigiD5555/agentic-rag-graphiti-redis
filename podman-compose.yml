@@ -95,6 +95,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        INSTALL_LOCAL_GPU_DEPS: "${INSTALL_LOCAL_GPU_DEPS:-0}"
     restart: unless-stopped
     depends_on:
       - weaviate

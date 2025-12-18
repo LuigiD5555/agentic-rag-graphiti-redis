@@ -5,7 +5,6 @@ from typing import Optional
 from src.providers.factory import ProviderFactory
 from src.rag.conf import Config
 from src.rag.interfaces.embedding_interface import EmbeddingInterface
-from src.utils.local_gpu.factory import build_local_gpu_embedding_service
 
 
 def get_embedding_service(
@@ -19,6 +18,9 @@ def get_embedding_service(
     """
     backend = (getattr(config, "EMBEDDING_BACKEND", "lmstudio") or "lmstudio").strip().lower()
     if backend == "local_gpu":
+        # Lazy import so torch/sentence-transformers stay optional unless needed.
+        from src.utils.local_gpu.factory import build_local_gpu_embedding_service
+
         return build_local_gpu_embedding_service(config)
 
     provider = provider or ProviderFactory(config)
