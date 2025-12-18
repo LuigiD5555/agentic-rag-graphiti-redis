@@ -1,6 +1,6 @@
 from src.providers.registry import list_providers, reset_provider_registry
-from src.rag.registry import ensure_apps_loaded, reset_app_registry
-from src.rag.providers import _reset_for_tests as reset_builtin_providers
+from src.providers.app_registry import ensure_apps_loaded, reset_app_registry
+from src.providers.builtins import _reset_for_tests as reset_builtin_providers
 from src.rag.conf import Config
 
 

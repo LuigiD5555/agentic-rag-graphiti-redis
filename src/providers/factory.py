@@ -6,7 +6,7 @@ from src.rag.conf import Config
 from src.rag.interfaces.embedding_interface import EmbeddingInterface
 from src.rag.interfaces.chat_interface import ChatInterface
 from src.rag.interfaces.provider_adapter_interface import ProviderAdapterInterface
-from src.rag.registry import ensure_apps_loaded
+from src.providers.app_registry import ensure_apps_loaded
 from src.providers.registry import get_provider_factory
 
 
