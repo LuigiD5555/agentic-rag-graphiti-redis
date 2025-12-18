@@ -11,7 +11,7 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.rag.ingestion.discovery.path_tree import PathTree, PathNode
+from src.ingestion.discovery.path_tree import PathTree, PathNode
 
 
 def test_path_tree_basic():

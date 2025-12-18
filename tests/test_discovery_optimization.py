@@ -14,8 +14,8 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.rag.ingestion.discovery import FileDiscoveryService, PathTree
-from src.rag.ingestion.options import DiscoveryOptions
+from src.ingestion.discovery import FileDiscoveryService, PathTree
+from src.ingestion.options import DiscoveryOptions
 from src.rag.audit import get_logger
 
 log = get_logger(__name__)

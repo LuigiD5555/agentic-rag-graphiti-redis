@@ -14,9 +14,9 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.rag.ingestion.helpers import build_ingestion_options_from_args
-from src.rag.ingestion.loaders.pdf_loader import PDFLoader
-from src.rag.ingestion.loaders.csv_loader import CSVLoader
+from src.ingestion.helpers import build_ingestion_options_from_args
+from src.ingestion.loaders.pdf_loader import PDFLoader
+from src.ingestion.loaders.csv_loader import CSVLoader
 from src.utils.file_operations import sort_paths_by_size_desc
 from src.settings import _DEFAULT_EXCLUDED_FILES
 import argparse

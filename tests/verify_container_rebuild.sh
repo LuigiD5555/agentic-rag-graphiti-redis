@@ -56,7 +56,7 @@ echo ""
 # Check PDFLoader incremental loading
 echo "4. Verifying PDFLoader incremental loading..."
 PDF_CHECK=$(podman exec "$CONTAINER_NAME" python -c "
-from src.rag.ingestion.loaders.pdf_loader import PDFLoader
+from src.ingestion.loaders.pdf_loader import PDFLoader
 print(f'MAX_PDF_SIZE={PDFLoader.MAX_PDF_SIZE_BYTES/(1024*1024):.0f}MB')
 print(f'LARGE_THRESHOLD={PDFLoader.LARGE_PDF_THRESHOLD/(1024*1024):.0f}MB')
 print(f'PAGES_PER_BATCH={PDFLoader.PAGES_PER_BATCH}')
@@ -76,7 +76,7 @@ echo ""
 # Check CSVLoader limits
 echo "5. Verifying CSVLoader row limits..."
 CSV_CHECK=$(podman exec "$CONTAINER_NAME" python -c "
-from src.rag.ingestion.loaders.csv_loader import CSVLoader
+from src.ingestion.loaders.csv_loader import CSVLoader
 print(f'MAX_ROWS={CSVLoader.MAX_ROWS}')
 print(f'MAX_FILE_SIZE={CSVLoader.MAX_FILE_SIZE_BYTES/(1024*1024):.0f}MB')
 " 2>/dev/null || echo "ERROR")
@@ -152,7 +152,7 @@ echo ""
 echo "NEXT STEP: run a test ingestion"
 echo ""
 echo "   podman exec -it $CONTAINER_NAME bash -c \\"
-echo "       'python -m src.rag.ingestion --max-files 10 --log-level DEBUG'"
+echo "       'python -m src.ingestion --max-files 10 --log-level DEBUG'"
 echo ""
 echo "   You should see:"
 echo "   - Only ~500-2000 candidate files (NOT 198,272)"
