@@ -51,6 +51,25 @@ def _split_batch_core(
     if has_split_method:
         return splitter.split_documents(list(documents))
 
+    # Some splitters (e.g., SemanticChunker) expose create_documents/split_text instead.
+    if hasattr(splitter, "create_documents"):
+        chunks: List[Document] = []
+        for doc in documents:
+            created = splitter.create_documents([doc.page_content], metadatas=[doc.metadata or {}])
+            chunks.extend(list(created or []))
+        return chunks
+
+    if hasattr(splitter, "split_text"):
+        chunks = []
+        for doc in documents:
+            parts = splitter.split_text(doc.page_content)
+            chunks.extend(
+                Document(page_content=part, metadata=(doc.metadata or {}))
+                for part in (parts or [])
+                if isinstance(part, str) and part.strip()
+            )
+        return chunks
+
     return list(documents)
 
 
@@ -93,7 +112,22 @@ def split_documents(
         return
 
     if hasattr(splitter, "split_documents"):
-        yield from splitter.split_documents(documents)
+        yield from splitter.split_documents(list(documents))
+        return
+
+    # Fallback for splitters that don't implement split_documents.
+    if hasattr(splitter, "create_documents"):
+        for doc in documents:
+            created = splitter.create_documents([doc.page_content], metadatas=[doc.metadata or {}])
+            yield from (created or [])
+        return
+
+    if hasattr(splitter, "split_text"):
+        for doc in documents:
+            parts = splitter.split_text(doc.page_content)
+            for part in (parts or []):
+                if isinstance(part, str) and part.strip():
+                    yield Document(page_content=part, metadata=(doc.metadata or {}))
         return
 
     yield from documents
