@@ -1,16 +1,17 @@
-"""Module for markdown file loader"""
+"""Module for markdown file loader."""
 from typing import List
 import re
 
 from langchain_core.documents import Document
 
-from langchain_community.document_loaders import TextLoader as _Loader
+from src.rag.ingestion.loaders.errors import LoaderUnreadableTextError, ensure_file_exists
+from src.utils.text_reading import read_text_with_fallbacks
 
 
 class MarkdownLoader:
     """Loader for markdown files."""
     def __init__(self, path: str):
-        self.loader = _Loader(path, encoding="utf-8")
+        self.path = path
 
     def _clean(self, text: str) -> str:
         text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
@@ -24,7 +25,13 @@ class MarkdownLoader:
         Returns:
             List[Document]: Loaded documents.
         """
-        documents = self.loader.load()
-        for doc in documents:
-            doc.page_content = self._clean(doc.page_content)
-        return documents
+        ensure_file_exists(self.path)
+        try:
+            result = read_text_with_fallbacks(self.path)
+        except ValueError as exc:
+            raise LoaderUnreadableTextError(self.path, str(exc)) from exc
+        except UnicodeDecodeError as exc:
+            raise LoaderUnreadableTextError(self.path, str(exc)) from exc
+
+        cleaned = self._clean(result.text)
+        return [Document(page_content=cleaned, metadata={"source": self.path, "encoding": result.encoding})]

@@ -38,6 +38,15 @@ class LoaderInvalidFormatError(LoaderError):
         self.expected = expected
 
 
+class LoaderUnreadableTextError(LoaderError):
+    """Raised when a text-like file cannot be decoded or appears to be binary."""
+
+    def __init__(self, path: str, detail: str):
+        super().__init__(f"Unreadable text encoding for {path}: {detail}")
+        self.path = path
+        self.detail = detail
+
+
 def ensure_file_exists(path: str) -> None:
     """Raise a consistent error if the input file does not exist."""
     if not os.path.isfile(path):

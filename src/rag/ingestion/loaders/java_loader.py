@@ -2,6 +2,9 @@
 
 import re
 
+from src.rag.ingestion.loaders.errors import LoaderUnreadableTextError, ensure_file_exists
+from src.utils.text_reading import read_text_with_fallbacks
+
 
 class JavaCodeStructure:
     """Represent the structure of a Java source file."""
@@ -28,18 +31,25 @@ class JavaCodeStructure:
         Returns:
             str: Summary of key declarations.
         """
-        out = []
-        with open(self.path, "r", encoding="utf-8") as f:
-            for i, line in enumerate(f, start=1):
-                stripped = line.strip()
-                if not stripped or stripped.startswith("//"):
-                    continue
+        ensure_file_exists(self.path)
+        try:
+            result = read_text_with_fallbacks(self.path)
+        except ValueError as exc:
+            raise LoaderUnreadableTextError(self.path, str(exc)) from exc
+        except UnicodeDecodeError as exc:
+            raise LoaderUnreadableTextError(self.path, str(exc)) from exc
 
-                if stripped.startswith(("class ", "interface ", "enum ", "record ")):
-                    out.append(f"Line {i}: {stripped}")
-                elif self._METHOD_PATTERN.match(stripped):
-                    out.append(f"Line {i}: {stripped}")
-                elif stripped.startswith("package ") or stripped.startswith("import "):
-                    continue
+        out: list[str] = []
+        for i, line in enumerate(result.text.splitlines(), start=1):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("//"):
+                continue
+
+            if stripped.startswith(("class ", "interface ", "enum ", "record ")):
+                out.append(f"Line {i}: {stripped}")
+            elif self._METHOD_PATTERN.match(stripped):
+                out.append(f"Line {i}: {stripped}")
+            elif stripped.startswith("package ") or stripped.startswith("import "):
+                continue
 
         return "\n".join(out) if out else "File structure only"
