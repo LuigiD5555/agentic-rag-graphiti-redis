@@ -8,6 +8,7 @@ It logs stage-level progress to avoid "silent" long-running steps.
 """
 
 from datetime import datetime, timezone
+import os
 from typing import Any, Dict
 
 from src import logger
@@ -19,6 +20,7 @@ from src.utils.file_operations import gather_file_metadata
 from src.utils.hashing import generate_hash
 from src.utils.metadata import prune_metadata, vector_store_contains
 from src.utils.text import sanitize_text, truncate_to_token_limit
+from src.utils.path_discovery import load_include_duplicates_from_files, should_preserve_duplicates
 
 
 def _resolve_file_context(pipeline: Any) -> IngestionFileContext:
@@ -58,11 +60,23 @@ def process_code_document(pipeline: Any, code_loader: object) -> None:
         pipeline._current_file_info = None
         return
 
+    file_info = pipeline._current_file_info or gather_file_metadata(source)
+
     summary_text = sanitize_text(summary_text_raw)
     summary_text = truncate_to_token_limit(summary_text, pipeline.embedding_effective_limit, pipeline.tokenizer_model_name)
-    summary_hash = generate_hash(summary_text)
+    file_path = str(file_info.get("file_path") or source)
 
-    file_info = pipeline._current_file_info or gather_file_metadata(source)
+    include_rules = load_include_duplicates_from_files(
+        getattr(getattr(pipeline, "options", None), "include_duplicates_file", None)
+        or os.environ.get("DOCS_INCLUDE_DUPLICATES_FILE", "")
+    )
+    preserve_dupes = should_preserve_duplicates(file_path, include_rules)
+
+    # Preserve directory-tree context and avoid hash collisions for identical content.
+    if preserve_dupes:
+        summary_text = f"FILE_PATH: {file_path}\n\n{summary_text}"
+
+    summary_hash = generate_hash(summary_text)
 
     if pipeline.hash_exists(summary_hash):
         pipeline.progress.add_total(0, source=source)

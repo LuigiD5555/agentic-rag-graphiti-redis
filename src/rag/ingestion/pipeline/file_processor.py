@@ -15,6 +15,7 @@ from typing import Any
 from src import logger
 from src.rag.ingestion.loaders import CODE_LOADER_SPECS, TEXT_LOADER_SPECS, PlainTextLoader
 from src.utils.file_operations import gather_file_metadata
+from src.utils.path_discovery import load_include_duplicates_from_files, should_preserve_duplicates
 
 from .code_processor import process_code_document
 from .loader_helpers import should_skip_path
@@ -154,8 +155,16 @@ def process_candidate_file(
                 pipeline._current_file_info = None
                 return
 
-        # Content-based deduplication: check if identical file was already processed
-        content_hash = cache_manager.compute_file_hash(full_path)
+        # Content-based deduplication: check if identical file was already processed.
+        # Some files are intentionally excluded from deduplication when their location matters.
+        include_rules = load_include_duplicates_from_files(
+            getattr(getattr(pipeline, "options", None), "include_duplicates_file", None)
+            or os.environ.get("DOCS_INCLUDE_DUPLICATES_FILE", "")
+        )
+        preserve_dupes = should_preserve_duplicates(full_path, include_rules)
+
+        content_hash = None if preserve_dupes else cache_manager.compute_file_hash(full_path)
+
         if content_hash:
             duplicate_meta = cache_manager.find_processed_file_by_hash(content_hash)
             if duplicate_meta and duplicate_meta.file_path != full_path:

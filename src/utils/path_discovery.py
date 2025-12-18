@@ -7,12 +7,14 @@ parsing path patterns, and classifying paths for file discovery operations.
 import json
 import os
 import re
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Iterable
 
 
 DEFAULT_EXCLUDE_FILES: tuple[str, ...] = (".ingestignore",)
 DEFAULT_ENABLED_PATHS_FILES: tuple[str, ...] = (".enabledpaths",)
+DEFAULT_INCLUDE_DUPLICATES_FILES: tuple[str, ...] = (".includethisduplicates",)
 
 
 def parse_list_env(raw_value: str | None) -> list[str]:
@@ -223,6 +225,106 @@ def load_enabled_paths_from_files(enabled_paths_file: str | None, *, cwd: str | 
         entries.extend(read_exclude_file(try_path))  # Reuse same parser
 
     return entries
+
+
+def load_include_duplicates_from_files(include_file: str | None, *, cwd: str | None = None) -> list[str]:
+    """Load duplicate-include rules from .includethisduplicates or custom file.
+
+    Entries in this file define paths that should NOT be deduplicated even when content is identical.
+    Supported formats:
+    - Plain basename: "__init__.py"
+    - Glob patterns: "**/__init__.py"
+    - Directory prefix (trailing slash): "src/my_pkg/"
+    - Regex (prefix): "re:^.*/__init__\\.py$"
+
+    Args:
+        include_file: Optional path to a custom include file.
+        cwd: Working directory for resolving relative paths.
+
+    Returns:
+        List of include patterns.
+    """
+    entries: list[str] = []
+
+    candidates: list[str] = []
+    if include_file:
+        candidates.append(include_file)
+    candidates.extend(DEFAULT_INCLUDE_DUPLICATES_FILES)
+
+    seen: set[Path] = set()
+    base_dir = Path(cwd or os.getcwd())
+    for candidate in candidates:
+        if not candidate:
+            continue
+        candidate_path = Path(candidate).expanduser()
+        if not candidate_path.is_absolute():
+            candidate_path = base_dir / candidate_path
+        try_path = candidate_path.resolve()
+        if try_path in seen or not try_path.is_file():
+            continue
+        seen.add(try_path)
+        entries.extend(read_exclude_file(try_path))
+
+    return entries
+
+
+def should_preserve_duplicates(
+    path: str,
+    patterns: Iterable[object],
+    *,
+    cwd: str | None = None,
+) -> bool:
+    """Return True if a file path matches any "include duplicates" pattern."""
+    base_dir = Path(cwd or os.getcwd()).resolve()
+    path_norm = str(Path(path).expanduser().resolve()).replace("\\", "/")
+    basename = Path(path_norm).name
+
+    try:
+        rel_norm = str(Path(path_norm).resolve().relative_to(base_dir)).replace("\\", "/")
+    except Exception:
+        rel_norm = ""
+
+    for entry in patterns:
+        raw = str(entry).strip()
+        if not raw or raw.startswith("#"):
+            continue
+
+        if raw.startswith("re:"):
+            try:
+                if re.search(raw[3:], path_norm) or (rel_norm and re.search(raw[3:], rel_norm)):
+                    return True
+            except re.error:
+                continue
+            continue
+
+        normalized = raw.replace("\\", "/").strip()
+        if normalized.endswith("/"):
+            prefix = normalized.rstrip("/")
+            if not prefix:
+                continue
+            if prefix.startswith("/"):
+                if path_norm.startswith(prefix.rstrip("/")):
+                    return True
+            else:
+                if (rel_norm and (rel_norm == prefix or rel_norm.startswith(prefix + "/"))) or (
+                    f"/{prefix}/" in path_norm
+                ):
+                    return True
+            continue
+
+        normalized = normalized.rstrip("/")
+        if not normalized:
+            continue
+
+        if not is_glob_like(normalized) and "/" not in normalized:
+            if basename == normalized:
+                return True
+            continue
+
+        if fnmatch(path_norm, normalized) or (rel_norm and fnmatch(rel_norm, normalized)) or fnmatch(basename, normalized):
+            return True
+
+    return False
 
 
 __all__ = [

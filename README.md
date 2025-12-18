@@ -59,6 +59,14 @@ Make sure the Weaviate service:
 
 Or with Docker Compose:
 
+## Ingestion: preserving duplicates by path
+
+If you want certain files to be ingested even when their content is identical (because the path/package tree matters), add rules to `.includethisduplicates`.
+
+- Default includes: `__init__.py`
+- Supported entries: basename, glob patterns, directory prefixes (ending with `/`), or regex (`re:` prefix)
+- Optional override: set `DOCS_INCLUDE_DUPLICATES_FILE` to point to another file
+
 ---
 
 ## Usage
