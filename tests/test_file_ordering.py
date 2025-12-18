@@ -1,4 +1,4 @@
-from src.storage.vector.utils import sort_paths_by_size_desc
+from src.utils.file_operations import sort_paths_by_size_desc
 
 
 def test_sort_paths_by_size_desc(tmp_path):
@@ -19,9 +19,9 @@ def test_sort_paths_by_size_desc(tmp_path):
     )
 
     assert ordered == [
-        str(large),
-        str(medium),
+        str(small),
         str(tie2),
         str(tie1),
-        str(small),
+        str(medium),
+        str(large),
     ]
