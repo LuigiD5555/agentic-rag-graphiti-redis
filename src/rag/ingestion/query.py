@@ -5,6 +5,7 @@ from src.rag.ingestion.options import PipelineOptions
 from src.rag.ingestion.pipeline import IngestionPipeline
 from src.providers.factory import ProviderFactory
 from src.rag.conf import Config
+from src.rag.embeddings_factory import get_embedding_service
 from src.storage.vector import get_vector_store
 
 
@@ -18,7 +19,7 @@ def main():
 
     cfg = Config()
     provider = ProviderFactory(cfg)
-    embed = provider.embeddings()
+    embed = get_embedding_service(cfg, provider)
     vector = get_vector_store(cfg)
 
     pipeline_options = PipelineOptions(

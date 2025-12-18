@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 # Base path for resolving project-relative files (.env, data/settings.json, etc.).

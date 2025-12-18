@@ -77,13 +77,32 @@ class CachedEmbeddingService:
                 self.ttl_seconds,
             )
 
-    def _compute_cache_key(self, text: str) -> str:
+    def _compute_cache_key(self, text: str, source: Optional[str] = None, chunk_index: Optional[int] = None) -> str:
         """
         Compute a stable cache key for the given text.
 
         Uses SHA256 hash of the text content to create a unique, deterministic key.
+        Optionally includes source file path and chunk index for better cache stability.
+
+        Args:
+            text: The text content to hash
+            source: Optional source file path for stable caching across preprocessing changes
+            chunk_index: Optional chunk index within the source file
+
+        Returns:
+            Cache key string
         """
-        text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        # Create a composite key that includes source+chunk if available
+        # This makes caching more stable when text preprocessing changes slightly
+        if source and chunk_index is not None:
+            # Use source path + chunk index for more stable caching
+            # Even if text preprocessing changes, same file+chunk will hit cache
+            composite = f"{source}::{chunk_index}::{text}"
+            text_hash = hashlib.sha256(composite.encode("utf-8")).hexdigest()
+        else:
+            # Fallback to text-only hashing (backward compatible)
+            text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+
         return f"{self.key_prefix}{text_hash}"
 
     def _get_from_cache(self, cache_key: str) -> Optional[List[float]]:
@@ -94,11 +113,13 @@ class CachedEmbeddingService:
             The cached embedding vector if found, None otherwise.
         """
         if not self.enabled:
+            logger.debug("Cache disabled, skipping cache lookup for key %s", cache_key[:20])
             return None
 
         try:
             cached_data = self.redis_client.get(cache_key)
             if cached_data is None:
+                logger.debug("CACHE MISS: No cached embedding for key %s", cache_key[:20])
                 return None
 
             # Deserialize the cached embedding
@@ -108,11 +129,12 @@ class CachedEmbeddingService:
                 return None
 
             self._cache_hits += 1
+            logger.debug("CACHE HIT: Retrieved embedding for key %s (dim=%d)", cache_key[:20], len(embedding))
             return embedding
 
         except Exception as e:
             self._cache_errors += 1
-            logger.debug("Cache retrieval error for key %s: %s", cache_key, e)
+            logger.warning("Cache retrieval error for key %s: %s", cache_key[:20], e)
             return None
 
     def _store_in_cache(self, cache_key: str, embedding: List[float]) -> None:
@@ -126,25 +148,31 @@ class CachedEmbeddingService:
             # Serialize the embedding as JSON
             cached_data = json.dumps(embedding)
             self.redis_client.setex(cache_key, self.ttl_seconds, cached_data)
+            logger.debug("CACHE STORE: Saved embedding for key %s (dim=%d, ttl=%ds)", cache_key[:20], len(embedding), self.ttl_seconds)
         except Exception as e:
             self._cache_errors += 1
-            logger.debug("Cache storage error for key %s: %s", cache_key, e)
+            logger.warning("Cache storage error for key %s: %s", cache_key[:20], e)
 
-    def generate(self, text: str) -> List[float]:
+    def generate(self, text: str, source: Optional[str] = None, chunk_index: Optional[int] = None) -> List[float]:
         """
         Generate an embedding for the given text, using cache when possible.
 
         Args:
             text: The input text to embed.
+            source: Optional source file path for stable caching
+            chunk_index: Optional chunk index within the source file
 
         Returns:
             The embedding vector as a list of floats.
         """
-        cache_key = self._compute_cache_key(text)
+        cache_key = self._compute_cache_key(text, source, chunk_index)
 
         # Try cache first
         cached_embedding = self._get_from_cache(cache_key)
         if cached_embedding is not None:
+            # Log stats every 100 cache hits for monitoring
+            if self._cache_hits % 100 == 0:
+                self.log_stats()
             return cached_embedding
 
         # Cache miss - generate embedding
@@ -154,9 +182,19 @@ class CachedEmbeddingService:
         # Store in cache for future use
         self._store_in_cache(cache_key, embedding)
 
+        # Log stats every 1000 requests for monitoring
+        total_requests = self._cache_hits + self._cache_misses
+        if total_requests % 1000 == 0:
+            self.log_stats()
+
         return embedding
 
-    def generate_batch(self, texts: List[str]) -> List[List[float]]:
+    def generate_batch(
+        self,
+        texts: List[str],
+        sources: Optional[List[Optional[str]]] = None,
+        chunk_indices: Optional[List[Optional[int]]] = None
+    ) -> List[List[float]]:
         """
         Generate embeddings for multiple texts, using cache when possible.
 
@@ -167,6 +205,8 @@ class CachedEmbeddingService:
 
         Args:
             texts: List of texts to embed.
+            sources: Optional list of source file paths (same length as texts)
+            chunk_indices: Optional list of chunk indices (same length as texts)
 
         Returns:
             List of embedding vectors, one per input text, in the same order.
@@ -174,8 +214,17 @@ class CachedEmbeddingService:
         if not texts:
             return []
 
+        # Ensure sources and chunk_indices match texts length
+        if sources is None:
+            sources = [None] * len(texts)
+        if chunk_indices is None:
+            chunk_indices = [None] * len(texts)
+
         # Build cache keys and check cache for all texts
-        cache_keys = [self._compute_cache_key(text) for text in texts]
+        cache_keys = [
+            self._compute_cache_key(text, source, chunk_idx)
+            for text, source, chunk_idx in zip(texts, sources, chunk_indices)
+        ]
         results: List[Optional[List[float]]] = [None] * len(texts)
         texts_to_generate: List[tuple[int, str]] = []  # (original_index, text)
 

@@ -64,6 +64,7 @@ class AppConfig(BaseSettings):
     WEAVIATE_CONNECT_BACKOFF: float = 2.0
     WEAVIATE_MULTI_TENANCY: bool = True
     WEAVIATE_DEFAULT_TENANT: str = "tenant-default"
+    WEAVIATE_SKIP_INIT_CHECKS: bool = False
 
     # Vector stores configuration (Django-style)
     VECTOR_STORES: Dict[str, Dict[str, Any]] = Field(default_factory=lambda: {
@@ -93,6 +94,10 @@ class AppConfig(BaseSettings):
     # ===== Embeddings =====
     EMBEDDING_DIM: int = 768
     EMBEDDING_MAX_TOKENS: int = 512
+    EMBEDDING_BACKEND: str = "lmstudio"
+    LOCAL_GPU_EMBED_MODEL: str = "all-MiniLM-L6-v2"
+    LOCAL_GPU_DEVICE: str = "cuda"
+    LOCAL_GPU_BATCH_SIZE: int = 32
 
     # ===== Ingestion =====
     DOCS_PATHS: List[str] = Field(default_factory=lambda: [

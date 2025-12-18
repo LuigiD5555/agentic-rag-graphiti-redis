@@ -46,6 +46,7 @@ FROM base AS runtime
 # Copy configuration files for ingestion
 COPY .ingestignore /app/.ingestignore
 COPY .enabledpaths /app/.enabledpaths
+COPY monitor_memory.sh /app/monitor_memory.sh
 
 # Set environment variables for default paths
 ENV DOCS_EXCLUDE_FILE=/app/.ingestignore

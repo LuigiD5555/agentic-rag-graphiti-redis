@@ -66,6 +66,8 @@ class LMStudioAdapter(ProviderAdapterBase):
             redis_port = int(getattr(config, "REDIS_PORT", 6379))
             redis_db = int(os.environ.get("RAG_EMBED_CACHE_DB", "0"))
 
+            logger.info("Attempting to connect to Redis at %s:%d (db=%d)", redis_host, redis_port, redis_db)
+
             client = redis.Redis(
                 host=redis_host,
                 port=redis_port,
@@ -77,11 +79,12 @@ class LMStudioAdapter(ProviderAdapterBase):
 
             # Test connection
             client.ping()
+            logger.info("Redis connection successful for embedding cache")
             return client
 
         except ImportError:
             logger.warning("redis-py not installed, embedding cache unavailable")
             return None
         except Exception as e:
-            logger.debug("Redis connection failed: %s", e)
+            logger.warning("Redis connection failed for embedding cache: %s", e)
             return None

@@ -14,13 +14,32 @@ def resolve_level(level: str | int | None) -> int:
 
 
 def configure_logging(level: str | int | None = None, fmt: str = DEFAULT_FORMAT) -> logging.Logger:
-    """
-    Configure the root logger with a consistent format and level.
+    """Configure logging with a consistent format and sensible defaults.
 
-    Returns the project logger for convenience.
+    This project runs in containers and talks to multiple services (Weaviate, Redis,
+    Neo4j, LM Studio). Some third-party libraries (notably `httpx`) can be very
+    chatty at INFO level. We keep the application logger at the requested level,
+    while lowering noisy dependencies unless the user explicitly raises them.
+
+    Args:
+        level: The desired root log level.
+        fmt: The log line format.
+
+    Returns:
+        The project logger ("rag") for convenience.
     """
     numeric_level = resolve_level(level)
     logging.basicConfig(level=numeric_level, format=fmt, force=True)
+
+    # Silence noisy third-party loggers
+    for noisy_logger_name in (
+        "httpx",
+        "httpcore",
+        "weaviate",
+        "urllib3",
+    ):
+        logging.getLogger(noisy_logger_name).setLevel(logging.WARNING)
+
     return get_logger()
 
 

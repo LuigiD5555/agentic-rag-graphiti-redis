@@ -8,13 +8,14 @@ from src.storage.cache import get_cache
 from src.rag.engine import RAGEngine
 from src.rag.cli.agent import Agent
 from src.storage.vector import get_vector_store
+from src.rag.embeddings_factory import get_embedding_service
 
 
 def main():
     cfg = Config()
 
     provider = ProviderFactory(cfg)
-    embed = provider.embeddings()
+    embed = get_embedding_service(cfg, provider)
     chat = provider.chat()
     vector = get_vector_store(cfg)
     graph = get_graph_store(cfg)

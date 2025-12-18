@@ -21,6 +21,10 @@ python-docx
 pypdf
 python-pptx
 
+# Local GPU embeddings
+torch>=2.1.1
+sentence-transformers>=2.3.0
+
 # Utils
 python-dotenv
 requests
