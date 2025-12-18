@@ -58,7 +58,7 @@ def test_path_tree():
     print(f"  - Visited paths: {stats['visited_paths']}")
     print(f"  - Memory savings: {stats['memory_savings']}")
 
-    print("\n✅ PathTree tests passed!")
+    print("\nPATHTREE TESTS PASSED")
 
 
 def test_discovery_with_optimization():
@@ -71,7 +71,7 @@ def test_discovery_with_optimization():
     test_root = str(Path(__file__).parent / "src")
 
     if not os.path.exists(test_root):
-        print(f"⚠️  Test directory not found: {test_root}")
+        print(f"WARNING: test directory not found: {test_root}")
         return
 
     service = FileDiscoveryService()
@@ -140,7 +140,7 @@ def test_discovery_with_optimization():
     # Verify results are identical
     assert len(files1) == len(files2), "Results should be identical"
     assert set(files1) == set(files2), "File sets should be identical"
-    print("\n✅ Discovery optimization tests passed!")
+    print("\nDISCOVERY OPTIMIZATION TESTS PASSED")
 
 
 def test_performance_comparison():
@@ -152,7 +152,7 @@ def test_performance_comparison():
     test_root = str(Path(__file__).parent / "src")
 
     if not os.path.exists(test_root):
-        print(f"⚠️  Test directory not found: {test_root}")
+        print(f"WARNING: test directory not found: {test_root}")
         return
 
     opts = DiscoveryOptions(
@@ -175,7 +175,7 @@ def test_performance_comparison():
     print(f"  - Files: {len(files_opt)}")
     print(f"  - Paths avoided: {stats_opt['path_optimization']['total_avoided']}")
 
-    print("\n✅ Performance comparison complete!")
+    print("\nPERFORMANCE COMPARISON COMPLETE")
 
 
 def main():
@@ -190,11 +190,11 @@ def main():
         test_performance_comparison()
 
         print("\n" + "="*70)
-        print("🎉 ALL TESTS PASSED!")
+        print("ALL TESTS PASSED")
         print("="*70)
 
     except Exception as e:
-        print(f"\n❌ Test failed with error: {e}")
+        print(f"\nTEST FAILED WITH ERROR: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

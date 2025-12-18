@@ -42,7 +42,7 @@ def test_path_tree_basic():
     assert not_found is None, "Should return None for non-existent path"
     print("   ✓ Non-existent path returns None")
 
-    print("\n✅ Basic operations test passed!")
+    print("\nBASIC OPERATIONS TEST PASSED")
 
 
 def test_path_tree_visited():
@@ -69,7 +69,7 @@ def test_path_tree_visited():
     assert not tree.is_visited("src/components/ui"), "Should be cleared"
     print("   ✓ Clear visited works correctly")
 
-    print("\n✅ Visited tracking test passed!")
+    print("\nVISITED TRACKING TEST PASSED")
 
 
 def test_path_tree_exclusion():
@@ -100,7 +100,7 @@ def test_path_tree_exclusion():
     assert tree2.is_path_excluded("build"), "Parent should be excluded"
     print("   ✓ Hierarchical exclusion works correctly")
 
-    print("\n✅ Exclusion test passed!")
+    print("\nEXCLUSION TEST PASSED")
 
 
 def test_path_tree_performance():
@@ -145,7 +145,7 @@ def test_path_tree_performance():
     print(f"   - Visited paths: {stats['visited_paths']}")
     print(f"   - Memory savings: {stats['memory_savings']}")
 
-    print("\n✅ Performance test passed!")
+    print("\nPERFORMANCE TEST PASSED")
 
 
 def test_path_normalization():
@@ -168,7 +168,7 @@ def test_path_normalization():
     assert tree.find_node("/src/components/forms") is not None
     print("   ✓ Path normalization works correctly")
 
-    print("\n✅ Normalization test passed!")
+    print("\nNORMALIZATION TEST PASSED")
 
 
 def test_unvisited_children():
@@ -192,7 +192,7 @@ def test_unvisited_children():
     assert "src/components/ui" not in unvisited, "Should not include visited child"
     print(f"   ✓ Found {len(unvisited)} unvisited children")
 
-    print("\n✅ Unvisited children test passed!")
+    print("\nUNVISITED CHILDREN TEST PASSED")
 
 
 def main():
@@ -210,7 +210,7 @@ def main():
         test_unvisited_children()
 
         print("\n" + "="*70)
-        print("🎉 ALL TESTS PASSED!")
+        print("ALL TESTS PASSED")
         print("="*70)
         print("\nThe PathTree optimization is working correctly and provides:")
         print("  • O(k) lookups where k is path depth")
@@ -222,12 +222,12 @@ def main():
         print("="*70 + "\n")
 
     except AssertionError as e:
-        print(f"\n❌ Test failed: {e}")
+        print(f"\nTEST FAILED: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
     except Exception as e:
-        print(f"\n❌ Test failed with error: {e}")
+        print(f"\nTEST FAILED WITH ERROR: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

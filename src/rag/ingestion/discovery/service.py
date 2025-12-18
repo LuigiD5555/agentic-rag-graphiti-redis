@@ -149,7 +149,7 @@ class FileDiscoveryService:
             )
             if total_skipped > 0:
                 log.info(
-                    "⚡ Performance boost: %d path operations avoided via tree optimization",
+                    "Performance boost: %d path operations avoided via tree optimization",
                     total_skipped
                 )
 
