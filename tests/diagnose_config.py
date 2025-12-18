@@ -44,7 +44,7 @@ def check_redis_connection():
 
         # Test connection
         client.ping()
-        print("✅ Redis connection successful")
+        print("Redis connection successful")
 
         # Check cache keys
         embed_keys = len(client.keys("embed:*"))
@@ -56,10 +56,10 @@ def check_redis_connection():
         return True
 
     except ImportError:
-        print("❌ redis-py not installed")
+        print("ERROR: redis-py not installed")
         return False
     except Exception as e:
-        print(f"❌ Redis connection failed: {e}")
+        print(f"ERROR: Redis connection failed: {e}")
         return False
 
 
@@ -74,28 +74,30 @@ def check_embedding_config():
 
         config = Config()
 
+        embedding_backend = getattr(config, "EMBEDDING_BACKEND", None)
         embedding_dim = getattr(config, "EMBEDDING_DIM", None)
         embedding_model = getattr(config, "EMBEDDING_MODEL", None)
         embedding_max_tokens = getattr(config, "EMBEDDING_MAX_TOKENS", None)
 
         print(f"Configuration loaded:")
+        print(f"   - EMBEDDING_BACKEND: {embedding_backend}")
         print(f"   - EMBEDDING_DIM: {embedding_dim}")
         print(f"   - EMBEDDING_MODEL: {embedding_model}")
         print(f"   - EMBEDDING_MAX_TOKENS: {embedding_max_tokens}")
 
         # Check if dimension matches expected models
         if embedding_dim == 768:
-            print("✅ EMBEDDING_DIM=768 (compatible with nomic-embed models)")
+            print("EMBEDDING_DIM=768 (compatible with nomic-embed models)")
         elif embedding_dim == 384:
-            print("⚠️  EMBEDDING_DIM=384 (compatible with minilm models)")
+            print("WARNING: EMBEDDING_DIM=384 (compatible with minilm models)")
             print("   Note: Ensure you're using a 384-dim model like all-minilm-l6-v2")
         else:
-            print(f"⚠️  EMBEDDING_DIM={embedding_dim} (non-standard dimension)")
+            print(f"WARNING: EMBEDDING_DIM={embedding_dim} (non-standard dimension)")
 
         return True
 
     except Exception as e:
-        print(f"❌ Failed to load config: {e}")
+        print(f"ERROR: Failed to load config: {e}")
         return False
 
 
@@ -120,7 +122,7 @@ def check_lmstudio_connectivity():
 
         models = response.json().get("data", [])
 
-        print(f"✅ LM Studio connected successfully")
+        print("LM Studio connected successfully")
         print(f"   - Available models: {len(models)}")
 
         # Separate embedding and LLM models
@@ -140,14 +142,14 @@ def check_lmstudio_connectivity():
         return True
 
     except ImportError:
-        print("❌ requests library not installed")
+        print("ERROR: requests library not installed")
         return False
     except requests.exceptions.ConnectionError:
-        print(f"❌ Cannot connect to LM Studio at {base_url}")
+        print(f"ERROR: Cannot connect to LM Studio at {base_url}")
         print("   Make sure LM Studio is running and accessible")
         return False
     except Exception as e:
-        print(f"❌ LM Studio connectivity check failed: {e}")
+        print(f"ERROR: LM Studio connectivity check failed: {e}")
         return False
 
 
@@ -176,7 +178,7 @@ def check_weaviate_connectivity():
         schema = response.json()
         classes = schema.get("classes", [])
 
-        print(f"✅ Weaviate connected successfully")
+        print("Weaviate connected successfully")
         print(f"   - Classes defined: {len(classes)}")
 
         # Check RAGDocument class
@@ -194,17 +196,17 @@ def check_weaviate_connectivity():
             if vector_index:
                 print(f"      - Vector index type: {vector_index.get('type', 'unknown')}")
         else:
-            print(f"\n   ⚠️  RAGDocument class not found in schema")
-            print(f"      This is normal if you haven't run ingestion yet")
+            print("\n   WARNING: RAGDocument class not found in schema")
+            print("      This is normal if you have not run ingestion yet")
 
         return True
 
     except requests.exceptions.ConnectionError:
-        print(f"❌ Cannot connect to Weaviate at {weaviate_url_test}")
+        print(f"ERROR: Cannot connect to Weaviate at {weaviate_url_test}")
         print("   Make sure Weaviate container is running")
         return False
     except Exception as e:
-        print(f"❌ Weaviate connectivity check failed: {e}")
+        print(f"ERROR: Weaviate connectivity check failed: {e}")
         return False
 
 
@@ -226,15 +228,18 @@ def check_environment_variables():
 
     for var, default in critical_vars.items():
         value = os.environ.get(var, default)
-        status = "✅" if value else "⚠️ "
-        print(f"   {status} {var}={value}")
+        if value:
+            status = "OK"
+        else:
+            status = "WARNING"
+        print(f"   {status}: {var}={value}")
 
     return True
 
 
 def main():
     """Run all diagnostic checks."""
-    print("\n" + "🔍 RAG INGESTION PIPELINE DIAGNOSTIC REPORT 🔍".center(60))
+    print("\n" + "RAG INGESTION PIPELINE DIAGNOSTIC REPORT".center(60))
     print("=" * 60)
 
     results = {
@@ -250,16 +255,16 @@ def main():
     print("="*60)
 
     for check, passed in results.items():
-        status = "✅ PASS" if passed else "❌ FAIL"
+        status = "PASS" if passed else "FAIL"
         print(f"   {status}: {check}")
 
     all_passed = all(results.values())
 
     print("\n" + "="*60)
     if all_passed:
-        print("🎉 ALL CHECKS PASSED - System ready for ingestion!")
+        print("ALL CHECKS PASSED - system ready for ingestion")
     else:
-        print("⚠️  SOME CHECKS FAILED - Review errors above")
+        print("SOME CHECKS FAILED - review errors above")
     print("="*60 + "\n")
 
     return 0 if all_passed else 1

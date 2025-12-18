@@ -126,9 +126,12 @@ EMBEDDING_MAX_TOKENS = 512
 LITELLM_TARGET_PROVIDER = "lmstudio"
 
 # Ingestion settings (discovery + splitting).
+# DOCS_PATHS define the BASE paths to scan.
+# To avoid scanning all of /mnt/Documents/Documents (which includes code),
+# we only scan the books folder:
 DOCS_PATHS = [
-    "/mnt/Documents/Documents",
-    "/mnt/resources/Libros/Aprendizaje",
+    "/mnt/resources/Libros/Aprendizaje",  # Books only, no source code
+    # "/mnt/Documents/Documents",  # Commented out: contains too much code
 ]
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
@@ -136,7 +139,21 @@ DOCS_ENABLED_PATHS_FILE = ""
 DOCS_ENABLED_PATHS = ()
 DOCS_EXCLUDE_FILE = ""
 DOCS_EXCLUDE_DIRS = ()
-DOCS_EXCLUDE_GLOBS = ()
+# Exclude specific subdirectories that contain code/projects (not knowledge)
+DOCS_EXCLUDE_GLOBS = (
+    # Exclude all programming projects and code
+    "*/Programacion/Aprendiendo_Programacion/*",
+    "*/Programacion/Proyectos_Programacion/*",
+    "*/Programacion/Deprecated*",
+
+    # Exclude specific heavy folders
+    "*/Certificates/*",
+    "*/Odoo/*",
+    "*/fact_checker*",
+
+    # Keep only /mnt/resources/Libros/Aprendizaje (books)
+    # Everything else in /mnt/Documents/Documents will be excluded
+)
 DOCS_FILE_EXTS = (
     ".pdf",
     ".docx",

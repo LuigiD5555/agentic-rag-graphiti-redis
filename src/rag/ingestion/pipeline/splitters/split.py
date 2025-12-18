@@ -10,9 +10,9 @@ from langchain_text_splitters import MarkdownHeaderTextSplitter
 from src import logger
 
 
-# Protocol para type checking
+# Protocol for type checking
 class TextSplitter(Protocol):
-    """Protocol para splitters que tienen método split_documents."""
+    """Protocol for splitters that expose split_documents."""
     def split_documents(self, documents: List[Document]) -> List[Document]:
         ...
 

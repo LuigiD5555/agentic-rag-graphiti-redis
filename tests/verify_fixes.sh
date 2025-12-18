@@ -1,125 +1,125 @@
 #!/bin/bash
-# Script para verificar que las correcciones estén implementadas
+# Script to verify that the fixes are implemented
 
 echo "================================================================================"
-echo "VERIFICACIÓN DE CORRECCIONES IMPLEMENTADAS"
+echo "VERIFICATION OF IMPLEMENTED FIXES"
 echo "================================================================================"
 echo ""
 
-# Test 1: Verificar que sort_paths_by_size_desc use orden ascendente
-echo "TEST 1: Verificando orden de archivos (ascendente)"
+# Test 1: verify that sort_paths_by_size_desc uses ascending order
+echo "TEST 1: Verifying file order (ascending)"
 echo "--------------------------------------------------------------------------------"
 if grep -q "key=lambda p: (sizes\[p\], p.lower())" src/utils/file_operations.py; then
-    echo "✅ ÉXITO: Orden ascendente configurado (pequeño→grande)"
+    echo "OK: Ascending order configured (small to large)"
 else
-    echo "❌ FALLO: Orden ascendente NO configurado"
+    echo "ERROR: Ascending order is not configured"
 fi
 echo ""
 
-# Test 2: Verificar que helpers.py use _DEFAULT_EXCLUDED_FILES
-echo "TEST 2: Verificando importación de exclusiones por defecto"
+# Test 2: verify that helpers.py uses _DEFAULT_EXCLUDED_FILES
+echo "TEST 2: Verifying import of default exclusions"
 echo "--------------------------------------------------------------------------------"
 if grep -q "from src.settings import _DEFAULT_EXCLUDED_FILES" src/rag/ingestion/helpers.py; then
-    echo "✅ ÉXITO: Importa exclusiones por defecto"
+    echo "OK: Default exclusions are imported"
 else
-    echo "❌ FALLO: No importa exclusiones por defecto"
+    echo "ERROR: Default exclusions are not imported"
 fi
 
 if grep -q "excluded_directory_names = _DEFAULT_EXCLUDED_FILES.copy()" src/rag/ingestion/helpers.py; then
-    echo "✅ ÉXITO: Usa exclusiones por defecto como base"
+    echo "OK: Default exclusions are used as base"
 else
-    echo "❌ FALLO: No usa exclusiones por defecto"
+    echo "ERROR: Default exclusions are not used as base"
 fi
 echo ""
 
-# Test 3: Verificar límites en CSVLoader
-echo "TEST 3: Verificando límites en CSVLoader"
+# Test 3: verify limits in CSVLoader
+echo "TEST 3: Verifying limits in CSVLoader"
 echo "--------------------------------------------------------------------------------"
 if grep -q "MAX_ROWS = 50000" src/rag/ingestion/loaders/csv_loader.py; then
-    echo "✅ ÉXITO: Límite de 50,000 filas configurado"
+    echo "OK: 50,000 row limit configured"
 else
-    echo "❌ FALLO: Límite de filas no configurado"
+    echo "ERROR: Row limit is not configured"
 fi
 
 if grep -q "MAX_FILE_SIZE_BYTES = 150 \* 1024 \* 1024" src/rag/ingestion/loaders/csv_loader.py; then
-    echo "✅ ÉXITO: Límite de 150 MB configurado"
+    echo "OK: 150 MB file size limit configured"
 else
-    echo "❌ FALLO: Límite de tamaño no configurado"
+    echo "ERROR: File size limit is not configured"
 fi
 echo ""
 
-# Test 4: Verificar límites y timeout en PDFLoader
-echo "TEST 4: Verificando límites y timeout en PDFLoader"
+# Test 4: verify limits and timeout in PDFLoader
+echo "TEST 4: Verifying limits and timeout in PDFLoader"
 echo "--------------------------------------------------------------------------------"
 if grep -q "MAX_PDF_SIZE_BYTES.*500.*1024.*1024" src/rag/ingestion/loaders/pdf_loader.py; then
-    echo "✅ ÉXITO: Límite máximo de PDF configurado (500 MB)"
+    echo "OK: PDF maximum size configured (500 MB)"
 else
-    echo "❌ FALLO: Límite de tamaño no configurado"
+    echo "ERROR: PDF maximum size is not configured"
 fi
 
 if grep -q "LOAD_TIMEOUT_SECONDS = 300" src/rag/ingestion/loaders/pdf_loader.py; then
-    echo "✅ ÉXITO: Timeout de 300s configurado"
+    echo "OK: 300s timeout configured"
 else
-    echo "❌ FALLO: Timeout no configurado"
+    echo "ERROR: Timeout is not configured"
 fi
 
 if grep -q "def _load_with_timeout" src/rag/ingestion/loaders/pdf_loader.py; then
-    echo "✅ ÉXITO: Método _load_with_timeout implementado"
+    echo "OK: _load_with_timeout method implemented"
 else
-    echo "❌ FALLO: Método _load_with_timeout no encontrado"
+    echo "ERROR: _load_with_timeout method not found"
 fi
 
 if grep -q "def _is_scanned_pdf" src/rag/ingestion/loaders/pdf_loader.py; then
-    echo "✅ ÉXITO: Detección de PDFs escaneados implementada"
+    echo "OK: scanned PDF detection implemented"
 else
-    echo "❌ FALLO: Detección de PDFs escaneados no encontrada"
+    echo "ERROR: scanned PDF detection not found"
 fi
 
 if grep -q "def _load_incrementally" src/rag/ingestion/loaders/pdf_loader.py; then
-    echo "✅ ÉXITO: Carga incremental de PDFs implementada"
+    echo "OK: incremental PDF loading implemented"
 else
-    echo "❌ FALLO: Carga incremental no encontrada"
+    echo "ERROR: incremental PDF loading not found"
 fi
 
 if grep -q "LARGE_PDF_THRESHOLD = 50 \* 1024 \* 1024" src/rag/ingestion/loaders/pdf_loader.py; then
-    echo "✅ ÉXITO: Umbral de PDF grande configurado (50 MB)"
+    echo "OK: large PDF threshold configured (50 MB)"
 else
-    echo "❌ FALLO: Umbral de PDF grande no configurado"
+    echo "ERROR: large PDF threshold is not configured"
 fi
 
 if grep -q "MAX_PDF_SIZE_BYTES = 500 \* 1024 \* 1024" src/rag/ingestion/loaders/pdf_loader.py; then
-    echo "✅ ÉXITO: Límite máximo aumentado a 500 MB"
+    echo "OK: PDF maximum size increased to 500 MB"
 else
-    echo "❌ FALLO: Límite máximo no actualizado"
+    echo "ERROR: PDF maximum size is not updated"
 fi
 
 if grep -q "PAGES_PER_BATCH = 50" src/rag/ingestion/loaders/pdf_loader.py; then
-    echo "✅ ÉXITO: Tamaño de lote configurado (50 páginas)"
+    echo "OK: batch size configured (50 pages)"
 else
-    echo "❌ FALLO: Tamaño de lote no configurado"
+    echo "ERROR: batch size is not configured"
 fi
 echo ""
 
-# Test 5: Verificar que _DEFAULT_EXCLUDED_FILES tenga los críticos
-echo "TEST 5: Verificando contenido de exclusiones por defecto"
+# Test 5: verify that _DEFAULT_EXCLUDED_FILES contains critical entries
+echo "TEST 5: Verifying default exclusion content"
 echo "--------------------------------------------------------------------------------"
 critical_dirs=("node_modules" ".git" "__pycache__" "venv" ".venv" "site-packages" ".next" "dist" "build")
 for dir in "${critical_dirs[@]}"; do
     if grep -q "\"$dir\"" src/settings.py; then
-        echo "✅ Encontrado: $dir"
+        echo "OK: Found $dir"
     else
-        echo "❌ Falta: $dir"
+        echo "ERROR: Missing $dir"
     fi
 done
 echo ""
 
 echo "================================================================================"
-echo "VERIFICACIÓN COMPLETADA"
+echo "VERIFICATION COMPLETED"
 echo "================================================================================"
 echo ""
-echo "Si todos los tests pasaron, el sistema está listo para ejecutar la ingesta."
+echo "If all tests passed, the system is ready to run ingestion."
 echo ""
-echo "Para probar con archivos reales:"
+echo "To test with real files:"
 echo "  cd /app"
 echo "  python -m src.rag.ingestion --paths /mnt/resources/Libros --max-files 50 --log-level DEBUG"
 echo ""

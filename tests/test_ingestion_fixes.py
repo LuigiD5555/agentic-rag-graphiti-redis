@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Test script para verificar que las correcciones de ingesta funcionen correctamente.
+Test script to verify that ingestion-related fixes work correctly.
 
-Este script verifica:
-1. Que las exclusiones por defecto estén activas
-2. Que el orden de archivos sea ascendente (pequeño→grande)
-3. Que los límites de PDF/CSV estén configurados correctamente
+This script verifies:
+1. That default exclusions are active
+2. That file ordering is ascending (small to large)
+3. That PDF/CSV limits are configured correctly
 """
 
 import sys
@@ -23,12 +23,12 @@ import argparse
 
 
 def test_exclusions():
-    """Verificar que las exclusiones por defecto están activas."""
+    """Verify that default exclusions are active."""
     print("\n" + "="*80)
-    print("TEST 1: Verificando exclusiones por defecto")
+    print("TEST 1: Verifying default exclusions")
     print("="*80)
 
-    # Simular args sin exclusiones explícitas
+    # Simulate args without explicit exclusions
     args = argparse.Namespace(
         paths=["/mnt/Documents"],
         exts=None,
@@ -43,7 +43,7 @@ def test_exclusions():
         scan_progress=0
     )
 
-    # Simular config sin exclusiones
+    # Simulate config without exclusions
     class MockConfig:
         DOCS_PATHS = ["/mnt/Documents"]
         DOCS_FILE_EXTS = [".pdf", ".txt"]
@@ -55,33 +55,33 @@ def test_exclusions():
 
     options = build_ingestion_options_from_args(args, MockConfig())
 
-    print(f"\n✓ Exclusiones activas: {len(options.excluded_directory_names)} directorios")
-    print(f"  Muestra: {sorted(list(options.excluded_directory_names))[:10]}")
+    print(f"\nActive exclusions: {len(options.excluded_directory_names)} directories")
+    print(f"  Sample: {sorted(list(options.excluded_directory_names))[:10]}")
 
-    # Verificar que contiene los defaults críticos
+    # Verify that critical defaults are present
     critical_excludes = {"node_modules", ".git", "__pycache__", "venv", ".venv"}
     missing = critical_excludes - options.excluded_directory_names
 
     if missing:
-        print(f"\n❌ FALLO: Faltan exclusiones críticas: {missing}")
+        print(f"\nERROR: missing critical exclusions: {missing}")
         return False
     else:
-        print(f"\n✅ ÉXITO: Todas las exclusiones críticas están activas")
+        print("\nSUCCESS: all critical exclusions are active")
         return True
 
 
 def test_file_order():
-    """Verificar que el orden de archivos sea ascendente."""
+    """Verify that file ordering is ascending."""
     print("\n" + "="*80)
-    print("TEST 2: Verificando orden de archivos (ascendente)")
+    print("TEST 2: Verifying file order (ascending)")
     print("="*80)
 
-    # Crear archivos de prueba simulados
+    # Create simulated test files
     import tempfile
     import os
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Crear archivos de diferentes tamaños
+        # Create files with different sizes
         files = []
         for name, size in [("big.txt", 1000), ("small.txt", 10), ("medium.txt", 100)]:
             path = os.path.join(tmpdir, name)
@@ -89,121 +89,121 @@ def test_file_order():
                 f.write("x" * size)
             files.append(path)
 
-        # Ordenar
+        # Sort
         sorted_files = sort_paths_by_size_desc(files)
 
-        # Verificar orden
+        # Verify order
         sizes = [os.path.getsize(f) for f in sorted_files]
-        print(f"\nArchivos ordenados:")
+        print(f"\nSorted files:")
         for path, size in zip(sorted_files, sizes):
             print(f"  {os.path.basename(path)}: {size} bytes")
 
-        # Verificar que sea ascendente
+        # Verify that order is ascending
         is_ascending = all(sizes[i] <= sizes[i+1] for i in range(len(sizes)-1))
 
         if is_ascending:
-            print(f"\n✅ ÉXITO: Orden ascendente correcto (pequeño→grande)")
+            print("\nSUCCESS: ascending order is correct (small to large)")
             return True
         else:
-            print(f"\n❌ FALLO: Orden NO es ascendente")
+            print("\nERROR: ascending order is not correct")
             return False
 
 
 def test_pdf_limits():
-    """Verificar que PDFLoader tenga límites configurados."""
+    """Verify that PDFLoader limits are configured."""
     print("\n" + "="*80)
-    print("TEST 3: Verificando límites de PDFLoader")
+    print("TEST 3: Verifying PDFLoader limits")
     print("="*80)
 
-    print(f"\nLímite de tamaño de PDF: {PDFLoader.MAX_PDF_SIZE_BYTES / (1024*1024):.1f} MB")
-    print(f"Timeout de carga: {PDFLoader.LOAD_TIMEOUT_SECONDS} segundos")
+    print(f"\nPDF size limit: {PDFLoader.MAX_PDF_SIZE_BYTES / (1024*1024):.1f} MB")
+    print(f"Load timeout: {PDFLoader.LOAD_TIMEOUT_SECONDS} seconds")
 
     expected_size = 500 * 1024 * 1024  # 500 MB
-    expected_timeout = 300  # 5 minutos
+    expected_timeout = 300  # 5 minutes
 
     if PDFLoader.MAX_PDF_SIZE_BYTES == expected_size:
-        print("✓ Límite de tamaño correcto")
+        print("Size limit is correct")
         size_ok = True
     else:
-        print(f"✗ Límite de tamaño incorrecto: esperado {expected_size}, actual {PDFLoader.MAX_PDF_SIZE_BYTES}")
+        print(f"Size limit is incorrect: expected {expected_size}, found {PDFLoader.MAX_PDF_SIZE_BYTES}")
         size_ok = False
 
     if PDFLoader.LOAD_TIMEOUT_SECONDS == expected_timeout:
-        print("✓ Timeout correcto")
+        print("Timeout is correct")
         timeout_ok = True
     else:
-        print(f"✗ Timeout incorrecto: esperado {expected_timeout}, actual {PDFLoader.LOAD_TIMEOUT_SECONDS}")
+        print(f"Timeout is incorrect: expected {expected_timeout}, found {PDFLoader.LOAD_TIMEOUT_SECONDS}")
         timeout_ok = False
 
     if size_ok and timeout_ok:
-        print(f"\n✅ ÉXITO: Límites de PDF configurados correctamente")
+        print("\nSUCCESS: PDF limits are configured correctly")
         return True
     else:
-        print(f"\n❌ FALLO: Límites de PDF incorrectos")
+        print("\nERROR: PDF limits are not configured correctly")
         return False
 
 
 def test_csv_limits():
-    """Verificar que CSVLoader tenga límites configurados."""
+    """Verify that CSVLoader limits are configured."""
     print("\n" + "="*80)
-    print("TEST 4: Verificando límites de CSVLoader")
+    print("TEST 4: Verifying CSVLoader limits")
     print("="*80)
 
-    print(f"\nLímite de filas: {CSVLoader.MAX_ROWS:,}")
-    print(f"Límite de tamaño de archivo: {CSVLoader.MAX_FILE_SIZE_BYTES / (1024*1024):.1f} MB")
+    print(f"\nRow limit: {CSVLoader.MAX_ROWS:,}")
+    print(f"File size limit: {CSVLoader.MAX_FILE_SIZE_BYTES / (1024*1024):.1f} MB")
 
     expected_rows = 50000
     expected_size = 150 * 1024 * 1024  # 150 MB
 
     if CSVLoader.MAX_ROWS == expected_rows:
-        print("✓ Límite de filas correcto")
+        print("Row limit is correct")
         rows_ok = True
     else:
-        print(f"✗ Límite de filas incorrecto: esperado {expected_rows}, actual {CSVLoader.MAX_ROWS}")
+        print(f"Row limit is incorrect: expected {expected_rows}, found {CSVLoader.MAX_ROWS}")
         rows_ok = False
 
     if CSVLoader.MAX_FILE_SIZE_BYTES == expected_size:
-        print("✓ Límite de tamaño correcto")
+        print("File size limit is correct")
         size_ok = True
     else:
-        print(f"✗ Límite de tamaño incorrecto: esperado {expected_size}, actual {CSVLoader.MAX_FILE_SIZE_BYTES}")
+        print(f"File size limit is incorrect: expected {expected_size}, found {CSVLoader.MAX_FILE_SIZE_BYTES}")
         size_ok = False
 
     if rows_ok and size_ok:
-        print(f"\n✅ ÉXITO: Límites de CSV configurados correctamente")
+        print("\nSUCCESS: CSV limits are configured correctly")
         return True
     else:
-        print(f"\n❌ FALLO: Límites de CSV incorrectos")
+        print("\nERROR: CSV limits are not configured correctly")
         return False
 
 
 def main():
-    """Ejecutar todos los tests."""
+    """Run all tests."""
     print("\n" + "="*80)
-    print("VERIFICACIÓN DE CORRECCIONES DE INGESTA")
+    print("VERIFICATION OF INGESTION FIXES")
     print("="*80)
 
     results = []
-    results.append(("Exclusiones por defecto", test_exclusions()))
-    results.append(("Orden de archivos", test_file_order()))
-    results.append(("Límites de PDF", test_pdf_limits()))
-    results.append(("Límites de CSV", test_csv_limits()))
+    results.append(("Default exclusions", test_exclusions()))
+    results.append(("File order", test_file_order()))
+    results.append(("PDF limits", test_pdf_limits()))
+    results.append(("CSV limits", test_csv_limits()))
 
-    # Resumen
+    # Summary
     print("\n" + "="*80)
-    print("RESUMEN DE RESULTADOS")
+    print("SUMMARY OF RESULTS")
     print("="*80)
 
     for name, passed in results:
-        status = "✅ PASÓ" if passed else "❌ FALLÓ"
+        status = "PASS" if passed else "FAIL"
         print(f"{status}: {name}")
 
     all_passed = all(passed for _, passed in results)
     print("\n" + "="*80)
     if all_passed:
-        print("✅ TODOS LOS TESTS PASARON - Sistema listo para ingesta")
+        print("ALL TESTS PASSED - system is ready for ingestion")
     else:
-        print("❌ ALGUNOS TESTS FALLARON - Revisar configuración")
+        print("SOME TESTS FAILED - review configuration")
     print("="*80 + "\n")
 
     return 0 if all_passed else 1
