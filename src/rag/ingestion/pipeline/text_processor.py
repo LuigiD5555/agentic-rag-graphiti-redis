@@ -21,16 +21,13 @@ from .loader_helpers import call_loader, resolve_loader_source
 from .splitters import split_documents
 from .stage_reporting import IngestionFileContext, IngestionStageReporter
 from .state_helpers import finalize_file_ingestion
-from src.storage.vector.utils import (
-    gather_file_metadata,
-    generate_hash,
-    generate_hash_presanitized,
-    prepare_embedding_segments,
-    prune_metadata,
+from src.utils.file_operations import gather_file_metadata
+from src.utils.hashing import generate_hash_presanitized
+from src.utils.splitting import prepare_embedding_segments
+from src.utils.metadata import prune_metadata, vector_store_contains
+from src.utils.text import (
     sanitize_text,
-    truncate_to_token_limit,
     truncate_to_token_limit_presanitized,
-    vector_store_contains,
 )
 
 
@@ -322,10 +319,30 @@ def process_text_document(pipeline: Any, loader: object) -> None:
             if should_flush and batch_records:
                 # Generate embeddings (batched if supported, sequential otherwise)
                 texts = [r["text"] for r in batch_records]
+                sources = [r["source"] for r in batch_records]
+                chunk_indices = [r["chunk_index"] for r in batch_records]
+
                 if supports_batch:
-                    embeddings = pipeline.embedding_service.generate_batch(texts)
+                    # Try to pass metadata to batch generation if supported
+                    try:
+                        embeddings = pipeline.embedding_service.generate_batch(
+                            texts, sources=sources, chunk_indices=chunk_indices
+                        )
+                    except TypeError:
+                        # Fallback if service doesn't support metadata parameters
+                        embeddings = pipeline.embedding_service.generate_batch(texts)
                 else:
-                    embeddings = [pipeline.embedding_service.generate(t) for t in texts]
+                    # Sequential generation with metadata
+                    embeddings = []
+                    for r in batch_records:
+                        try:
+                            emb = pipeline.embedding_service.generate(
+                                r["text"], source=r["source"], chunk_index=r["chunk_index"]
+                            )
+                        except TypeError:
+                            # Fallback if service doesn't support metadata parameters
+                            emb = pipeline.embedding_service.generate(r["text"])
+                        embeddings.append(emb)
 
                 # Upsert each record with its embedding
                 for record, embedding in zip(batch_records, embeddings):

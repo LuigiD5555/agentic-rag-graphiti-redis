@@ -2,7 +2,7 @@ import logging
 from dataclasses import dataclass
 from importlib import import_module
 from importlib.metadata import entry_points
-from typing import Iterable, Mapping, Sequence
+from typing import Iterable
 
 from src.rag.apps import AppConfig
 from src.rag.providers import ensure_builtin_providers_loaded
@@ -44,7 +44,10 @@ class AppRegistry:
 
         # 2) Optional autoload from Python entry points (opt-in).
         if bool(getattr(config, "AUTOLOAD_APP_ENTRYPOINTS", False)):
-            for spec in _iter_entrypoint_app_specs(group=getattr(config, "APP_ENTRYPOINT_GROUP", DEFAULT_APP_ENTRYPOINT_GROUP)):
+            for spec in _iter_entrypoint_app_specs(group=getattr(
+                config, "APP_ENTRYPOINT_GROUP", DEFAULT_APP_ENTRYPOINT_GROUP
+                )
+            ):
                 app_config = _load_app_config(spec)
                 self._add_app(app_config)
 
@@ -113,7 +116,11 @@ def _load_app_config(dotted_path: str) -> AppConfig:
 def _iter_entrypoint_app_specs(group: str) -> Iterable[str]:
     try:
         eps = entry_points()
-        candidates = eps.select(group=group) if hasattr(eps, "select") else eps.get(group, [])
+        if hasattr(eps, "select"):
+            candidates = list(eps.select(group=group))
+        else:
+            selected = eps.get(group)  # type: ignore[attr-defined]
+            candidates = list(selected or ())
     except Exception:
         log.exception("Failed reading entry points group '%s'", group)
         return ()

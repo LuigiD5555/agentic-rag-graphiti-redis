@@ -15,14 +15,10 @@ from src import logger
 from .loader_helpers import call_loader
 from .stage_reporting import IngestionFileContext, IngestionStageReporter
 from .state_helpers import finalize_file_ingestion
-from src.storage.vector.utils import (
-    gather_file_metadata,
-    generate_hash,
-    prune_metadata,
-    sanitize_text,
-    truncate_to_token_limit,
-    vector_store_contains,
-)
+from src.utils.file_operations import gather_file_metadata
+from src.utils.hashing import generate_hash
+from src.utils.metadata import prune_metadata, vector_store_contains
+from src.utils.text import sanitize_text, truncate_to_token_limit
 
 
 def _resolve_file_context(pipeline: Any) -> IngestionFileContext:

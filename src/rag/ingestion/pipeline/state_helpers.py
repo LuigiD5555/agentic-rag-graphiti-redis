@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable
 
 from src import logger
 

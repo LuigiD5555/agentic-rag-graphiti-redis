@@ -9,12 +9,12 @@ It also updates the ingestion catalog and registers per-file progress estimates.
 
 import os
 import time
-from typing import Any
 from pathlib import Path
+from typing import Any
 
 from src import logger
 from src.rag.ingestion.loaders import CODE_LOADER_SPECS, TEXT_LOADER_SPECS, PlainTextLoader
-from src.storage.vector.utils import gather_file_metadata
+from src.utils.file_operations import gather_file_metadata
 
 from .code_processor import process_code_document
 from .loader_helpers import should_skip_path
@@ -27,15 +27,14 @@ def _format_timedelta(td):
     seconds = int(td.total_seconds())
     if seconds < 60:
         return f"{seconds}s"
-    elif seconds < 3600:
+    if seconds < 3600:
         minutes = seconds // 60
         return f"{minutes}m"
-    elif seconds < 86400:
+    if seconds < 86400:
         hours = seconds // 3600
         return f"{hours}h"
-    else:
-        days = seconds // 86400
-        return f"{days}d"
+    days = seconds // 86400
+    return f"{days}d"
 
 
 def _update_file_cache(
@@ -43,22 +42,32 @@ def _update_file_cache(
     full_path: str,
     chunk_count: int,
     embedding_count: int,
-    status: str = 'processed',
-    error_message: str | None = None
+    status: str = "processed",
+    error_message: str | None = None,
 ) -> None:
     """Update Redis cache with processed file metadata."""
-    cache_manager = getattr(pipeline, 'cache_manager', None)
-    if not cache_manager or not cache_manager.enabled:
+    cache_manager = getattr(pipeline, "cache_manager", None)
+    if not cache_manager:
+        logger.warning("Cache manager not available for pipeline, skipping cache update for %s", full_path)
+        return
+
+    if not cache_manager.enabled:
+        logger.debug("Cache manager disabled, skipping cache update for %s", full_path)
         return
 
     try:
         # Compute file hash
+        logger.debug("Computing file hash for %s", full_path)
         content_hash = cache_manager.compute_file_hash(full_path)
         if not content_hash:
+            logger.error("Failed to compute file hash for %s, cannot cache", full_path)
             return
+
+        logger.debug("File hash computed: %s for %s", content_hash[:16], full_path)
 
         # Get file stats
         stat = Path(full_path).stat()
+        logger.debug("File stats: size=%d, mtime=%f for %s", stat.st_size, stat.st_mtime, full_path)
 
         # Import FileMetadata
         from src.storage.cache.ingestion import FileMetadata
@@ -73,15 +82,26 @@ def _update_file_cache(
             chunk_count=chunk_count,
             embedding_count=embedding_count,
             status=status,
-            error_message=error_message
+            error_message=error_message,
         )
 
-        # Save to cache
-        cache_manager.set_file_metadata(metadata)
-        logger.debug("Updated cache for %s: %d chunks, %d embeddings", full_path, chunk_count, embedding_count)
+        logger.debug("Created metadata object for %s", full_path)
 
-    except Exception as e:
-        logger.debug("Failed to update cache for %s: %s", full_path, e)
+        # Save to cache
+        success = cache_manager.set_file_metadata(metadata)
+        if success:
+            logger.info(
+                "Cache updated for %s: %d chunks, %d embeddings (hash=%s)",
+                os.path.basename(full_path),
+                chunk_count,
+                embedding_count,
+                content_hash[:16],
+            )
+        else:
+            logger.error("Failed to save cache metadata for %s", full_path)
+
+    except Exception as exc:
+        logger.error("Failed to update cache for %s: %s", full_path, exc, exc_info=True)
 
 
 def process_candidate_file(
@@ -112,24 +132,24 @@ def process_candidate_file(
     register_observed_file(pipeline, full_path)
 
     # Check Redis cache if available
-    cache_manager = getattr(pipeline, 'cache_manager', None)
+    cache_manager = getattr(pipeline, "cache_manager", None)
     if cache_manager and cache_manager.enabled:
         # Check if file is unchanged using content hash
         if cache_manager.is_file_unchanged(full_path):
             cached_meta = cache_manager.get_file_metadata(full_path)
-            if cached_meta and cached_meta.status == 'processed':
+            if cached_meta and cached_meta.status == "processed":
                 # Calculate time saved
                 import datetime
-                last_proc = datetime.datetime.fromtimestamp(cached_meta.last_processed)
-                time_ago = datetime.datetime.now() - last_proc
+                last_processed = datetime.datetime.fromtimestamp(cached_meta.last_processed)
+                time_ago = datetime.datetime.now() - last_processed
 
                 logger.info(
-                    "✓ CACHE HIT: Skipping %s (processed %s ago, %d chunks, %d embeddings) %s",
+                    "CACHE HIT: Skipping %s (processed %s ago, %d chunks, %d embeddings) [%s]",
                     os.path.basename(full_path),
                     _format_timedelta(time_ago),
                     cached_meta.chunk_count,
                     cached_meta.embedding_count,
-                    "🚀" if not cache_manager.paranoid_mode else "🔒"
+                    "Fast mode" if not cache_manager.paranoid_mode else "Security mode",
                 )
                 pipeline._current_file_info = None
                 return
@@ -141,11 +161,13 @@ def process_candidate_file(
             if duplicate_meta and duplicate_meta.file_path != full_path:
                 # Found a duplicate! Reuse its metadata without processing
                 import datetime
-                last_proc = datetime.datetime.fromtimestamp(duplicate_meta.last_processed)
-                time_ago = datetime.datetime.now() - last_proc
+                from src.storage.cache.ingestion import FileMetadata
+
+                last_processed = datetime.datetime.fromtimestamp(duplicate_meta.last_processed)
+                time_ago = datetime.datetime.now() - last_processed
 
                 logger.info(
-                    "⚡ DUPLICATE: Skipping %s (identical to %s, processed %s ago, %d chunks, %d embeddings)",
+                    "DUPLICATE: Skipping %s (identical to %s, processed %s ago, %d chunks, %d embeddings)",
                     os.path.basename(full_path),
                     os.path.basename(duplicate_meta.file_path),
                     _format_timedelta(time_ago),
@@ -155,19 +177,19 @@ def process_candidate_file(
 
                 # Cache this file with the same processing results
                 stat = Path(full_path).stat()
-                from src.storage.cache.ingestion import FileMetadata
-                new_metadata = FileMetadata(
-                    file_path=full_path,
-                    content_hash=content_hash,
-                    mtime=stat.st_mtime,
-                    size=stat.st_size,
-                    last_processed=time.time(),
-                    chunk_count=duplicate_meta.chunk_count,
-                    embedding_count=duplicate_meta.embedding_count,
-                    status='processed',
-                    error_message=None
+                cache_manager.set_file_metadata(
+                    FileMetadata(
+                        file_path=full_path,
+                        content_hash=content_hash,
+                        mtime=stat.st_mtime,
+                        size=stat.st_size,
+                        last_processed=time.time(),
+                        chunk_count=duplicate_meta.chunk_count,
+                        embedding_count=duplicate_meta.embedding_count,
+                        status="processed",
+                        error_message=None,
+                    )
                 )
-                cache_manager.set_file_metadata(new_metadata)
                 pipeline._current_file_info = None
                 return
 
@@ -197,7 +219,14 @@ def process_candidate_file(
 
     for extensions, loader_cls in TEXT_LOADER_SPECS:
         if full_path.endswith(extensions):
-            process_text_document(pipeline, loader_cls(full_path))
+            # Pass Redis client to PDFLoader for content caching
+            if loader_cls.__name__ == "PDFLoader":
+                cache_manager = getattr(pipeline, "cache_manager", None)
+                redis_client = getattr(cache_manager, "redis_client", None) if cache_manager else None
+                loader = loader_cls(full_path, redis_client=redis_client)
+            else:
+                loader = loader_cls(full_path)
+            process_text_document(pipeline, loader)
             return
 
     for extensions, loader_cls in CODE_LOADER_SPECS:

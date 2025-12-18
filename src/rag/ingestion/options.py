@@ -49,7 +49,19 @@ class IngestionOptions:
     root_paths: Tuple[str, ...]
     enabled_paths: Tuple[str, ...] = field(default_factory=tuple)
     allowed_extensions: Set[str] = field(default_factory=set)
-    excluded_directory_names: Set[str] = field(default_factory=set)
+    excluded_directory_names: Set[str] = field(
+        default_factory=lambda: {
+            ".git",
+            ".hg",
+            ".svn",
+            "__pycache__",
+            "node_modules",
+            ".venv",
+            "venv",
+            ".idea",
+            ".vscode",
+        }
+    )
     excluded_path_globs: Set[str] = field(default_factory=set)
     follow_symbolic_links: bool = False
     dry_run: bool = False

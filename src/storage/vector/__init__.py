@@ -49,7 +49,7 @@ def _config_with_overrides(
             raise ValueError(f"Unsupported vector store setting '{raw_key}'")
         update[key_map[key_upper]] = raw_value
 
-    return config.copy(update=update) if update else config
+    return config.model_copy(update=update) if update else config
 
 
 def _normalize_vector_store_cfg(store_cfg: Mapping[str, Any], config: "Config") -> Mapping[str, Any]:
@@ -159,6 +159,9 @@ def get_vector_store(config: "Config", alias: str = "default") -> VectorInterfac
         # Determine GRPC port
         grpc_port = cfg.WEAVIATE_GRPC_PORT or (50051 if not use_https else 443)
 
+        # Skip init checks for air-gapped environments (prevents PyPI version checks)
+        skip_init_checks = bool(getattr(cfg, "WEAVIATE_SKIP_INIT_CHECKS", False))
+
         if cfg.WEAVIATE_API_KEY:
             client = weaviate.connect_to_custom(
                 http_host=host,
@@ -169,6 +172,7 @@ def get_vector_store(config: "Config", alias: str = "default") -> VectorInterfac
                 grpc_secure=use_https,
                 auth_credentials=weaviate.auth.AuthApiKey(api_key=cfg.WEAVIATE_API_KEY),
                 additional_config=additional,
+                skip_init_checks=skip_init_checks,
             )
         else:
             client = weaviate.connect_to_custom(
@@ -179,6 +183,7 @@ def get_vector_store(config: "Config", alias: str = "default") -> VectorInterfac
                 grpc_port=grpc_port,
                 grpc_secure=use_https,
                 additional_config=additional,
+                skip_init_checks=skip_init_checks,
             )
 
         # Define class properties

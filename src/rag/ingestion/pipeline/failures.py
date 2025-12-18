@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from src import logger
-from src.storage.vector.utils import gather_file_metadata
+from src.utils.file_operations import gather_file_metadata
 
 
 def record_failure(

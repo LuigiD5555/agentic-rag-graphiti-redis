@@ -17,7 +17,7 @@ from src.rag.audit import ProgressBar
 from .file_processor import process_candidate_file
 from .splitters import SplitterStrategy, build_text_splitter
 from .state_helpers import finalize_ingestion_run, record_directory_listing
-from src.storage.vector.utils import effective_limit
+from src.utils.text import effective_limit
 
 
 CATALOG_PATH = os.environ.get(

@@ -48,7 +48,12 @@ def gather_file_metadata(path: Optional[str]) -> Dict[str, Any]:
 
 
 def sort_paths_by_size_desc(paths: Iterable[str]) -> List[str]:
-    """Order paths from largest to smallest file size.
+    """Order paths from smallest to largest file size (ASCENDING).
+
+    This ordering ensures that small files are processed first, which:
+    - Provides faster initial progress feedback to users
+    - Reduces CPU spikes from processing multiple large files in parallel
+    - Improves overall stability when dealing with mixed file sizes
 
     Ties on size are broken alphabetically (case-insensitive) to ensure
     deterministic processing. Missing/inaccessible files are treated as size 0.
@@ -57,7 +62,7 @@ def sort_paths_by_size_desc(paths: Iterable[str]) -> List[str]:
         paths: Iterable of file paths to sort.
 
     Returns:
-        List of paths sorted by size (descending) then alphabetically.
+        List of paths sorted by size (ascending) then alphabetically.
     """
     sizes: dict[str, int] = {}
     for path in paths:
@@ -68,7 +73,7 @@ def sort_paths_by_size_desc(paths: Iterable[str]) -> List[str]:
 
     return sorted(
         paths,
-        key=lambda p: (-sizes[p], p.lower()),
+        key=lambda p: (sizes[p], p.lower()),  # Changed from (-sizes[p], ...) to (sizes[p], ...)
     )
 
 

@@ -2,6 +2,7 @@
 import argparse
 
 from src.rag.ingestion.options import IngestionOptions
+from src.settings import _DEFAULT_EXCLUDED_FILES
 
 
 def build_ingestion_options_from_args(args: argparse.Namespace, config: object) -> IngestionOptions:
@@ -27,11 +28,17 @@ def build_ingestion_options_from_args(args: argparse.Namespace, config: object) 
         allowed_extensions = {_normalize_ext(e) for e in cfg_exts} if cfg_exts else set()
         allowed_extensions.discard("")
 
+    # Always start with built-in defaults, then add user-specified exclusions
+    excluded_directory_names = _DEFAULT_EXCLUDED_FILES.copy()
+
     if getattr(args, "exclude_dirs", None) is not None:
-        excluded_directory_names = set(args.exclude_dirs)
+        # CLI args provided - merge with defaults
+        excluded_directory_names.update(args.exclude_dirs)
     else:
+        # Check config for additional exclusions
         cfg_excludes = getattr(config, "DOCS_EXCLUDE_DIRS", ()) or ()
-        excluded_directory_names = set(cfg_excludes)
+        if cfg_excludes:
+            excluded_directory_names.update(cfg_excludes)
 
     if getattr(args, "exclude_patterns", None) is not None:
         excluded_path_globs = set(args.exclude_patterns)
