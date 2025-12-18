@@ -1,7 +1,8 @@
 # -----------------------------
 # Python
 # -----------------------------
-__pycache__/
+**/__pycache__/**
+**/*.pyc
 *.py[cod]
 *.pyo
 *.pyd
@@ -17,12 +18,13 @@ data/
 # Virtual environments
 # -----------------------------
 env/
-venv/
+**/.venv/**
+**/venv/**
 ENV/
-.venv/
 env.bak/
 venv.bak/
 .mypy_cache/
+
 # -----------------------------
 # Environment files (do not commit secrets)
 # -----------------------------
@@ -33,14 +35,14 @@ venv.bak/
 # -----------------------------
 # OS generated files
 # -----------------------------
-.DS_Store
-Thumbs.db
+**/.DS_Store
+**/Thumbs.db
 
 # -----------------------------
 # Editors & IDEs
 # -----------------------------
-.vscode/
-.idea/
+**/.idea/**
+**/.vscode/**
 *.sublime-workspace
 *.sublime-project
 .cspell/
@@ -103,3 +105,17 @@ build/
 # Other
 # -----------------------------
 ~$*
+
+# -----------------------------
+# Node / Frontend
+# -----------------------------
+**/node_modules/**
+**/dist/**
+**/build/**
+
+# -----------------------------
+# Version control
+# -----------------------------
+**/.git/**
+**/.hg/**
+**/.svn/**
