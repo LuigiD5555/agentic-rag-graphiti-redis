@@ -125,6 +125,9 @@ class WeaviateRepository:
                 coll.data.replace(uuid=uuid_id, properties=payload, vector=vector)
                 return
             except UnexpectedStatusCodeError as replace_exc:
+                dim_mismatch = self._detect_vector_dimension_mismatch(replace_exc)
+                if dim_mismatch is not None:
+                    raise RuntimeError(self._format_vector_dimension_mismatch_error(*dim_mismatch)) from replace_exc
                 if self._is_not_found_error(replace_exc):
                     # Race condition: object was deleted between check and replace
                     logger.debug("Object was deleted during replace for uuid=%s, inserting instead", uuid_id)
@@ -141,6 +144,9 @@ class WeaviateRepository:
                 coll.data.insert(uuid=uuid_id, properties=payload, vector=vector)
                 return
             except UnexpectedStatusCodeError as insert_exc:
+                dim_mismatch = self._detect_vector_dimension_mismatch(insert_exc)
+                if dim_mismatch is not None:
+                    raise RuntimeError(self._format_vector_dimension_mismatch_error(*dim_mismatch)) from insert_exc
                 if self._is_duplicate_insert_error(insert_exc):
                     # Race condition: object was created between check and insert
                     logger.debug("Object was created during insert for uuid=%s, replacing instead", uuid_id)
@@ -176,6 +182,57 @@ class WeaviateRepository:
 
         low = text.lower()
         return ("no object with id" in low) or ("not found" in low)
+
+    @staticmethod
+    def _extract_error_text(exc: Exception) -> str:
+        for attr in ("message", "body", "response", "response_text", "error"):
+            value = getattr(exc, attr, None)
+            if value:
+                return str(value)
+        return str(exc)
+
+    @classmethod
+    def _detect_vector_dimension_mismatch(
+        cls, exc: UnexpectedStatusCodeError
+    ) -> tuple[int, int] | None:
+        """Detect Weaviate vector dimension mismatch errors.
+
+        Example message:
+            "new node has a vector with length 768. Existing nodes have vectors with length 384"
+        Returns:
+            (new_dim, existing_dim) or None
+        """
+        text = cls._extract_error_text(exc)
+        low = text.lower()
+        if "vector dimensions do not match" not in low:
+            return None
+
+        import re
+
+        match = re.search(
+            r"new node has a vector with length (\d+)\.\s*existing nodes have vectors with length (\d+)",
+            low,
+        )
+        if not match:
+            return None
+        return (int(match.group(1)), int(match.group(2)))
+
+    @staticmethod
+    def _format_vector_dimension_mismatch_error(new_dim: int, existing_dim: int) -> str:
+        return (
+            "Weaviate rejected the upsert due to a vector dimension mismatch.\n"
+            f"- New vector length: {new_dim}\n"
+            f"- Existing index length: {existing_dim}\n\n"
+            "Fix options:\n"
+            "1) Use the same embedding model/dimension as the existing index "
+            f"(set EMBEDDING_DIM={existing_dim} and ensure your embedding provider returns that length).\n"
+            "2) Reset/recreate the Weaviate collection/volume (destructive):\n"
+            "   - podman-compose down\n"
+            "   - podman volume ls | rg weaviate_data\n"
+            "   - podman volume rm <your_project>_weaviate_data\n"
+            "   - podman-compose up -d\n"
+            "3) Use a different WEAVIATE_CLASS (new collection name) for the new embedding dimension.\n"
+        )
 
     @staticmethod
     def _is_duplicate_insert_error(exc: UnexpectedStatusCodeError) -> bool:

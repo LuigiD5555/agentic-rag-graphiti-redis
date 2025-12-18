@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
-
 from typing import Callable, List, Optional
 
 from weaviate.classes.config import Configure, Property
