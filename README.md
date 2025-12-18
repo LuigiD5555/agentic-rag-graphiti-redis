@@ -175,10 +175,17 @@ an external gateway/provider would integrate.
 ### Local GPU Embeddings
 
 Set `EMBEDDING_BACKEND=local_gpu` to run sentence-transformers embeddings locally while LM Studio continues to handle chat completions.
-Install optional deps with `pip install -r requirements-local-gpu.txt`.
-For containers, build with `--build-arg INSTALL_LOCAL_GPU_DEPS=1`.
+Install deps with `pip install -r requirements.txt`.
+If `EMBEDDING_BACKEND=local_gpu` is set but `torch`/`sentence-transformers` are missing, the app falls back to the configured provider embeddings.
 Tune `LOCAL_GPU_DEVICE` (`cuda`, `cuda:0`, `auto`, `cpu`), `LOCAL_GPU_EMBED_MODEL` (sentence-transformers model name), and `LOCAL_GPU_BATCH_SIZE` (default 32) via `.env`.
 The helper lives in `src/utils/local_gpu`: it wraps the CUDA-aware encoder with an optional Redis cache, so embeddings stay on the GPU while LM Studio is only used for chat. Ensure `torch` and `sentence-transformers` are installed and a CUDA driver is available.
+
+### Weaviate embedding dimension changes
+
+Weaviate collections require a consistent vector length. If you change embedding models (e.g., 384 → 768 dimensions), you must either:
+- Keep using the original dimension/model, or
+- Recreate the Weaviate collection/volume, or
+- Use a new `WEAVIATE_CLASS` for the new dimension.
 
 ---
 

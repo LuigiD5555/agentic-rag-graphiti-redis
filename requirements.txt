@@ -22,7 +22,8 @@ pypdf
 python-pptx
 
 # Local GPU embeddings
-# NOTE: moved to requirements-local-gpu.txt so LM Studio-only installs stay lightweight.
+torch>=2.1.1
+sentence-transformers>=2.3.0
 
 # Utils
 python-dotenv
