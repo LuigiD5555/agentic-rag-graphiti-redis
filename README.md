@@ -59,6 +59,34 @@ Make sure the Weaviate service:
 
 Or with Docker Compose:
 
+## Logs (Podman / journald)
+
+This stack configures `journald` as the `log driver` (see `podman-compose.yml`), so you can query complete logs with `journalctl`.
+
+- Follow a container log: `journalctl CONTAINER_NAME=rag-graphiti-agentic_weaviate_1 -f`
+- In rootless setups it may be in the user journal: `journalctl --user CONTAINER_NAME=rag-graphiti-agentic_weaviate_1 -f`
+- Export to a file (example): `journalctl CONTAINER_NAME=rag-graphiti-agentic_weaviate_1 --since today > weaviate.log`
+- Export all stack logs to a git-ignored folder: `./scripts/journal_dump.sh`
+  - Output: `logs/<YYYY-MM-DD>/<YYYYMMDD-HHMMSS>/`
+  - Configurable time window: `SINCE=\"2 hours ago\" UNTIL=\"now\" ./scripts/journal_dump.sh`
+
+Note: the `log driver` is fixed when the container is created; if containers already exist, recreate them: `podman-compose down` then `podman-compose up -d`.
+
+### Auto-export on container stop (systemd)
+
+To automatically export to `logs/` when a project container stops (error or manual), install the systemd watcher (user):
+
+- `cp systemd/rag-graphiti-logwatcher.service ~/.config/systemd/user/`
+- Edit `~/.config/systemd/user/rag-graphiti-logwatcher.service` and set `REPO_DIR=/absolute/path/to/repo`
+- `systemctl --user daemon-reload`
+- `systemctl --user enable --now rag-graphiti-logwatcher.service`
+
+To disable:
+
+- `systemctl --user disable --now rag-graphiti-logwatcher.service`
+
+Or, if you prefer to keep it installed but not exporting, toggle `ENABLE_LOG_EXPORT=1` / `#Environment=ENABLE_LOG_EXPORT=0` in the unit file.
+
 ## Ingestion: preserving duplicates by path
 
 If you want certain files to be ingested even when their content is identical (because the path/package tree matters), add rules to `.includethisduplicates`.

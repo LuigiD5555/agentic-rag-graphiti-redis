@@ -53,6 +53,7 @@ docs
 # -----------------------------
 # Logs & temp files
 # -----------------------------
+/logs/
 *.log
 *.tmp
 *.temp
@@ -100,6 +101,7 @@ build/
 # Uncomment these if you want to keep ingestion configs private:
 # .enabledpaths
 # .ingestignore
+# .includethisduplicates
 
 # -----------------------------
 # Other

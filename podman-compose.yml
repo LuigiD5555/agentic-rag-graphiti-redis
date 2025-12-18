@@ -7,6 +7,8 @@ services:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_weaviate_1"
     image: "docker.io/semitechnologies/weaviate:${WEAVIATE_IMAGE_TAG:?WEAVIATE_IMAGE_TAG is required}"
     restart: unless-stopped
+    logging:
+      driver: journald
     # Bind ONLY to localhost so it's not exposed to LAN
     ports:
       - "127.0.0.1:${HOST_WEAVIATE_HTTP_PORT:-8080}:8080"
@@ -41,6 +43,8 @@ services:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_neo4j_1"
     image: "docker.io/library/neo4j:${NEO4J_IMAGE_TAG:?NEO4J_IMAGE_TAG is required}"
     restart: unless-stopped
+    logging:
+      driver: journald
     # Bind ONLY to localhost so it's not exposed to LAN
     ports:
       - "127.0.0.1:${HOST_NEO4J_HTTP_PORT:-7474}:7474"
@@ -71,6 +75,8 @@ services:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_redis_1"
     image: "docker.io/library/redis:${REDIS_IMAGE_TAG:?REDIS_IMAGE_TAG is required}"
     restart: unless-stopped
+    logging:
+      driver: journald
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
       - "127.0.0.1:${HOST_REDIS_TCP_PORT:-6379}:6379"
@@ -90,14 +96,14 @@ services:
           cpus: "${REDIS_CPUS:-1.0}"
           memory: "${REDIS_MEMORY:-512m}"
 
-  app:
-    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_app_1"
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        INSTALL_LOCAL_GPU_DEPS: "${INSTALL_LOCAL_GPU_DEPS:-0}"
-    restart: unless-stopped
+	  app:
+	    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_app_1"
+	    build:
+	      context: .
+	      dockerfile: Dockerfile
+	    restart: unless-stopped
+	    logging:
+	      driver: journald
     depends_on:
       - weaviate
       - neo4j
