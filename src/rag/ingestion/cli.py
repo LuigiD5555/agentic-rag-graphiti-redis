@@ -9,13 +9,14 @@ import argparse
 from .helpers import build_ingestion_options_from_args
 from src.rag.ingestion.orchestrator import IngestionOrchestrator
 from src.rag.audit import configure_logging, get_logger, resolve_level
-from src.rag.conf import Config
+from src.rag.conf import Config, sync_settings_json
 
 
 class IngestionCLI:
     """CLI facade that parses arguments, configures logging, and executes the orchestrator."""
 
     def __init__(self) -> None:
+        sync_settings_json()
         self._config = Config()
         self._parser = self._build_parser()
         self._log = get_logger(__name__)
