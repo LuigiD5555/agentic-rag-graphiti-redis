@@ -30,6 +30,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 20
+      start_period: 30s
     stop_grace_period: 30s
     ulimits:
       nofile: { soft: 65536, hard: 65536 }
@@ -62,6 +63,12 @@ services:
     volumes:
       - ${HOST_NEO4J_DATA:-neo4j_data}:/data:Z
       - ${HOST_NEO4J_LOGS:-neo4j_logs}:/logs:Z
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7474"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
     stop_grace_period: 45s
     ulimits:
       nofile: { soft: 65536, hard: 65536 }
@@ -87,6 +94,12 @@ services:
       default:
         aliases:
           - redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     stop_grace_period: 20s
     ulimits:
       nofile: { soft: 65536, hard: 65536 }
@@ -96,14 +109,14 @@ services:
           cpus: "${REDIS_CPUS:-1.0}"
           memory: "${REDIS_MEMORY:-512m}"
 
-	  app:
-	    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_app_1"
-	    build:
-	      context: .
-	      dockerfile: Dockerfile
-	    restart: unless-stopped
-	    logging:
-	      driver: journald
+  app:
+    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_app_1"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    logging:
+      driver: journald
     depends_on:
       - weaviate
       - neo4j
@@ -152,7 +165,6 @@ services:
       - ${HOST_DOCS_DIR:?HOST_DOCS_DIR is required}:/mnt/Documents/Documents:Z
       - ${HOST_LIBROS_DIR:-/mnt/resources/Libros}:/mnt/resources/Libros:Z
       - ${HOST_DATA_DIR:-./data}:/data:Z
-      - ./.enabledpaths:/app/.enabledpaths:ro,Z
       - ./.ingestignore:/app/.ingestignore:ro,Z
 
     # Do NOT publish container ports; app binds to 127.0.0.1 via host network

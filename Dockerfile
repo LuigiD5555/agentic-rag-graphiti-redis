@@ -8,14 +8,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
 # System packages kept minimal; add only what you need
+# LibreOffice is required for processing .doc/.docx files via unstructured
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl \
+ && apt-get install -y --no-install-recommends \
+    curl \
+    libreoffice-writer \
+    libreoffice-calc \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Leverage Docker layer caching: install deps first
 COPY requirements.txt .
+
+# Install requirements (LM Studio only, no torch/sentence-transformers)
 RUN python -m pip install --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
@@ -45,11 +51,9 @@ FROM base AS runtime
 
 # Copy configuration files for ingestion
 COPY .ingestignore /app/.ingestignore
-COPY .enabledpaths /app/.enabledpaths
 
 # Set environment variables for default paths
 ENV DOCS_EXCLUDE_FILE=/app/.ingestignore
-ENV DOCS_ENABLED_PATHS_FILE=/app/.enabledpaths
 
 # Copy only the application code required at runtime
 COPY src/ src/
