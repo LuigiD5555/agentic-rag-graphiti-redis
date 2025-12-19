@@ -13,8 +13,6 @@ from typing import Iterable
 
 
 DEFAULT_EXCLUDE_FILES: tuple[str, ...] = (".ingestignore",)
-DEFAULT_ENABLED_PATHS_FILES: tuple[str, ...] = (".enabledpaths",)
-DEFAULT_INCLUDE_DUPLICATES_FILES: tuple[str, ...] = (".includethisduplicates",)
 
 
 def parse_list_env(raw_value: str | None) -> list[str]:
@@ -193,79 +191,6 @@ def is_glob_like(entry: str) -> bool:
     return any(char in entry for char in "*?[]")
 
 
-def load_enabled_paths_from_files(enabled_paths_file: str | None, *, cwd: str | None = None) -> list[str]:
-    """Load enabled paths from .enabledpaths or custom file.
-
-    Args:
-        enabled_paths_file: Optional path to a custom enabled paths file.
-        cwd: Working directory for resolving relative paths.
-
-    Returns:
-        List of enabled path patterns.
-    """
-    entries: list[str] = []
-
-    candidates: list[str] = []
-    if enabled_paths_file:
-        candidates.append(enabled_paths_file)
-    candidates.extend(DEFAULT_ENABLED_PATHS_FILES)
-
-    seen: set[Path] = set()
-    base_dir = Path(cwd or os.getcwd())
-    for candidate in candidates:
-        if not candidate:
-            continue
-        candidate_path = Path(candidate).expanduser()
-        if not candidate_path.is_absolute():
-            candidate_path = base_dir / candidate_path
-        try_path = candidate_path.resolve()
-        if try_path in seen or not try_path.is_file():
-            continue
-        seen.add(try_path)
-        entries.extend(read_exclude_file(try_path))  # Reuse same parser
-
-    return entries
-
-
-def load_include_duplicates_from_files(include_file: str | None, *, cwd: str | None = None) -> list[str]:
-    """Load duplicate-include rules from .includethisduplicates or custom file.
-
-    Entries in this file define paths that should NOT be deduplicated even when content is identical.
-    Supported formats:
-    - Plain basename: "__init__.py"
-    - Glob patterns: "**/__init__.py"
-    - Directory prefix (trailing slash): "src/my_pkg/"
-    - Regex (prefix): "re:^.*/__init__\\.py$"
-
-    Args:
-        include_file: Optional path to a custom include file.
-        cwd: Working directory for resolving relative paths.
-
-    Returns:
-        List of include patterns.
-    """
-    entries: list[str] = []
-
-    candidates: list[str] = []
-    if include_file:
-        candidates.append(include_file)
-    candidates.extend(DEFAULT_INCLUDE_DUPLICATES_FILES)
-
-    seen: set[Path] = set()
-    base_dir = Path(cwd or os.getcwd())
-    for candidate in candidates:
-        if not candidate:
-            continue
-        candidate_path = Path(candidate).expanduser()
-        if not candidate_path.is_absolute():
-            candidate_path = base_dir / candidate_path
-        try_path = candidate_path.resolve()
-        if try_path in seen or not try_path.is_file():
-            continue
-        seen.add(try_path)
-        entries.extend(read_exclude_file(try_path))
-
-    return entries
 
 
 def should_preserve_duplicates(
@@ -329,12 +254,11 @@ def should_preserve_duplicates(
 
 __all__ = [
     "DEFAULT_EXCLUDE_FILES",
-    "DEFAULT_ENABLED_PATHS_FILES",
     "classify_exclude_entries",
     "is_glob_like",
     "load_excludes_from_files",
-    "load_enabled_paths_from_files",
     "parse_list_env",
     "read_exclude_file",
+    "should_preserve_duplicates",
     "value_as_list",
 ]

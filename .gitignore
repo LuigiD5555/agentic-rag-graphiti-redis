@@ -98,10 +98,8 @@ build/
 # -----------------------------
 # Ingestion configuration (optional: user-specific)
 # -----------------------------
-# Uncomment these if you want to keep ingestion configs private:
-# .enabledpaths
+# Uncomment this if you want to keep ingestion configs private:
 # .ingestignore
-# .includethisduplicates
 
 # -----------------------------
 # Other

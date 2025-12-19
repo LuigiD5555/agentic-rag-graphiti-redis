@@ -20,7 +20,7 @@ from src.utils.file_operations import gather_file_metadata
 from src.utils.hashing import generate_hash
 from src.utils.metadata import prune_metadata, vector_store_contains
 from src.utils.text import sanitize_text, truncate_to_token_limit
-from src.utils.path_discovery import load_include_duplicates_from_files, should_preserve_duplicates
+from src.utils.path_discovery import should_preserve_duplicates
 
 
 def _resolve_file_context(pipeline: Any) -> IngestionFileContext:
@@ -66,11 +66,8 @@ def process_code_document(pipeline: Any, code_loader: object) -> None:
     summary_text = truncate_to_token_limit(summary_text, pipeline.embedding_effective_limit, pipeline.tokenizer_model_name)
     file_path = str(file_info.get("file_path") or source)
 
-    include_rules = load_include_duplicates_from_files(
-        getattr(getattr(pipeline, "options", None), "include_duplicates_file", None)
-        or os.environ.get("DOCS_INCLUDE_DUPLICATES_FILE", "")
-    )
-    preserve_dupes = should_preserve_duplicates(file_path, include_rules)
+    include_patterns = getattr(getattr(pipeline, "options", None), "include_duplicates_patterns", ())
+    preserve_dupes = should_preserve_duplicates(file_path, include_patterns)
 
     # Preserve directory-tree context and avoid hash collisions for identical content.
     if preserve_dupes:

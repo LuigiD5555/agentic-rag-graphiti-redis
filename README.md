@@ -89,11 +89,11 @@ Or, if you prefer to keep it installed but not exporting, toggle `ENABLE_LOG_EXP
 
 ## Ingestion: preserving duplicates by path
 
-If you want certain files to be ingested even when their content is identical (because the path/package tree matters), add rules to `.includethisduplicates`.
+If you want certain files to be ingested even when their content is identical (because the path/package tree matters), configure `DUPLICATES_DOC_EXCEPTIONS` in `src/settings.py` or `data/settings.json`.
 
 - Default includes: `__init__.py`
 - Supported entries: basename, glob patterns, directory prefixes (ending with `/`), or regex (`re:` prefix)
-- Optional override: set `DOCS_INCLUDE_DUPLICATES_FILE` to point to another file
+- Example: `DUPLICATES_DOC_EXCEPTIONS = ("__init__.py", "setup.py", "**/*.config")`
 
 ---
 

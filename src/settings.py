@@ -135,8 +135,8 @@ DOCS_PATHS = [
 ]
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
-DOCS_ENABLED_PATHS_FILE = ""
 DOCS_ENABLED_PATHS = ()
+DUPLICATES_DOC_EXCEPTIONS = ("__init__.py",)  # Paths that should NOT be deduplicated
 DOCS_EXCLUDE_FILE = ""
 DOCS_EXCLUDE_DIRS = ()
 # Exclude specific subdirectories that contain code/projects (not knowledge)
@@ -264,8 +264,8 @@ _DEFAULT_EXCLUDED_FILES = {
 # Keys that can be persisted/overridden via the user settings JSON file.
 _USER_SETTING_FIELDS = (
     "DOCS_PATHS",
-    "DOCS_ENABLED_PATHS_FILE",
     "DOCS_ENABLED_PATHS",
+    "DUPLICATES_DOC_EXCEPTIONS",
     "DOCS_EXCLUDE_FILE",
     "DOCS_EXCLUDE_DIRS",
     "DOCS_EXCLUDE_GLOBS",

@@ -1,8 +1,9 @@
 """Module that implements a hybrid RAG engine using vector and graph stores."""
+import json
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from pydantic import Field, computed_field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict, PydanticBaseSettingsSource
 
 from src.rag.interfaces.embedding_interface import EmbeddingInterface
 from src.rag.interfaces.vector_interface import VectorInterface, ScoredItem
@@ -14,10 +15,22 @@ from src.storage.graph.null_repository import NullGraphRepository
 from src.utils.path_discovery import (
     classify_exclude_entries,
     load_excludes_from_files,
-    load_enabled_paths_from_files,
     parse_list_env,
     value_as_list,
 )
+
+
+def _load_json_settings(json_path: Path) -> Dict[str, Any]:
+    """Load settings from JSON file if it exists."""
+    try:
+        if json_path.is_file():
+            content = json_path.read_text(encoding='utf-8')
+            data = json.loads(content)
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        pass
+    return {}
 
 
 def _build_user_filter(user_id: Optional[str]) -> Dict[str, Any]:
@@ -92,12 +105,9 @@ class AppConfig(BaseSettings):
     LMSTUDIO_REQUIRE_SERVER: bool = False
 
     # ===== Embeddings =====
-    EMBEDDING_DIM: int = 768
+    # Embeddings are provided by LM Studio with automatic dimension detection
+    EMBEDDING_DIM: int = 768  # Fallback value if auto-detection fails
     EMBEDDING_MAX_TOKENS: int = 512
-    EMBEDDING_BACKEND: str = "lmstudio"
-    LOCAL_GPU_EMBED_MODEL: str = "all-MiniLM-L6-v2"
-    LOCAL_GPU_DEVICE: str = "cuda"
-    LOCAL_GPU_BATCH_SIZE: int = 32
 
     # ===== Ingestion =====
     DOCS_PATHS: List[str] = Field(default_factory=lambda: [
@@ -106,8 +116,8 @@ class AppConfig(BaseSettings):
     ])
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 50
-    DOCS_ENABLED_PATHS_FILE: str = ""
     DOCS_ENABLED_PATHS: tuple = ()
+    DUPLICATES_DOC_EXCEPTIONS: tuple = ("__init__.py",)
     DOCS_EXCLUDE_FILE: str = ""
     DOCS_EXCLUDE_DIRS: tuple = ()
     DOCS_EXCLUDE_GLOBS: tuple = ()
@@ -147,6 +157,17 @@ class AppConfig(BaseSettings):
             return [h.strip() for h in v.split(",") if h.strip()]
         return v or []
 
+    @field_validator('DOCS_ENABLED_PATHS', 'DUPLICATES_DOC_EXCEPTIONS', mode='before')
+    @classmethod
+    def parse_tuple_fields(cls, v):
+        """Parse comma/newline-separated strings or JSON arrays into tuples."""
+        if isinstance(v, str):
+            parsed = parse_list_env(v)
+            return tuple(parsed) if parsed else ()
+        if isinstance(v, (list, tuple)):
+            return tuple(str(item).strip() for item in v if str(item).strip())
+        return v or ()
+
     @field_validator('WEAVIATE_DEFAULT_TENANT')
     @classmethod
     def set_default_tenant(cls, v, info):
@@ -169,6 +190,54 @@ class AppConfig(BaseSettings):
             if ext:
                 normalized.add(ext if ext.startswith('.') else f'.{ext}')
         return tuple(sorted(normalized))
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Customize settings sources to load from: init → env → .env → JSON → defaults.
+
+        This allows data/settings.json to override .env values, enabling persistent
+        user configuration that survives restarts.
+        """
+        # Create a custom source for JSON file
+        class JsonSettingsSource(PydanticBaseSettingsSource):
+            def get_field_value(self, field, field_name: str) -> tuple[Any, str, bool]:
+                # Load JSON on first access
+                if not hasattr(self, '_json_data'):
+                    json_path = Path("data/settings.json")
+                    if not json_path.is_absolute():
+                        base_dir = Path(__file__).resolve().parent.parent.parent
+                        json_path = base_dir / json_path
+                    self._json_data = _load_json_settings(json_path)
+
+                # Return value if present in JSON
+                if field_name in self._json_data:
+                    return self._json_data[field_name], field_name, False
+                return None, field_name, False
+
+            def __call__(self) -> Dict[str, Any]:
+                if not hasattr(self, '_json_data'):
+                    json_path = Path("data/settings.json")
+                    if not json_path.is_absolute():
+                        base_dir = Path(__file__).resolve().parent.parent.parent
+                        json_path = base_dir / json_path
+                    self._json_data = _load_json_settings(json_path)
+                return self._json_data
+
+        # Priority: init > env > dotenv > JSON > file_secret > defaults
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            JsonSettingsSource(settings_cls),
+            file_secret_settings,
+        )
 
     @computed_field
     @property
@@ -220,14 +289,11 @@ class AppConfig(BaseSettings):
         return [f"http://{h}:{self.LMSTUDIO_PORT}" for h in unique_hosts]
 
     def get_enabled_paths(self) -> tuple:
-        """Build enabled paths from settings and files."""
+        """Build enabled paths from settings only."""
         entries = []
 
         # From setting
         entries.extend(value_as_list(self.DOCS_ENABLED_PATHS))
-
-        # From file
-        entries.extend(load_enabled_paths_from_files(self.DOCS_ENABLED_PATHS_FILE))
 
         return tuple(e.strip() for e in entries if e.strip())
 

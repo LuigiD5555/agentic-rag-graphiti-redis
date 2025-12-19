@@ -96,6 +96,7 @@ class IngestionOrchestrator:
             chunk_overlap=self._config.CHUNK_OVERLAP,
             embedding_token_limit=self._config.EMBEDDING_MAX_TOKENS,
             tenant_id=(self._config.WEAVIATE_DEFAULT_TENANT or None),
+            include_duplicates_patterns=getattr(self._config, 'DUPLICATES_DOC_EXCEPTIONS', ()),
         )
 
         # Log cache manager status

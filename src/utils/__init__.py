@@ -56,7 +56,6 @@ from .path_discovery import (
     read_exclude_file,
     classify_exclude_entries,
     is_glob_like,
-    load_enabled_paths_from_files,
 )
 
 from .language_routing import (
@@ -100,7 +99,6 @@ __all__ = [
     "read_exclude_file",
     "classify_exclude_entries",
     "is_glob_like",
-    "load_enabled_paths_from_files",
     # Language Routing
     "ScriptFamily",
     "TextProfile",

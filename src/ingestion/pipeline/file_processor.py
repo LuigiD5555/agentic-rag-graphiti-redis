@@ -15,7 +15,7 @@ from typing import Any
 from src import logger
 from src.ingestion.loaders import CODE_LOADER_SPECS, TEXT_LOADER_SPECS, PlainTextLoader
 from src.utils.file_operations import gather_file_metadata
-from src.utils.path_discovery import load_include_duplicates_from_files, should_preserve_duplicates
+from src.utils.path_discovery import should_preserve_duplicates
 
 from .code_processor import process_code_document
 from .loader_helpers import should_skip_path
@@ -157,11 +157,8 @@ def process_candidate_file(
 
         # Content-based deduplication: check if identical file was already processed.
         # Some files are intentionally excluded from deduplication when their location matters.
-        include_rules = load_include_duplicates_from_files(
-            getattr(getattr(pipeline, "options", None), "include_duplicates_file", None)
-            or os.environ.get("DOCS_INCLUDE_DUPLICATES_FILE", "")
-        )
-        preserve_dupes = should_preserve_duplicates(full_path, include_rules)
+        include_patterns = getattr(getattr(pipeline, "options", None), "include_duplicates_patterns", ())
+        preserve_dupes = should_preserve_duplicates(full_path, include_patterns)
 
         content_hash = None if preserve_dupes else cache_manager.compute_file_hash(full_path)
 

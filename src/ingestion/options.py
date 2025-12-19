@@ -86,6 +86,7 @@ class PipelineOptions:
     tokenizer_model_name: str = "gpt-4o-mini"
     markdown_levels: Optional[object] = None
     semantic_embeddings: Optional[object] = None
+    include_duplicates_patterns: Tuple[str, ...] = field(default_factory=tuple)
 
 
 __all__ = ["DiscoveryOptions", "IngestionOptions", "PipelineOptions"]
