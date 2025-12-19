@@ -1,7 +1,65 @@
 """Module that manages language models and embeddings models."""
-from typing import Dict, Iterable, List, Sequence
+from typing import Dict, Iterable, List, Sequence, Optional
 import requests
 from src import logger
+
+
+# Known embedding model dimensions (pattern matching)
+EMBEDDING_MODEL_DIMENSIONS = {
+    # 768-dimensional models
+    "nomic-embed-text-v2": 768,
+    "nomic-embed-text-v1.5": 768,
+    "all-mpnet-base": 768,
+    "all-roberta-large": 768,
+    "bge-base": 768,
+    "bge-large": 768,
+    "e5-base": 768,
+    "e5-large": 768,
+    "gte-base": 768,
+    "gte-large": 768,
+    "instructor-base": 768,
+    "instructor-large": 768,
+
+    # 384-dimensional models
+    "all-minilm-l6": 384,
+    "all-minilm-l12": 384,
+    "paraphrase-multilingual-minilm": 384,
+    "bge-small": 384,
+    "bge-micro": 384,
+    "e5-small": 384,
+    "gte-small": 384,
+
+    # 1024-dimensional models
+    "bge-m3": 1024,
+    "e5-mistral": 1024,
+
+    # 1536-dimensional models (OpenAI-style)
+    "text-embedding-ada": 1536,
+    "text-embedding-3-small": 1536,
+    "text-embedding-3-large": 3072,
+}
+
+
+def detect_model_dimensions(model_name: str) -> Optional[int]:
+    """Detect embedding dimensions from model name using pattern matching.
+
+    Args:
+        model_name: The model identifier (e.g., 'text-embedding-nomic-embed-text-v2-moe')
+
+    Returns:
+        Detected dimension size or None if unknown
+    """
+    if not model_name:
+        return None
+
+    model_lower = model_name.lower()
+
+    # Check for exact pattern matches
+    for pattern, dim in EMBEDDING_MODEL_DIMENSIONS.items():
+        if pattern in model_lower:
+            return dim
+
+    return None
 
 
 class ModelManager:
@@ -67,3 +125,14 @@ class ModelManager:
     def get_first_language_model(self):
         """Return the first non-embedding model or None."""
         return self.language_models[0] if self.language_models else None
+
+    def get_model_dimensions(self, model_name: str) -> Optional[int]:
+        """Get the dimension size for a given embedding model.
+
+        Args:
+            model_name: The model identifier
+
+        Returns:
+            Dimension size or None if unknown
+        """
+        return detect_model_dimensions(model_name)

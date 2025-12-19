@@ -51,9 +51,6 @@ class EmbeddingService:
         self._embed_url: str = f"{self._api_root}/v1/embeddings"
         self._require_live = bool(getattr(config, "LMSTUDIO_REQUIRE_SERVER", False))
 
-        # Expected embedding dimension for validation and dummy fallback
-        self._expected_dim: int = int(getattr(config, "EMBEDDING_DIM", 768))
-
         # Model selection (explicit override or first available)
         explicit_model: Optional[str] = getattr(config, "EMBEDDING_MODEL", None)
         if explicit_model:
@@ -62,6 +59,25 @@ class EmbeddingService:
             self._model_name = model_manager.get_first_embedding_model()
 
         self._use_dummy: bool = not bool(self._model_name)
+
+        # Auto-detect embedding dimension from model name, fallback to config
+        if self._model_name:
+            detected_dim = model_manager.get_model_dimensions(self._model_name)
+            if detected_dim:
+                self._expected_dim = detected_dim
+                logger.info("Auto-detected embedding dimension: %d for model: %s", detected_dim, self._model_name)
+            else:
+                # Fallback to config value if model dimensions unknown
+                self._expected_dim = int(getattr(config, "EMBEDDING_DIM", 768))
+                logger.warning(
+                    "Could not auto-detect dimensions for model '%s', using configured EMBEDDING_DIM=%d",
+                    self._model_name,
+                    self._expected_dim
+                )
+        else:
+            # No model available, use config dimension
+            self._expected_dim = int(getattr(config, "EMBEDDING_DIM", 768))
+
         if self._use_dummy:
             if self._require_live:
                 raise RuntimeError(
@@ -70,7 +86,7 @@ class EmbeddingService:
                 )
             logger.warning("No embedding model found. Using dummy embeddings of size %d.", self._expected_dim)
         else:
-            logger.info("Selected embedding model: %s", self._model_name)
+            logger.info("Selected embedding model: %s (dimension: %d)", self._model_name, self._expected_dim)
 
         # Optional: a requests.Session could be used for connection pooling
         self._session = requests.Session()
