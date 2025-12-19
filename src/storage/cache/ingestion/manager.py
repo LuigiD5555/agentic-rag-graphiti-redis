@@ -1,5 +1,6 @@
 """Main cache manager class."""
 from typing import TYPE_CHECKING, Dict, Any
+import time
 
 if TYPE_CHECKING:
     import redis
@@ -51,11 +52,15 @@ class IngestionCacheManager(FileCacheOperations, DirectoryCacheOperations):
         )
 
     @classmethod
-    def from_settings(cls, settings: Dict[str, Any]) -> "IngestionCacheManager":
-        """Create cache manager from settings.
+    def from_settings(cls, settings: Dict[str, Any], max_retries: int = 10) -> "IngestionCacheManager":
+        """Create cache manager from settings with connection retry logic.
+
+        Args:
+            settings: Configuration dictionary.
+            max_retries: Maximum number of connection attempts.
 
         Raises:
-            RuntimeError: If Redis is unavailable or connection fails.
+            RuntimeError: If Redis is unavailable or connection fails after retries.
         """
         if not REDIS_AVAILABLE:
             raise RuntimeError("redis-py is not installed. Install it with: pip install redis")
@@ -70,19 +75,53 @@ class IngestionCacheManager(FileCacheOperations, DirectoryCacheOperations):
             redis_port = os.getenv("REDIS_PORT", "6379")
             location = f"redis://{redis_host}:{redis_port}/0"
 
-        try:
-            client = redis_module.from_url(
-                location,
-                decode_responses=True,
-                socket_connect_timeout=5,
-                socket_timeout=5,
-            )
-            # Test connection
-            client.ping()
-            log.info("Connected to Redis cache at %s", location)
-            return cls(redis_client=client)
-        except Exception as e:
-            raise RuntimeError(f"Failed to connect to Redis at {location}: {e}") from e
+        # Retry logic with exponential backoff
+        delay = 1.0
+        max_delay = 30.0
+        last_error = None
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                log.info(
+                    "Attempting to connect to Redis at %s (attempt %d/%d)",
+                    location, attempt, max_retries
+                )
+
+                client = redis_module.from_url(
+                    location,
+                    decode_responses=True,
+                    socket_connect_timeout=5,
+                    socket_timeout=5,
+                )
+
+                # Test connection
+                client.ping()
+                log.info("Successfully connected to Redis cache at %s", location)
+                return cls(redis_client=client)
+
+            except Exception as e:
+                last_error = e
+
+                if attempt == max_retries:
+                    log.error(
+                        "Failed to connect to Redis at %s after %d attempts. Last error: %s",
+                        location, max_retries, e
+                    )
+                    break
+
+                log.warning(
+                    "Redis connection attempt %d/%d failed: %s. Retrying in %.1f seconds...",
+                    attempt, max_retries, e, delay
+                )
+
+                time.sleep(delay)
+                delay = min(delay * 2, max_delay)  # Exponential backoff with cap
+
+        # If we get here, all retries failed
+        raise RuntimeError(
+            f"Failed to connect to Redis at {location} after {max_retries} attempts. "
+            f"Last error: {last_error}"
+        ) from last_error
 
     # Re-expose utility methods for backwards compatibility
     def compute_file_hash(self, file_path: str, chunk_size: int = 8192):

@@ -4,6 +4,7 @@ import json
 import redis
 from src import logger
 from src.rag.interfaces.cache_interface import CacheServiceProtocol
+from src.storage.cache.redis_connection import create_redis_client_with_retry
 
 
 class CacheService(CacheServiceProtocol):
@@ -14,11 +15,15 @@ class CacheService(CacheServiceProtocol):
     def __init__(self, config):
         """
         Initialize the Redis client using host and port from configuration.
+        Retries connection with exponential backoff if Redis is temporarily unavailable.
         """
-        self.client = redis.Redis(
+        self.client = create_redis_client_with_retry(
             host=config.REDIS_HOST,
             port=config.REDIS_PORT,
-            decode_responses=True
+            decode_responses=True,
+            max_retries=10,
+            initial_delay=1.0,
+            max_delay=30.0,
         )
         logger.info(
             "CacheService initialized with Redis at %s:%s",
