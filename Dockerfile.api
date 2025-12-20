@@ -1,0 +1,42 @@
+# ============================================
+# RAG API - Personal/Local use
+# ============================================
+FROM python:3.12-slim AS base
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ============================================
+# Development stage (default for local use)
+# ============================================
+FROM base AS development
+
+# Install development/testing tools
+RUN pip install --no-cache-dir pytest pytest-asyncio httpx ipdb
+
+# Copy source code (will be overridden by volume mount in docker-compose)
+COPY src/ ./src/
+COPY tests/ ./tests/
+COPY data/ ./data/
+
+# Create data directory
+RUN mkdir -p data
+
+EXPOSE 5555
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:5555/health')" || exit 1
+
+# Run with auto-reload for local development
+CMD ["uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "5555", "--reload"]
