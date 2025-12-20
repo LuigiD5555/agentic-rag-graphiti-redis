@@ -11,8 +11,8 @@ import sys
 import time
 from pathlib import Path
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.ingestion.discovery import FileDiscoveryService, PathTree
 from src.ingestion.options import DiscoveryOptions
@@ -68,7 +68,7 @@ def test_discovery_with_optimization():
     print("="*70)
 
     # Use current project directory as test
-    test_root = str(Path(__file__).parent / "src")
+    test_root = str(PROJECT_ROOT / "src")
 
     if not os.path.exists(test_root):
         print(f"WARNING: test directory not found: {test_root}")
@@ -149,7 +149,7 @@ def test_performance_comparison():
     print("TEST 3: Performance Comparison")
     print("="*70)
 
-    test_root = str(Path(__file__).parent / "src")
+    test_root = str(PROJECT_ROOT / "src")
 
     if not os.path.exists(test_root):
         print(f"WARNING: test directory not found: {test_root}")

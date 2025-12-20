@@ -40,7 +40,7 @@ def test_embeddings_fallback_to_dummy_when_no_model():
     manager = ModelManagerStub(model_name=None)
 
     service = EmbeddingService(config, manager)
-    embedding = service.generate("hola rag")
+    embedding = service.generate("hello rag")
 
     assert embedding == [0.0] * 6
 
@@ -91,7 +91,7 @@ def test_embeddings_attempts_fallback_hosts(monkeypatch):
 
     monkeypatch.setattr(service, "_post_json", fake_post)
 
-    vector = service.generate("texto")
+    vector = service.generate("text")
 
     assert attempts["count"] == 2
     assert vector == pytest.approx([0.4, 0.5, 0.6, 0.7])

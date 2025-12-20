@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 
@@ -11,3 +13,8 @@ def isolate_user_settings_file(tmp_path, monkeypatch):
     """
     monkeypatch.setenv("USER_SETTINGS_FILE", str(tmp_path / "settings.json"))
     yield
+
+
+def pytest_runtest_setup(item):
+    if "integration" in item.keywords and os.getenv("RUN_INTEGRATION") != "1":
+        pytest.skip("Set RUN_INTEGRATION=1 to run integration tests.")

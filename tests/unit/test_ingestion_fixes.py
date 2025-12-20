@@ -11,8 +11,8 @@ This script verifies:
 import sys
 from pathlib import Path
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.ingestion.helpers import build_ingestion_options_from_args
 from src.ingestion.loaders.pdf_loader import PDFLoader
@@ -62,12 +62,9 @@ def test_exclusions():
     critical_excludes = {"node_modules", ".git", "__pycache__", "venv", ".venv"}
     missing = critical_excludes - options.excluded_directory_names
 
-    if missing:
-        print(f"\nERROR: missing critical exclusions: {missing}")
-        return False
-    else:
-        print("\nSUCCESS: all critical exclusions are active")
-        return True
+    assert not missing, f"Missing critical exclusions: {missing}"
+    print("\nSUCCESS: all critical exclusions are active")
+    return True
 
 
 def test_file_order():
@@ -101,12 +98,9 @@ def test_file_order():
         # Verify that order is ascending
         is_ascending = all(sizes[i] <= sizes[i+1] for i in range(len(sizes)-1))
 
-        if is_ascending:
-            print("\nSUCCESS: ascending order is correct (small to large)")
-            return True
-        else:
-            print("\nERROR: ascending order is not correct")
-            return False
+        assert is_ascending, "Ascending order is not correct"
+        print("\nSUCCESS: ascending order is correct (small to large)")
+        return True
 
 
 def test_pdf_limits():
@@ -135,12 +129,9 @@ def test_pdf_limits():
         print(f"Timeout is incorrect: expected {expected_timeout}, found {PDFLoader.LOAD_TIMEOUT_SECONDS}")
         timeout_ok = False
 
-    if size_ok and timeout_ok:
-        print("\nSUCCESS: PDF limits are configured correctly")
-        return True
-    else:
-        print("\nERROR: PDF limits are not configured correctly")
-        return False
+    assert size_ok and timeout_ok, "PDF limits are not configured correctly"
+    print("\nSUCCESS: PDF limits are configured correctly")
+    return True
 
 
 def test_csv_limits():
@@ -169,12 +160,9 @@ def test_csv_limits():
         print(f"File size limit is incorrect: expected {expected_size}, found {CSVLoader.MAX_FILE_SIZE_BYTES}")
         size_ok = False
 
-    if rows_ok and size_ok:
-        print("\nSUCCESS: CSV limits are configured correctly")
-        return True
-    else:
-        print("\nERROR: CSV limits are not configured correctly")
-        return False
+    assert rows_ok and size_ok, "CSV limits are not configured correctly"
+    print("\nSUCCESS: CSV limits are configured correctly")
+    return True
 
 
 def main():

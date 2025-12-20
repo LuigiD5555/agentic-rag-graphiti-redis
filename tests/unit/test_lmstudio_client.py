@@ -39,15 +39,15 @@ def test_llm_service_fallback(monkeypatch):
             raise requests.exceptions.ConnectionError("down")
         return ResponseStub({
             "choices": [
-                {"message": {"content": "respuesta"}}
+                {"message": {"content": "response"}}
             ]
         })
 
     monkeypatch.setattr(requests, "post", fake_post)
 
-    text = service.complete("hola")
+    text = service.complete("hello")
 
-    assert text == "respuesta"
+    assert text == "response"
     assert service.api_root == ConfigStub.LMSTUDIO_API_ROOTS[1]
 
 
@@ -71,4 +71,4 @@ def test_llm_service_require_live_raises(monkeypatch):
     monkeypatch.setattr(requests, "post", fake_post)
 
     with pytest.raises(RuntimeError):
-        service.complete("hola")
+        service.complete("hello")

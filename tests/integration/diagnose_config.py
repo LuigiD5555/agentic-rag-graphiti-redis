@@ -16,8 +16,12 @@ import sys
 import json
 from pathlib import Path
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+import pytest
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+pytestmark = pytest.mark.integration
 
 def check_redis_connection():
     """Check Redis connectivity."""
@@ -268,6 +272,14 @@ def main():
     print("="*60 + "\n")
 
     return 0 if all_passed else 1
+
+
+def test_diagnose_config_checks():
+    assert check_environment_variables()
+    assert check_embedding_config()
+    assert check_redis_connection()
+    assert check_lmstudio_connectivity()
+    assert check_weaviate_connectivity()
 
 
 if __name__ == "__main__":
