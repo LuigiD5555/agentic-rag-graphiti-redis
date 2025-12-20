@@ -52,12 +52,24 @@ Key `.env` entries you may need to adjust:
 
 ## Starting Required Services
 
-You can run Weaviate, Redis, and Neo4j using the provided **Podman Compose** file.
-Make sure the Weaviate service:
-- exposes both REST (8080) and gRPC (50051) ports so the client can complete its startup checks
-- sets a stable `CLUSTER_HOSTNAME` (e.g., `weaviate-node-1`) so restarts reuse the same Raft identity
+You can run **all services** (Weaviate, Neo4j, Redis, and RAG API) using the provided **Podman Compose** file:
+
+```bash
+podman-compose up --build -d
+```
+
+This will start:
+- **Weaviate** (vector store) on port 8080
+- **Neo4j** (graph store) on port 7687
+- **Redis** (cache) on port 6379
+- **RAG API** (OpenAI-compatible REST API) on port 5555
+
+**Note:** Make sure LM Studio is running on your host machine (port 1234) with both an embedding model and a chat model loaded.
 
 Or with Docker Compose:
+```bash
+docker-compose up --build -d
+```
 
 ## Logs (Podman / journald)
 
@@ -98,6 +110,57 @@ If you want certain files to be ingested even when their content is identical (b
 ---
 
 ## Usage
+
+### OpenAI-Compatible REST API ✨
+
+The RAG API is **automatically started** when you run `podman-compose up --build -d`. It's accessible at `http://localhost:5555`.
+
+**Alternative: Run API locally (without containers):**
+
+```bash
+# Local with auto-reload (services must be running)
+uvicorn src.api.app:app --host 0.0.0.0 --port 5555 --reload
+```
+
+**Available endpoints:**
+
+- `GET /v1/models` - List available models
+- `POST /v1/chat/completions` - Chat completion (OpenAI-compatible)
+- `POST /v1/responses` - Modern endpoint with structured metadata
+- `POST /v1/embeddings` - Generate embeddings/vectors
+- `GET /health` - Health check
+
+**Interactive docs:**
+
+- Swagger UI: http://localhost:5555/docs
+- ReDoc: http://localhost:5555/redoc
+
+**Example usage with the OpenAI SDK:**
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:5555/v1",
+    api_key="not-needed"
+)
+
+response = client.chat.completions.create(
+    model="rag-local",
+    messages=[
+        {"role": "user", "content": "What is machine learning?"}
+    ]
+)
+
+print(response.choices[0].message.content)
+```
+
+**More information:**
+
+- Full documentation: [src/api/README.md](src/api/README.md)
+- Tests: `python tests/test_api.py`
+
+---
 
 ### Ingest Documents and Code
 
