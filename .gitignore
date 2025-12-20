@@ -12,7 +12,7 @@
 .coverage
 coverage.xml
 htmlcov/
-data/
+
 
 # -----------------------------
 # Virtual environments
@@ -24,6 +24,7 @@ ENV/
 env.bak/
 venv.bak/
 .mypy_cache/
+.venv
 
 # -----------------------------
 # Environment files (do not commit secrets)
@@ -42,13 +43,13 @@ venv.bak/
 # Editors & IDEs
 # -----------------------------
 **/.idea/**
+.idea
 **/.vscode/**
 *.sublime-workspace
 *.sublime-project
 .cspell/
 .lh/
 .claude
-docs
 
 # -----------------------------
 # Logs & temp files
@@ -119,3 +120,12 @@ build/
 **/.git/**
 **/.hg/**
 **/.svn/**
+
+# -----------------------------
+# RAG
+# -----------------------------
+data
+tests/logs
+tests/scripts
+tests/systemd
+docs

@@ -21,6 +21,11 @@ python-docx
 pypdf
 python-pptx
 
+# API
+fastapi
+uvicorn[standard]
+openai
+
 # Utils
 python-dotenv
 requests
