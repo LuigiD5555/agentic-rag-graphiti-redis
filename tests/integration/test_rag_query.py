@@ -10,40 +10,40 @@ from src.rag.engine import AppConfig
 pytestmark = pytest.mark.integration
 
 def main():
-    print("🚀 Testing RAG Query System\n")
+    print("Testing RAG Query System\n")
     print("=" * 70)
 
     # Load config
-    print("\n1️⃣ Loading configuration...")
+    print("\n1) Loading configuration...")
     try:
         config = AppConfig()
-        print(f"   ✅ Config loaded: Weaviate={config.WEAVIATE_URL}, LMStudio={config.OPENAI_API_BASE}")
+        print(f"   OK Config loaded: Weaviate={config.WEAVIATE_URL}, LMStudio={config.OPENAI_API_BASE}")
     except Exception as e:
-        print(f"   ❌ Failed to load config: {e}")
+        print(f"   FAIL Failed to load config: {e}")
         return 1
 
     # Initialize RAG system
-    print("\n2️⃣ Initializing RAG system...")
+    print("\n2) Initializing RAG system...")
     try:
         rag = create_rag_system(config)
-        print("   ✅ RAG system initialized")
+        print("   OK RAG system initialized")
     except Exception as e:
-        print(f"   ❌ Failed to initialize RAG: {e}")
+        print(f"   FAIL Failed to initialize RAG: {e}")
         import traceback
         traceback.print_exc()
         return 1
 
     # Test retriever
-    print("\n3️⃣ Testing retriever...")
+    print("\n3) Testing retriever...")
     try:
         stats = rag.retriever.get_stats()
-        print(f"   ✅ Collection: {stats.get('collection')}")
-        print(f"   ✅ Total documents: {stats.get('total_documents', 'N/A')}")
+        print(f"   OK Collection: {stats.get('collection')}")
+        print(f"   OK Total documents: {stats.get('total_documents', 'N/A')}")
     except Exception as e:
-        print(f"   ⚠️  Stats failed: {e}")
+        print(f"   WARN Stats failed: {e}")
 
     # Test query
-    print("\n4️⃣ Testing query...")
+    print("\n4) Testing query...")
     test_question = "What are the main topics in the ingested documents?"
     try:
         result = rag.query(question=test_question, top_k=3)
@@ -56,15 +56,15 @@ def main():
             for i, src in enumerate(result['sources'][:3], 1):
                 print(f"     {i}. {src['path']}")
 
-        print("\n   ✅ Query test passed!")
+        print("\n   OK Query test passed!")
     except Exception as e:
-        print(f"   ❌ Query failed: {e}")
+        print(f"   FAIL Query failed: {e}")
         import traceback
         traceback.print_exc()
         return 1
 
     print("\n" + "=" * 70)
-    print("✅ All tests passed! RAG system is working.\n")
+    print("OK All tests passed! RAG system is working.\n")
     print("To use interactively, run:")
     print("  python -m src.query.cli\n")
     return 0

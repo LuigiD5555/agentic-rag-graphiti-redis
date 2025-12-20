@@ -21,7 +21,7 @@ def print_json(data, title=""):
 
 def test_health():
     """Test health check endpoint."""
-    print("\n🔍 Testing Health Check...")
+    print("\nTesting Health Check...")
     response = requests.get(f"{BASE_URL}/health")
     print_json(response.json(), "Health Check")
     assert response.status_code == 200
@@ -30,7 +30,7 @@ def test_health():
 
 def test_models():
     """Test models listing endpoint."""
-    print("\n🔍 Testing GET /v1/models...")
+    print("\nTesting GET /v1/models...")
     response = requests.get(f"{BASE_URL}/v1/models")
     print_json(response.json(), "Available Models")
     assert response.status_code == 200
@@ -39,7 +39,7 @@ def test_models():
 
 def test_chat_completions():
     """Test chat completions endpoint."""
-    print("\n🔍 Testing POST /v1/chat/completions...")
+    print("\nTesting POST /v1/chat/completions...")
 
     payload = {
         "model": "rag-local",
@@ -70,13 +70,13 @@ def test_chat_completions():
 
     # Extract and display just the answer
     answer = data["choices"][0]["message"]["content"]
-    print(f"📝 Answer Preview:\n{answer[:200]}...\n")
+    print(f"Answer Preview:\n{answer[:200]}...\n")
     return True
 
 
 def test_responses():
     """Test modern responses endpoint."""
-    print("\n🔍 Testing POST /v1/responses...")
+    print("\nTesting POST /v1/responses...")
 
     payload = {
         "model": "rag-local",
@@ -98,11 +98,11 @@ def test_responses():
 
     # Display metadata
     metadata = data.get("metadata", {})
-    print(f"\n📊 Metadata:")
+    print("\nMetadata:")
     print(f"  - Retrieved: {metadata.get('retrieved_count', 0)} documents")
     print(f"  - Sources: {len(metadata.get('sources', []))}")
     if metadata.get("sources"):
-        print(f"\n📚 Top Sources:")
+        print("\nTop Sources:")
         for src in metadata["sources"][:3]:
             print(f"  - {src['path']} (score: {src['relevance_score']:.3f})")
     return True
@@ -110,7 +110,7 @@ def test_responses():
 
 def test_embeddings():
     """Test embeddings endpoint."""
-    print("\n🔍 Testing POST /v1/embeddings...")
+    print("\nTesting POST /v1/embeddings...")
 
     payload = {
         "model": "text-embedding-ada-002",
@@ -128,7 +128,7 @@ def test_embeddings():
 
     # Don't print full embedding (too long)
     embedding = data["data"][0]["embedding"]
-    print(f"\n✅ Embedding Generated!")
+    print("\nEmbedding Generated!")
     print(f"  - Model: {data['model']}")
     print(f"  - Dimension: {len(embedding)}")
     print(f"  - First 10 values: {embedding[:10]}")
@@ -138,7 +138,7 @@ def test_embeddings():
 
 def test_embeddings_batch():
     """Test embeddings with multiple inputs."""
-    print("\n🔍 Testing POST /v1/embeddings (batch)...")
+    print("\nTesting POST /v1/embeddings (batch)...")
 
     payload = {
         "model": "text-embedding-ada-002",
@@ -157,7 +157,7 @@ def test_embeddings_batch():
 
     assert response.status_code == 200, response.text
     data = response.json()
-    print(f"\n✅ Batch Embeddings Generated!")
+    print("\nBatch Embeddings Generated!")
     print(f"  - Model: {data['model']}")
     print(f"  - Count: {len(data['data'])}")
     print(f"  - Dimension: {len(data['data'][0]['embedding'])}")
@@ -190,7 +190,7 @@ def main():
     print("="*60)
 
     for test_name, passed in results.items():
-        status = "✅ PASS" if passed else "❌ FAIL"
+        status = "PASS" if passed else "FAIL"
         print(f"{status} - {test_name}")
 
     total = len(results)
@@ -203,12 +203,12 @@ if __name__ == "__main__":
     try:
         main()
     except requests.exceptions.ConnectionError:
-        print("\n❌ ERROR: Could not connect to API!")
+        print("\nERROR: Could not connect to API!")
         print(f"Make sure the API is running at {BASE_URL}")
         print("\nStart it with:")
         print("  python -m src.api.app")
         print()
     except Exception as e:
-        print(f"\n❌ ERROR: {e}")
+        print(f"\nERROR: {e}")
         import traceback
         traceback.print_exc()

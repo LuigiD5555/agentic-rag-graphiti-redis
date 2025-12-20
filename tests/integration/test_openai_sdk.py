@@ -20,14 +20,14 @@ def main():
     print("="*60)
 
     # Example 1: List models
-    print("\n1️⃣  Listing available models...")
+    print("\n1)  Listing available models...")
     print("-" * 60)
     models = client.models.list()
     for model in models.data:
         print(f"  - {model.id} (owned by: {model.owned_by})")
 
     # Example 2: Simple chat completion
-    print("\n2️⃣  Simple chat completion...")
+    print("\n2)  Simple chat completion...")
     print("-" * 60)
     response = client.chat.completions.create(
         model="rag-local",
@@ -39,11 +39,11 @@ def main():
     )
 
     answer = response.choices[0].message.content
-    print(f"\n📝 Answer:\n{answer}\n")
-    print(f"📊 Usage: {response.usage.total_tokens} tokens")
+    print(f"\nAnswer:\n{answer}\n")
+    print(f"Usage: {response.usage.total_tokens} tokens")
 
     # Example 3: Conversation with context
-    print("\n3️⃣  Multi-turn conversation...")
+    print("\n3)  Multi-turn conversation...")
     print("-" * 60)
     messages = [
         {"role": "system", "content": "You are a helpful AI tutor."},
@@ -58,10 +58,10 @@ def main():
         temperature=0.7
     )
 
-    print(f"📝 Answer:\n{response.choices[0].message.content}\n")
+    print(f"Answer:\n{response.choices[0].message.content}\n")
 
     # Example 4: Generate embeddings
-    print("\n4️⃣  Generating embeddings...")
+    print("\n4)  Generating embeddings...")
     print("-" * 60)
     embedding_response = client.embeddings.create(
         model="text-embedding-ada-002",
@@ -69,11 +69,11 @@ def main():
     )
 
     embedding = embedding_response.data[0].embedding
-    print(f"✅ Generated embedding with {len(embedding)} dimensions")
-    print(f"📊 First 5 values: {embedding[:5]}")
+    print(f"OK Generated embedding with {len(embedding)} dimensions")
+    print(f"First 5 values: {embedding[:5]}")
 
     # Example 5: Batch embeddings
-    print("\n5️⃣  Batch embeddings...")
+    print("\n5)  Batch embeddings...")
     print("-" * 60)
     texts = [
         "Machine learning",
@@ -86,7 +86,7 @@ def main():
         input=texts
     )
 
-    print(f"✅ Generated {len(embedding_response.data)} embeddings")
+    print(f"OK Generated {len(embedding_response.data)} embeddings")
     for i, emb in enumerate(embedding_response.data):
         print(f"  {i+1}. Dimension: {len(emb.embedding)}")
 
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print(f"\n❌ ERROR: {e}")
+        print(f"\nERROR: {e}")
         print("\nMake sure:")
         print("  1. API is running: python -m src.api.app")
         print("  2. OpenAI SDK is installed: pip install openai")

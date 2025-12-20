@@ -36,19 +36,19 @@ def test_path_tree():
     tree.add_path("node_modules", is_excluded=True)
     tree.add_path("node_modules/package/dist", is_excluded=True)
 
-    print("✓ Added 5 paths to tree")
+    print("OK Added 5 paths to tree")
 
     # Test visited tracking
     tree.mark_visited("src/components/ui")
     assert tree.is_visited("src/components/ui"), "Should be marked as visited"
     assert not tree.is_visited("src/utils"), "Should not be visited yet"
-    print("✓ Visited tracking works correctly")
+    print("OK Visited tracking works correctly")
 
     # Test exclusion
     assert tree.is_path_excluded("node_modules"), "Should be excluded"
     assert tree.is_path_excluded("node_modules/package/dist"), "Child should be excluded"
     assert not tree.is_path_excluded("src/components"), "Should not be excluded"
-    print("✓ Hierarchical exclusion works correctly")
+    print("OK Hierarchical exclusion works correctly")
 
     # Test stats
     stats = tree.get_stats()

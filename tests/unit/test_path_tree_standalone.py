@@ -28,19 +28,19 @@ def test_path_tree_basic():
     node2 = tree.add_path("src/components/forms")
     node3 = tree.add_path("src/utils")
     assert node1 is not None, "Should return a node"
-    print("   ✓ Added 3 paths successfully")
+    print("   OK Added 3 paths successfully")
 
     # Test finding paths
     print("\n2. Testing path lookup...")
     found = tree.find_node("src/components/ui")
     assert found is not None, "Should find the path"
     assert found.name == "ui", f"Node name should be 'ui', got {found.name}"
-    print("   ✓ Path lookup works correctly")
+    print("   OK Path lookup works correctly")
 
     # Test non-existent path
     not_found = tree.find_node("nonexistent/path")
     assert not_found is None, "Should return None for non-existent path"
-    print("   ✓ Non-existent path returns None")
+    print("   OK Non-existent path returns None")
 
     print("\nBASIC OPERATIONS TEST PASSED")
 
@@ -61,13 +61,13 @@ def test_path_tree_visited():
 
     assert tree.is_visited("src/components/ui"), "Should be marked as visited"
     assert not tree.is_visited("src/components/forms"), "Should not be visited"
-    print("   ✓ Visited marking works correctly")
+    print("   OK Visited marking works correctly")
 
     # Test clearing
     print("\n2. Testing clear visited...")
     tree.clear_visited()
     assert not tree.is_visited("src/components/ui"), "Should be cleared"
-    print("   ✓ Clear visited works correctly")
+    print("   OK Clear visited works correctly")
 
     print("\nVISITED TRACKING TEST PASSED")
 
@@ -88,7 +88,7 @@ def test_path_tree_exclusion():
 
     assert tree.is_path_excluded("node_modules"), "Should be excluded"
     assert not tree.is_path_excluded("src/components"), "Should not be excluded"
-    print("   ✓ Exclusion marking works correctly")
+    print("   OK Exclusion marking works correctly")
 
     # Test that marking a parent as excluded affects children
     print("\n2. Testing hierarchical exclusion...")
@@ -98,7 +98,7 @@ def test_path_tree_exclusion():
 
     # The parent is excluded
     assert tree2.is_path_excluded("build"), "Parent should be excluded"
-    print("   ✓ Hierarchical exclusion works correctly")
+    print("   OK Hierarchical exclusion works correctly")
 
     print("\nEXCLUSION TEST PASSED")
 
@@ -118,14 +118,14 @@ def test_path_tree_performance():
     for i in range(1000):
         tree.add_path(f"src/module{i % 10}/file{i}.py")
     elapsed = time.time() - start
-    print(f"   ✓ Added 1000 paths in {elapsed*1000:.2f}ms ({elapsed*1000000/1000:.2f}µs per path)")
+    print(f"   OK Added 1000 paths in {elapsed*1000:.2f}ms ({elapsed*1000000/1000:.2f}us per path)")
 
     print("\n2. Looking up 1000 paths...")
     start = time.time()
     for i in range(1000):
         tree.find_node(f"src/module{i % 10}/file{i}.py")
     elapsed = time.time() - start
-    print(f"   ✓ Looked up 1000 paths in {elapsed*1000:.2f}ms ({elapsed*1000000/1000:.2f}µs per path)")
+    print(f"   OK Looked up 1000 paths in {elapsed*1000:.2f}ms ({elapsed*1000000/1000:.2f}us per path)")
 
     print("\n3. Checking visited status 1000 times...")
     # Mark some as visited
@@ -136,7 +136,7 @@ def test_path_tree_performance():
     for i in range(1000):
         tree.is_visited(f"src/module{i % 10}/file{i}.py")
     elapsed = time.time() - start
-    print(f"   ✓ Checked 1000 visited status in {elapsed*1000:.2f}ms ({elapsed*1000000/1000:.2f}µs per check)")
+    print(f"   OK Checked 1000 visited status in {elapsed*1000:.2f}ms ({elapsed*1000000/1000:.2f}us per check)")
 
     # Get stats
     stats = tree.get_stats()
@@ -166,7 +166,7 @@ def test_path_normalization():
     assert tree.find_node("/src/components/ui/") is not None
     assert tree.find_node("src/components/forms") is not None
     assert tree.find_node("/src/components/forms") is not None
-    print("   ✓ Path normalization works correctly")
+    print("   OK Path normalization works correctly")
 
     print("\nNORMALIZATION TEST PASSED")
 
@@ -190,7 +190,7 @@ def test_unvisited_children():
     assert "src/components/forms" in unvisited, "Should include unvisited child"
     assert "src/components/layout" in unvisited, "Should include unvisited child"
     assert "src/components/ui" not in unvisited, "Should not include visited child"
-    print(f"   ✓ Found {len(unvisited)} unvisited children")
+    print(f"   OK Found {len(unvisited)} unvisited children")
 
     print("\nUNVISITED CHILDREN TEST PASSED")
 
@@ -213,10 +213,10 @@ def main():
         print("ALL TESTS PASSED")
         print("="*70)
         print("\nThe PathTree optimization is working correctly and provides:")
-        print("  • O(k) lookups where k is path depth")
-        print("  • Efficient visited tracking")
-        print("  • Hierarchical exclusion checking")
-        print("  • Memory-efficient prefix sharing")
+        print("  - O(k) lookups where k is path depth")
+        print("  - Efficient visited tracking")
+        print("  - Hierarchical exclusion checking")
+        print("  - Memory-efficient prefix sharing")
         print("\nThese optimizations prevent re-scanning of directories and")
         print("significantly speed up file discovery operations.")
         print("="*70 + "\n")

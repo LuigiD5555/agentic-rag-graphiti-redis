@@ -59,48 +59,48 @@ def interactive_mode(rag: RAGOrchestrator):
     Args:
         rag: RAG orchestrator instance.
     """
-    print("\n╔═══════════════════════════════════════════════════════════╗")
-    print("║          RAG Interactive Query System                     ║")
-    print("║  Type your questions below. Type 'exit' or 'quit' to end  ║")
-    print("╚═══════════════════════════════════════════════════════════╝\n")
+    print("\n===================================================================")
+    print("RAG Interactive Query System")
+    print("Type your questions below. Type 'exit' or 'quit' to end")
+    print("===================================================================\n")
 
     while True:
         try:
             # Get user input
-            question = input("\n❓ Your question: ").strip()
+            question = input("\nYour question: ").strip()
 
             if not question:
                 continue
 
             if question.lower() in ["exit", "quit", "q"]:
-                print("\n👋 Goodbye!")
+                print("\nGoodbye!")
                 break
 
             # Execute RAG query
-            print("\n🔍 Searching and generating answer...\n")
+            print("\nSearching and generating answer...\n")
             result = rag.query(question=question, top_k=5, temperature=0.7)
 
             # Display answer
-            print("═" * 70)
-            print(f"✅ Answer:\n\n{result['answer']}")
-            print("═" * 70)
+            print("=" * 70)
+            print(f"Answer:\n\n{result['answer']}")
+            print("=" * 70)
 
             # Display sources
             if result.get("sources"):
-                print(f"\n📚 Sources ({len(result['sources'])} documents):")
+                print(f"\nSources ({len(result['sources'])} documents):")
                 for i, source in enumerate(result["sources"], 1):
                     print(f"  {i}. {source['path']} (score: {source['relevance_score']:.3f})")
 
             # Display metadata
             metadata = result.get("metadata", {})
-            print(f"\n📊 Retrieved: {metadata.get('retrieved_count', 0)} chunks")
+            print(f"\nRetrieved: {metadata.get('retrieved_count', 0)} chunks")
 
         except KeyboardInterrupt:
-            print("\n\n👋 Interrupted. Goodbye!")
+            print("\n\nInterrupted. Goodbye!")
             break
         except Exception as e:
             log.error("Query failed: %s", e)
-            print(f"\n❌ Error: {e}\n")
+            print(f"\nError: {e}\n")
 
 
 def single_query_mode(rag: RAGOrchestrator, question: str, top_k: int = 5):
@@ -111,30 +111,30 @@ def single_query_mode(rag: RAGOrchestrator, question: str, top_k: int = 5):
         question: Question to ask.
         top_k: Number of documents to retrieve.
     """
-    print(f"\n❓ Question: {question}\n")
-    print("🔍 Searching and generating answer...\n")
+    print(f"\nQuestion: {question}\n")
+    print("Searching and generating answer...\n")
 
     try:
         result = rag.query(question=question, top_k=top_k, temperature=0.7)
 
         # Display answer
-        print("═" * 70)
-        print(f"✅ Answer:\n\n{result['answer']}")
-        print("═" * 70)
+        print("=" * 70)
+        print(f"Answer:\n\n{result['answer']}")
+        print("=" * 70)
 
         # Display sources
         if result.get("sources"):
-            print(f"\n📚 Sources ({len(result['sources'])} documents):")
+            print(f"\nSources ({len(result['sources'])} documents):")
             for i, source in enumerate(result["sources"], 1):
                 print(f"  {i}. {source['path']} (score: {source['relevance_score']:.3f})")
 
         # Display metadata
         metadata = result.get("metadata", {})
-        print(f"\n📊 Retrieved: {metadata.get('retrieved_count', 0)} chunks\n")
+        print(f"\nRetrieved: {metadata.get('retrieved_count', 0)} chunks\n")
 
     except Exception as e:
         log.error("Query failed: %s", e)
-        print(f"\n❌ Error: {e}\n")
+        print(f"\nError: {e}\n")
         sys.exit(1)
 
 
@@ -176,14 +176,14 @@ Examples:
         config = AppConfig()
         log.info("Configuration loaded successfully")
     except Exception as e:
-        print(f"❌ Failed to load configuration: {e}")
+        print(f"Failed to load configuration: {e}")
         sys.exit(1)
 
     # Initialize RAG system
     try:
         rag = create_rag_system(config)
     except Exception as e:
-        print(f"❌ Failed to initialize RAG system: {e}")
+        print(f"Failed to initialize RAG system: {e}")
         log.error("RAG initialization failed", exc_info=True)
         sys.exit(1)
 
