@@ -1,0 +1,41 @@
+[Unit]
+Description=RAG Tool Office (container + proxy)
+Documentation=https://github.com/yourusername/rag-agentic-graphiti
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# 1) Clean up any previous container
+ExecStartPre=/usr/bin/podman rm -f rag-tool-office
+
+# 2) Start the container (API on port 8000 inside, mapped to 19102 on host)
+ExecStartPre=/usr/bin/podman run -d --name rag-tool-office \
+  --pull=never \
+  -p 127.0.0.1:19102:8000 \
+  --security-opt=no-new-privileges \
+  --cap-drop=all \
+  --read-only \
+  --tmpfs /tmp \
+  -v %h/.cache/rag-tools/office:/work:rw \
+  -v /mnt:/mnt:ro \
+  localhost/rag-tool-office:latest
+
+# 3) Wait for container to be ready (healthcheck)
+ExecStartPre=/usr/bin/bash -c 'for i in {1..60}; do curl -fsS http://127.0.0.1:19102/healthz && exit 0; sleep 0.2; done; exit 1'
+
+# 4) Proxy: socket (inherited FD) -> internal port
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd 127.0.0.1:19102
+
+# Stop the container when service stops
+ExecStop=/usr/bin/podman stop -t 10 rag-tool-office
+ExecStopPost=/usr/bin/podman rm -f rag-tool-office
+
+Restart=on-failure
+RestartSec=1
+TimeoutStartSec=90
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,10 @@
+[Unit]
+Description=RAG Tool Office (socket)
+Documentation=https://github.com/yourusername/rag-agentic-graphiti
+
+[Socket]
+ListenStream=127.0.0.1:9102
+NoDelay=true
+
+[Install]
+WantedBy=sockets.target

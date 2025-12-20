@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+python-multipart
+# Optional: uncomment for actual GPU OCR implementation
+# torch
+# easyocr
+# paddleocr
