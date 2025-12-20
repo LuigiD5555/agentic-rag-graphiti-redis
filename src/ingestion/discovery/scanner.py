@@ -67,13 +67,13 @@ class DirectoryScanner:
             # OPTIMIZATION 1: Check if already visited using path tree (O(k) lookup)
             if self.path_tree.is_visited(dirpath):
                 self._scan_stats['paths_skipped_visited'] += 1
-                log.debug("⊗ Skipping already visited: %s", dirpath)
+                log.debug("SKIP already visited: %s", dirpath)
                 continue
 
             # OPTIMIZATION 2: Check tree-based exclusion first (O(k) vs O(n*m) for patterns)
             if rel_dirpath and self.path_tree.is_path_excluded(rel_dirpath):
                 self._scan_stats['paths_skipped_excluded'] += 1
-                log.debug("⊗ Tree exclusion for: %s", dirpath)
+                log.debug("SKIP tree exclusion for: %s", dirpath)
                 continue
 
             # OPTIMIZATION 3: Check cache for this specific directory
@@ -85,7 +85,7 @@ class DirectoryScanner:
                 dirs_scanned += 1
                 # Mark as visited in tree
                 self.path_tree.mark_visited(dirpath)
-                log.debug("✓ Cache hit for subdirectory: %s", dirpath)
+                log.debug("OK cache hit for subdirectory: %s", dirpath)
                 continue
 
             self.cache_manager.record_miss()
@@ -98,7 +98,7 @@ class DirectoryScanner:
                 # Add to tree for future quick lookups
                 self.path_tree.add_path(rel_dirpath, is_excluded=True)
                 self._scan_stats['paths_skipped_excluded'] += 1
-                log.debug("⊗ Pattern exclusion for: %s (added to tree)", dirpath)
+                log.debug("SKIP pattern exclusion for: %s (added to tree)", dirpath)
                 continue
 
             # Optimized logging
@@ -108,7 +108,7 @@ class DirectoryScanner:
 
             if should_log:
                 log.info(
-                    "Scanning… visited=%d dir(s), accepted=%d file(s), current=%s",
+                    "Scanning... visited=%d dir(s), accepted=%d file(s), current=%s",
                     dirs_scanned, len(files), dirpath
                 )
                 last_progress = now

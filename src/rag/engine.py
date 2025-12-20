@@ -200,7 +200,7 @@ class AppConfig(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Customize settings sources to load from: init → env → .env → JSON → defaults.
+        """Customize settings sources to load from: init -> env -> .env -> JSON -> defaults.
 
         This allows data/settings.json to override .env values, enabling persistent
         user configuration that survives restarts.

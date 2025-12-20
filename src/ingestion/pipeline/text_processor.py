@@ -151,7 +151,7 @@ def _split_documents_with_progress(
             # Create visual progress bar
             bar_width = 25
             filled = int(bar_width * percent / 100)
-            bar = "█" * filled + "·" * (bar_width - filled)
+            bar = "#" * filled + "." * (bar_width - filled)
 
             _log_with_file_prefix(
                 file_context,
@@ -387,7 +387,7 @@ def process_text_document(pipeline: Any, loader: object) -> None:
                         percent = (record["chunk_index"] / segment_total) * 100.0
                         bar_width = 25
                         filled = int(bar_width * percent / 100)
-                        bar = "█" * filled + "·" * (bar_width - filled)
+                        bar = "#" * filled + "." * (bar_width - filled)
 
                         base_url = getattr(getattr(pipeline, "vector_store", None), "base_url", None) or ""
                         target_url = f"{base_url.rstrip('/')}/v1/objects" if base_url else "/v1/objects"

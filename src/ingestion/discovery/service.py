@@ -107,7 +107,7 @@ class FileDiscoveryService:
                     files.extend(cached.files)
                     visited_dirs += 1
                     log.info(
-                        "✓ Cache HIT for %s: %d files (saved scanning)",
+                        "OK cache hit for %s: %d files (saved scanning)",
                         root, len(cached.files)
                     )
                     continue

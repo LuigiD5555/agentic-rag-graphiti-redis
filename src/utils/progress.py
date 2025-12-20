@@ -26,7 +26,7 @@ def progress_ratio(current: int, total: int) -> float:
     return min(1.0, max(0.0, current / total))
 
 
-def render_bar(ratio: float, length: int, fill_char: str = "▮", empty_char: str = "·") -> str:
+def render_bar(ratio: float, length: int, fill_char: str = "#", empty_char: str = ".") -> str:
     """Render a progress bar string based on the given ratio.
 
     Args:
@@ -58,8 +58,8 @@ class ProgressBar:
         stream: TextIO = sys.stdout,
         prefix: str = "",
         suffix: str = "",
-        fill_char: str = "▮",
-        empty_char: str = "·",
+        fill_char: str = "#",
+        empty_char: str = ".",
         rewrite: bool | None = None,
         min_interval_seconds: float = 0.0,
     ) -> None:

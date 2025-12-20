@@ -8,7 +8,7 @@ log = get_logger(__name__)
 
 
 class RAGOrchestrator:
-    """Orchestrates the full RAG pipeline: retrieve → generate."""
+    """Orchestrates the full RAG pipeline: retrieve -> generate."""
 
     DEFAULT_SYSTEM_PROMPT = """You are a helpful assistant that answers questions based on the provided context.
 

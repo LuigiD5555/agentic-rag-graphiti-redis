@@ -20,8 +20,8 @@ class EmbeddingProgress:
     """
 
     bar_length: int = 25
-    fill_char: str = "▮"
-    empty_char: str = "·"
+    fill_char: str = "#"
+    empty_char: str = "."
     chunk_tokens: int = 500
 
     total_estimated: int = 0

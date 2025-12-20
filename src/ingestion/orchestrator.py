@@ -12,7 +12,7 @@ from src.rag.audit import get_logger
 from src.rag.conf import Config
 from src.rag.embeddings_factory import get_embedding_service
 from src.storage.vector import get_vector_store
-from src.utils.file_operations import sort_paths_by_size_desc  # Now sorts ascending (small→large)
+from src.utils.file_operations import sort_paths_by_size_desc  # Now sorts ascending (small->large)
 
 log = get_logger(__name__)
 
@@ -87,7 +87,7 @@ class IngestionOrchestrator:
         return candidates[:maximum]
 
     def _build_pipeline(self) -> IngestionPipeline:
-        log.info("Initializing services (LM Studio, EmbeddingService, VectorStore, Pipeline)…")
+        log.info("Initializing services (LM Studio, EmbeddingService, VectorStore, Pipeline)...")
         provider = ProviderFactory(self._config)
         embedding_service = get_embedding_service(self._config, provider)
         vector_store = get_vector_store(self._config)
