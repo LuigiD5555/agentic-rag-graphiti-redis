@@ -66,10 +66,12 @@ class WeaviateRetriever:
             log.debug("Executing hybrid search: query=%s, top_k=%d", query[:50], k)
 
             # Hybrid search (combines vector + keyword search)
+            active_filters = self._build_filters(filters)
             response = self.collection.query.hybrid(
                 query=query,
                 limit=k,
                 alpha=self.alpha,
+                filters=active_filters,
                 return_metadata=MetadataQuery(score=True, distance=True),
             )
 
@@ -144,6 +146,31 @@ class WeaviateRetriever:
             log.error("Source-filtered retrieval failed: %s", e)
             return []
 
+    def get_file_metadata(self, file_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch a representative metadata record for a file_id."""
+        from weaviate.classes.query import Filter
+
+        try:
+            response = self.collection.query.fetch_objects(
+                limit=1,
+                filters=Filter.by_property("file_id").equal(file_id),
+            )
+            objects = getattr(response, "objects", []) or []
+            if not objects:
+                return None
+            obj = objects[0]
+            return getattr(obj, "properties", {}) or {}
+        except Exception as e:
+            log.error("Metadata fetch failed for file_id '%s': %s", file_id, e)
+            return None
+
+    def get_file_location(self, file_id: str) -> Optional[str]:
+        """Fetch the file_path for a file_id if available."""
+        meta = self.get_file_metadata(file_id)
+        if not meta:
+            return None
+        return meta.get("file_path") or meta.get("source")
+
     def get_stats(self) -> Dict[str, Any]:
         """Get collection statistics.
 
@@ -165,6 +192,30 @@ class WeaviateRetriever:
         except Exception as e:
             log.error("Failed to get collection stats: %s", e)
             return {"error": str(e)}
+
+    @staticmethod
+    def _build_filters(filters: Optional[Dict[str, Any]]):
+        if not filters:
+            return None
+
+        from weaviate.classes.query import Filter
+
+        clauses = []
+        for key, value in filters.items():
+            if value is None:
+                continue
+            if isinstance(value, (list, tuple, set)):
+                clauses.append(Filter.by_property(key).contains_any(list(value)))
+            else:
+                clauses.append(Filter.by_property(key).equal(value))
+
+        if not clauses:
+            return None
+
+        combined = clauses[0]
+        for clause in clauses[1:]:
+            combined = combined & clause
+        return combined
 
 
 __all__ = ["WeaviateRetriever"]

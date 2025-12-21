@@ -73,6 +73,25 @@ This will start:
 
 **Note:** Make sure LM Studio is running on your host machine (port 1234) with both an embedding model and a chat model loaded.
 
+### Silencing Podman Compose warnings
+
+Podman prints a warning when it detects the Compose CLI wrapper. Update your Podman config (user-level `~/.config/containers/containers.conf`
+or system `/etc/containers/containers.conf`, inside the `[engine]` section) with:
+
+```ini
+[engine]
+compose_providers = ["/usr/bin/podman-compose"]
+compose_warning_logs = false
+```
+
+This forces the `podman-compose` provider and stops logging the wrapper notice. When you run the stack manually, also disable Bake:
+
+```bash
+COMPOSE_BAKE=false podman-compose up --build -d
+```
+
+The `start-everything.sh` script already exports `COMPOSE_BAKE=false`, so it runs without the Bake warning.
+
 Or with Docker Compose:
 ```bash
 docker-compose up --build -d

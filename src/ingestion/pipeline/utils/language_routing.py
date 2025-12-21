@@ -223,10 +223,18 @@ class CjkTextSplitter:
         return overlapped
 
 
+def detect_script_families(text: str, sample_limit: int = 50000) -> Dict[ScriptFamily, float]:
+    """Return script share distribution for the provided text."""
+    profiler = TextProfiler()
+    profile = profiler.profile(text, sample_limit=sample_limit)
+    return profile.script_shares
+
+
 __all__ = [
     "ScriptFamily",
     "TextProfile",
     "SplitPolicy",
     "TextProfiler",
     "CjkTextSplitter",
+    "detect_script_families",
 ]

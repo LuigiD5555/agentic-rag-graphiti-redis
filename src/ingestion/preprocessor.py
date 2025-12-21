@@ -167,6 +167,10 @@ class FilePreprocessor:
             log.error("Office conversion error: %s", e)
             return None
 
+    def convert_office_document(self, file_path: Path) -> Optional[Path]:
+        """Public wrapper to convert an Office document to text."""
+        return self._convert_office_document(file_path)
+
     def _extract_archive(self, file_path: Path) -> Optional[Path]:
         """Extract archive.
 
@@ -215,6 +219,10 @@ class FilePreprocessor:
             log.error("Archive extraction error: %s", e)
             return None
 
+    def extract_archive(self, file_path: Path) -> Optional[Path]:
+        """Public wrapper to extract an archive."""
+        return self._extract_archive(file_path)
+
     def _perform_ocr(self, file_path: Path) -> Optional[Path]:
         """Perform OCR on image.
 
@@ -254,6 +262,11 @@ class FilePreprocessor:
                 self.ocr_url
             )
             return None
+
+    def perform_ocr(self, file_path: Path) -> Optional[Path]:
+        """Public wrapper to perform OCR on an image file."""
+        try:
+            return self._perform_ocr(file_path)
         except Exception as e:
             log.error("OCR error: %s", e)
             return None

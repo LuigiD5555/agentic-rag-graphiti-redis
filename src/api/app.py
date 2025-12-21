@@ -1,4 +1,4 @@
-"""FastAPI application for OpenAI-compatible RAG API."""
+"""FastAPI application for Ollama-like RAG API."""
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -8,16 +8,18 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import weaviate
 
-from src.api.routers import models, chat, responses, embeddings
-from src.api.routers.chat import get_rag_orchestrator as chat_get_rag
-from src.api.routers.responses import get_rag_orchestrator as responses_get_rag
-from src.api.routers.embeddings import get_embedding_service
+from src.api.routers import ollama, rag
+from src.api.routers.ollama import get_rag_orchestrator as ollama_get_rag
+from src.api.routers.ollama import get_embedding_service as ollama_get_embedding
+from src.api.routers.rag import get_rag_orchestrator as rag_get_rag
+from src.api.routers.rag import get_ingestion_orchestrator
 from src.rag.engine import AppConfig
 from src.rag.retrieval import WeaviateRetriever
 from src.rag.chat import LMStudioChatService
 from src.rag.pipeline.rag_orchestrator import RAGOrchestrator
 from src.rag.embeddings_factory import get_embedding_service as create_embedding_service
 from src.rag.conf import Config
+from src.ingestion.orchestrator import IngestionOrchestrator
 
 
 # Configure logging
@@ -32,6 +34,7 @@ logger = logging.getLogger(__name__)
 _rag_orchestrator: RAGOrchestrator | None = None
 _embedding_service = None
 _weaviate_client = None
+_ingestion_orchestrator: IngestionOrchestrator | None = None
 
 
 @asynccontextmanager
@@ -40,7 +43,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     Handles initialization and cleanup of RAG components.
     """
-    global _rag_orchestrator, _embedding_service, _weaviate_client
+    global _rag_orchestrator, _embedding_service, _weaviate_client, _ingestion_orchestrator
 
     logger.info("Initializing RAG API...")
 
@@ -83,6 +86,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         # Create embedding service
         _embedding_service = create_embedding_service(rag_config)
+        _ingestion_orchestrator = IngestionOrchestrator(rag_config)
 
         logger.info("RAG API initialized successfully")
         logger.info("API is ready to serve requests")
@@ -107,7 +111,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 # Create FastAPI app
 app = FastAPI(
     title="RAG API",
-    description="OpenAI-compatible API for RAG (Retrieval-Augmented Generation) system",
+    description="Ollama-like API for RAG (Retrieval-Augmented Generation) system",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -137,11 +141,18 @@ def get_embedding_instance():
         raise RuntimeError("Embedding service not initialized")
     return _embedding_service
 
+def get_ingestion_instance() -> IngestionOrchestrator:
+    """Get ingestion orchestrator instance."""
+    if _ingestion_orchestrator is None:
+        raise RuntimeError("Ingestion orchestrator not initialized")
+    return _ingestion_orchestrator
+
 
 # Override dependencies
-app.dependency_overrides[chat_get_rag] = get_rag_instance
-app.dependency_overrides[responses_get_rag] = get_rag_instance
-app.dependency_overrides[get_embedding_service] = get_embedding_instance
+app.dependency_overrides[ollama_get_rag] = get_rag_instance
+app.dependency_overrides[ollama_get_embedding] = get_embedding_instance
+app.dependency_overrides[rag_get_rag] = get_rag_instance
+app.dependency_overrides[get_ingestion_orchestrator] = get_ingestion_instance
 
 
 # Exception handlers
@@ -162,10 +173,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # Include routers
-app.include_router(models.router)
-app.include_router(chat.router)
-app.include_router(responses.router)
-app.include_router(embeddings.router)
+app.include_router(ollama.router)
+app.include_router(rag.router)
 
 
 # Health check endpoint
@@ -183,13 +192,16 @@ async def health_check():
 async def root():
     """Root endpoint."""
     return {
-        "message": "RAG API - OpenAI-compatible endpoint",
+        "message": "RAG API - Ollama-like endpoint",
         "version": "1.0.0",
         "endpoints": {
-            "models": "GET /v1/models",
-            "chat_completions": "POST /v1/chat/completions",
-            "responses": "POST /v1/responses",
-            "embeddings": "POST /v1/embeddings",
+            "generate": "POST /api/generate",
+            "chat": "POST /api/chat",
+            "embeddings": "POST /api/embeddings",
+            "pull": "POST /api/pull",
+            "tags": "GET /api/tags",
+            "rag_ingest": "POST /rag/ingest",
+            "rag_query": "POST /rag/query",
             "health": "GET /health",
         },
     }

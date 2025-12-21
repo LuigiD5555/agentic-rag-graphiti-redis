@@ -1,5 +1,3 @@
-version: "3.9"
-
 name: ${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}
 
 services:

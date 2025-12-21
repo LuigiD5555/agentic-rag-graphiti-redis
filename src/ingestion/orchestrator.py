@@ -53,6 +53,40 @@ class IngestionOrchestrator:
         ingested, failed = self._ingest(candidates, pipeline, per_file=options.per_file_mode)
         self._report_final(ingested, failed)
 
+    def run_with_report(self, options: IngestionOptions) -> dict:
+        """Execute ingestion and return a summary report."""
+        if not options.root_paths:
+            raise ValueError("At least one root path must be provided.")
+        if all(not os.path.exists(p) for p in options.root_paths):
+            raise FileNotFoundError("None of the provided root paths exist.")
+
+        self._log_discovery_intro(options)
+        candidates, visited_dirs = self._discover_files(options)
+        candidates = sort_paths_by_size_desc(candidates)
+        candidates = self._cap_candidates(candidates, options.maximum_files)
+
+        log.info("Visited directories: %d", visited_dirs)
+        log.info("Candidate files found: %d", len(candidates))
+
+        if options.dry_run:
+            self._report_dry_run(candidates)
+            return {
+                "status": "dry_run",
+                "ingested": 0,
+                "failed": 0,
+                "candidates": len(candidates),
+            }
+
+        pipeline = self._build_pipeline()
+        ingested, failed = self._ingest(candidates, pipeline, per_file=options.per_file_mode)
+        self._report_final(ingested, failed)
+        return {
+            "status": "ok",
+            "ingested": ingested,
+            "failed": failed,
+            "candidates": len(candidates),
+        }
+
     def _log_discovery_intro(self, options: IngestionOptions) -> None:
         log.info("Roots to scan (%d): %s", len(options.root_paths), list(options.root_paths))
         log.info(

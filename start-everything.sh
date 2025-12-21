@@ -12,8 +12,11 @@
 
 set -e
 
+# Ensure Podman Compose does not emit the Bake warning when we delegate.
+export COMPOSE_BAKE=false
+
 # Wait time for services to respond (seconds)
-SERVICE_WAIT_SECONDS=${SERVICE_WAIT_SECONDS:-30}
+SERVICE_WAIT_SECONDS=${SERVICE_WAIT_SECONDS:-50}
 SERVICE_WAIT_INTERVAL=${SERVICE_WAIT_INTERVAL:-2}
 
 # Colors

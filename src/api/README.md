@@ -1,6 +1,6 @@
-# RAG API - OpenAI Compatible
+# RAG API - Ollama-like
 
-An OpenAI-compatible API to expose the RAG system as a REST service. This API lets any application that uses the OpenAI format connect to your RAG without changes.
+An Ollama-like API to expose the RAG system as a REST service. This API prioritizes simple `/api/*` endpoints and RAG-specific `/rag/*` endpoints.
 
 ## Requirements
 
@@ -9,7 +9,8 @@ An OpenAI-compatible API to expose the RAG system as a REST service. This API le
 
 ## Features
 
-- **100% OpenAI compatible**: Same request/response structure
+- **Ollama-like core**: `/api/generate`, `/api/chat`, `/api/embeddings`, `/api/tags`
+- **RAG endpoints**: `/rag/ingest`, `/rag/query`, `/rag/tools/*`
 - **FastAPI**: Modern, fast framework
 - **Automatic docs**: Swagger UI and ReDoc included
 - **Type-safe**: Automatic validation with Pydantic
@@ -17,145 +18,67 @@ An OpenAI-compatible API to expose the RAG system as a REST service. This API le
 
 ## Implemented Endpoints
 
-### 1. GET `/v1/models`
+### Core (Ollama-like)
 
-Lists the available models in the system.
+- POST `/api/generate`
+- POST `/api/chat`
+- POST `/api/embeddings`
+- POST `/api/pull` (returns 501)
+- GET `/api/tags`
+
+### RAG-Specific
+
+- POST `/rag/ingest`
+- POST `/rag/query`
+- POST `/rag/tools/zip`
+- POST `/rag/tools/office`
+- POST `/rag/tools/ocr`
+- GET `/rag/files/{id}/location`
+- GET `/rag/files/{id}/metadata`
+- GET `/health`
+
+### Example: `/api/chat`
+
+**Request:**
+```json
+{
+  "model": "rag-default",
+  "messages": [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "What is machine learning?"}
+  ],
+  "options": {"temperature": 0.7, "max_tokens": 512, "top_k": 5}
+}
+```
 
 **Response:**
 ```json
 {
-  "object": "list",
-  "data": [
-    {
-      "id": "rag-local",
-      "object": "model",
-      "created": 1234567890,
-      "owned_by": "rag-local"
-    },
-    {
-      "id": "lmstudio-liquidai",
-      "object": "model",
-      "created": 1234567890,
-      "owned_by": "lmstudio"
-    }
+  "model": "rag-default",
+  "created_at": "2024-01-01T00:00:00Z",
+  "message": {"role": "assistant", "content": "Machine learning is..."},
+  "done": true,
+  "sources": [
+    {"path": "/path/to/doc.pdf", "relevance_score": 0.892}
   ]
 }
 ```
 
-### 2. POST `/v1/chat/completions` (Legacy - Most Used)
-
-Classic OpenAI-compatible chat endpoint. Ideal for existing UIs.
+### Example: `/api/generate`
 
 **Request:**
 ```json
 {
-  "model": "rag-local",
-  "messages": [
-    {
-      "role": "system",
-      "content": "You are a helpful assistant."
-    },
-    {
-      "role": "user",
-      "content": "What is machine learning?"
-    }
-  ],
-  "temperature": 0.7,
-  "max_tokens": 1024,
-  "top_k": 5
+  "model": "rag-default",
+  "prompt": "Explain neural networks in simple terms",
+  "system": "Be concise.",
+  "options": {"temperature": 0.7, "max_tokens": 256}
 }
 ```
 
-**Response:**
-```json
-{
-  "id": "chatcmpl-abc123",
-  "object": "chat.completion",
-  "created": 1234567890,
-  "model": "rag-local",
-  "choices": [
-    {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "Machine learning is...\n\nSources:\n- /path/to/doc.pdf (score: 0.892)"
-      },
-      "finish_reason": "stop"
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 50,
-    "completion_tokens": 100,
-    "total_tokens": 150
-  }
-}
-```
-
-### 3. POST `/v1/responses` (Modern)
-
-Modern endpoint with advanced metadata support and structured sources.
+### Example: `/api/embeddings`
 
 **Request:**
-```json
-{
-  "model": "rag-local",
-  "input": "What is machine learning?",
-  "temperature": 0.7,
-  "max_tokens": 1024,
-  "top_k": 5
-}
-```
-
-**Response:**
-```json
-{
-  "id": "resp-abc123",
-  "object": "response",
-  "created": 1234567890,
-  "model": "rag-local",
-  "output": [
-    {
-      "type": "text",
-      "text": "Machine learning is a subset of artificial intelligence..."
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 20,
-    "completion_tokens": 100,
-    "total_tokens": 120
-  },
-  "metadata": {
-    "retrieved_count": 5,
-    "sources": [
-      {
-        "path": "/path/to/document.pdf",
-        "relevance_score": 0.892
-      },
-      {
-        "path": "/path/to/another.docx",
-        "relevance_score": 0.765
-      }
-    ],
-    "query": "What is machine learning?",
-    "temperature": 0.7,
-    "max_tokens": 1024
-  }
-}
-```
-
-### 4. POST `/v1/embeddings`
-
-Generates embeddings (vectors) for text.
-
-**Request:**
-```json
-{
-  "model": "text-embedding-ada-002",
-  "input": "Hello world"
-}
-```
-
-Or multiple texts:
 ```json
 {
   "model": "text-embedding-ada-002",
@@ -166,33 +89,33 @@ Or multiple texts:
 **Response:**
 ```json
 {
-  "object": "list",
-  "data": [
-    {
-      "object": "embedding",
-      "embedding": [0.123, -0.456, 0.789, ...],
-      "index": 0
-    }
-  ],
   "model": "text-embedding-ada-002",
-  "usage": {
-    "prompt_tokens": 10,
-    "completion_tokens": 0,
-    "total_tokens": 10
-  }
+  "embeddings": [
+    [0.123, -0.456, 0.789],
+    [0.111, -0.222, 0.333]
+  ]
 }
 ```
 
-### 5. GET `/health`
+### Example: `/rag/query`
 
-Service health check.
-
-**Response:**
+**Request:**
 ```json
 {
-  "status": "healthy",
-  "rag_initialized": true,
-  "embedding_initialized": true
+  "query": "What is machine learning?",
+  "top_k": 5,
+  "filters": {"source": "notes.pdf"}
+}
+```
+
+### Example: `/rag/ingest`
+
+**Request:**
+```json
+{
+  "paths": ["/path/to/docs"],
+  "dry_run": false,
+  "max_files": 100
 }
 ```
 
@@ -229,74 +152,35 @@ Once the API is running, visit:
 - **ReDoc**: http://localhost:8000/redoc
 - **OpenAPI JSON**: http://localhost:8000/openapi.json
 
-## Use with Existing Clients
-
-### Python (OpenAI SDK)
-
-```python
-from openai import OpenAI
-
-# Configure the client to point to your local API
-client = OpenAI(
-    base_url="http://localhost:8000/v1",
-    api_key="not-needed"  # The API does not require authentication (you can add it)
-)
-
-# Use it as if it were OpenAI
-response = client.chat.completions.create(
-    model="rag-local",
-    messages=[
-        {"role": "user", "content": "What is machine learning?"}
-    ],
-    temperature=0.7,
-    max_tokens=1024
-)
-
-print(response.choices[0].message.content)
-```
-
-### cURL
+## Example Requests
 
 ```bash
-# Chat completion
-curl -X POST http://localhost:8000/v1/chat/completions \
+# Chat
+curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "rag-local",
+    "model": "rag-default",
     "messages": [
       {"role": "user", "content": "What is machine learning?"}
     ],
-    "temperature": 0.7
+    "options": {"temperature": 0.7}
+  }'
+
+# Generate
+curl -X POST http://localhost:8000/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "rag-default",
+    "prompt": "Explain neural networks"
   }'
 
 # Embeddings
-curl -X POST http://localhost:8000/v1/embeddings \
+curl -X POST http://localhost:8000/api/embeddings \
   -H "Content-Type: application/json" \
   -d '{
     "model": "text-embedding-ada-002",
     "input": "Hello world"
   }'
-```
-
-### JavaScript/TypeScript
-
-```typescript
-import OpenAI from 'openai';
-
-const client = new OpenAI({
-  baseURL: 'http://localhost:8000/v1',
-  apiKey: 'not-needed',
-});
-
-const response = await client.chat.completions.create({
-  model: 'rag-local',
-  messages: [
-    { role: 'user', content: 'What is machine learning?' }
-  ],
-  temperature: 0.7,
-});
-
-console.log(response.choices[0].message.content);
 ```
 
 ## Custom Parameters
@@ -308,9 +192,9 @@ The API includes RAG-specific additional parameters:
 Example:
 ```json
 {
-  "model": "rag-local",
+  "model": "rag-default",
   "messages": [...],
-  "top_k": 10
+  "options": {"top_k": 10}
 }
 ```
 
@@ -319,7 +203,7 @@ Example:
 ```
 ┌─────────────────┐
 │   Client        │
-│ (OpenAI SDK)    │
+│ (Ollama-like)   │
 └────────┬────────┘
          │ HTTP/REST
          ▼
@@ -380,126 +264,51 @@ See [docker-compose.api.yml](../../docker-compose.api.yml) for usage examples.
 1. **No authentication**: You can add JWT/API keys if needed
 2. **No rate limiting**: Consider adding `slowapi` if needed
 3. **Streaming not implemented**: Endpoints do not support `stream=true` yet
-4. **GET/DELETE /v1/responses/{id}**: Not implemented (returns 501)
+4. **/api/pull**: Not supported (returns 501)
 
 ## Potential Improvements
 
 - [ ] Add authentication (API keys or JWT)
 - [ ] Implement rate limiting if needed
 - [ ] Add streaming support (SSE)
-- [ ] Persist responses for GET/DELETE `/v1/responses/{id}`
 - [ ] Metrics and observability (Prometheus/OpenTelemetry)
-- [ ] Integration tests
+- [ ] Integration tests for `/rag/*` tools
 
-## Usage Examples in Different Languages
-
-### Python with OpenAI SDK
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://localhost:8000/v1",
-    api_key="not-needed"
-)
-
-# Chat completion
-response = client.chat.completions.create(
-    model="rag-local",
-    messages=[{"role": "user", "content": "What is machine learning?"}],
-    temperature=0.7
-)
-print(response.choices[0].message.content)
-
-# Embeddings
-embedding = client.embeddings.create(
-    model="text-embedding-ada-002",
-    input="Text to vectorize"
-)
-print(f"Vector dimension: {len(embedding.data[0].embedding)}")
-```
-
-### JavaScript/TypeScript
-
-```typescript
-import OpenAI from 'openai';
-
-const client = new OpenAI({
-  baseURL: 'http://localhost:8000/v1',
-  apiKey: 'not-needed',
-});
-
-const response = await client.chat.completions.create({
-  model: 'rag-local',
-  messages: [{ role: 'user', content: 'What is machine learning?' }],
-});
-
-console.log(response.choices[0].message.content);
-```
+## Usage Examples
 
 ### cURL
 
 ```bash
-# Chat completion
-curl -X POST http://localhost:8000/v1/chat/completions \
+# Chat
+curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "rag-local",
+    "model": "rag-default",
     "messages": [{"role": "user", "content": "What is ML?"}]
   }'
 
+# Generate
+curl -X POST http://localhost:8000/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{"model": "rag-default", "prompt": "Explain ML"}'
+
 # Embeddings
-curl -X POST http://localhost:8000/v1/embeddings \
+curl -X POST http://localhost:8000/api/embeddings \
   -H "Content-Type: application/json" \
   -d '{"model": "text-embedding-ada-002", "input": "Hello world"}'
 ```
 
-### Langchain
-
-```python
-from langchain_openai import ChatOpenAI
-
-llm = ChatOpenAI(
-    openai_api_base="http://localhost:8000/v1",
-    openai_api_key="not-needed",
-    model_name="rag-local",
-)
-
-response = llm.invoke("What is machine learning?")
-print(response.content)
-```
-
-### LlamaIndex
-
-```python
-from llama_index.llms.openai import OpenAI
-from llama_index.core import Settings
-
-llm = OpenAI(
-    api_base="http://localhost:8000/v1",
-    api_key="not-needed",
-    model="rag-local",
-)
-
-Settings.llm = llm
-# Now all components will use your RAG
-```
-
 ## Tests
 
-API tests are in [`tests/test_api.py`](../../tests/test_api.py):
+API tests are in [`tests/integration/test_api.py`](../../tests/integration/test_api.py):
 
 ```bash
 # Run tests
-python tests/test_api.py
-
-# Test with OpenAI SDK
-python tests/test_openai_sdk.py
+python tests/integration/test_api.py
 ```
 
 ## Resources
 
-- [OpenAI API documentation](https://platform.openai.com/docs/api-reference)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Pydantic Documentation](https://docs.pydantic.dev/)
 

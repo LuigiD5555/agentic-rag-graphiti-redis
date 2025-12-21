@@ -1,4 +1,4 @@
-"""Example script to test the RAG API endpoints."""
+"""Example script to test the Ollama-like RAG API endpoints."""
 import pytest
 import requests
 import json
@@ -28,147 +28,105 @@ def test_health():
     return True
 
 
-def test_models():
-    """Test models listing endpoint."""
-    print("\nTesting GET /v1/models...")
-    response = requests.get(f"{BASE_URL}/v1/models")
+def test_tags():
+    """Test tags listing endpoint."""
+    print("\nTesting GET /api/tags...")
+    response = requests.get(f"{BASE_URL}/api/tags")
     print_json(response.json(), "Available Models")
     assert response.status_code == 200
     return True
 
 
-def test_chat_completions():
-    """Test chat completions endpoint."""
-    print("\nTesting POST /v1/chat/completions...")
-
+def test_chat():
+    """Test chat endpoint."""
+    print("\nTesting POST /api/chat...")
     payload = {
-        "model": "rag-local",
+        "model": "rag-default",
         "messages": [
-            {
-                "role": "system",
-                "content": "You are a helpful assistant."
-            },
-            {
-                "role": "user",
-                "content": "What is machine learning?"
-            }
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "What is machine learning?"},
         ],
-        "temperature": 0.7,
-        "max_tokens": 512,
-        "top_k": 5
+        "options": {"temperature": 0.7, "max_tokens": 512, "top_k": 5},
     }
 
     response = requests.post(
-        f"{BASE_URL}/v1/chat/completions",
+        f"{BASE_URL}/api/chat",
         json=payload,
-        headers={"Content-Type": "application/json"}
+        headers={"Content-Type": "application/json"},
     )
 
     assert response.status_code == 200, response.text
     data = response.json()
-    print_json(data, "Chat Completion Response")
-
-    # Extract and display just the answer
-    answer = data["choices"][0]["message"]["content"]
+    print_json(data, "Chat Response")
+    answer = data["message"]["content"]
     print(f"Answer Preview:\n{answer[:200]}...\n")
     return True
 
 
-def test_responses():
-    """Test modern responses endpoint."""
-    print("\nTesting POST /v1/responses...")
-
+def test_generate():
+    """Test generate endpoint."""
+    print("\nTesting POST /api/generate...")
     payload = {
-        "model": "rag-local",
-        "input": "Explain neural networks in simple terms",
-        "temperature": 0.7,
-        "max_tokens": 512,
-        "top_k": 3
+        "model": "rag-default",
+        "prompt": "Explain neural networks in simple terms",
+        "system": "You are a concise assistant.",
+        "options": {"temperature": 0.7, "max_tokens": 512, "top_k": 3},
     }
 
     response = requests.post(
-        f"{BASE_URL}/v1/responses",
+        f"{BASE_URL}/api/generate",
         json=payload,
-        headers={"Content-Type": "application/json"}
+        headers={"Content-Type": "application/json"},
     )
 
     assert response.status_code == 200, response.text
     data = response.json()
-    print_json(data, "Response Object")
-
-    # Display metadata
-    metadata = data.get("metadata", {})
-    print("\nMetadata:")
-    print(f"  - Retrieved: {metadata.get('retrieved_count', 0)} documents")
-    print(f"  - Sources: {len(metadata.get('sources', []))}")
-    if metadata.get("sources"):
-        print("\nTop Sources:")
-        for src in metadata["sources"][:3]:
-            print(f"  - {src['path']} (score: {src['relevance_score']:.3f})")
+    print_json(data, "Generate Response")
     return True
 
 
 def test_embeddings():
     """Test embeddings endpoint."""
-    print("\nTesting POST /v1/embeddings...")
-
-    payload = {
-        "model": "text-embedding-ada-002",
-        "input": "Hello world"
-    }
+    print("\nTesting POST /api/embeddings...")
+    payload = {"model": "text-embedding-ada-002", "input": "Hello world"}
 
     response = requests.post(
-        f"{BASE_URL}/v1/embeddings",
+        f"{BASE_URL}/api/embeddings",
         json=payload,
-        headers={"Content-Type": "application/json"}
+        headers={"Content-Type": "application/json"},
     )
 
     assert response.status_code == 200, response.text
     data = response.json()
-
-    # Don't print full embedding (too long)
-    embedding = data["data"][0]["embedding"]
+    embedding = data["embeddings"][0]
     print("\nEmbedding Generated!")
     print(f"  - Model: {data['model']}")
     print(f"  - Dimension: {len(embedding)}")
     print(f"  - First 10 values: {embedding[:10]}")
-    print(f"  - Usage: {data['usage']}")
     return True
 
 
-def test_embeddings_batch():
-    """Test embeddings with multiple inputs."""
-    print("\nTesting POST /v1/embeddings (batch)...")
-
-    payload = {
-        "model": "text-embedding-ada-002",
-        "input": [
-            "Machine learning is fascinating",
-            "Deep learning uses neural networks",
-            "AI is transforming technology"
-        ]
-    }
+def test_rag_query():
+    """Test RAG query endpoint."""
+    print("\nTesting POST /rag/query...")
+    payload = {"query": "What is machine learning?", "top_k": 3}
 
     response = requests.post(
-        f"{BASE_URL}/v1/embeddings",
+        f"{BASE_URL}/rag/query",
         json=payload,
-        headers={"Content-Type": "application/json"}
+        headers={"Content-Type": "application/json"},
     )
 
     assert response.status_code == 200, response.text
     data = response.json()
-    print("\nBatch Embeddings Generated!")
-    print(f"  - Model: {data['model']}")
-    print(f"  - Count: {len(data['data'])}")
-    print(f"  - Dimension: {len(data['data'][0]['embedding'])}")
-    print(f"  - Total tokens: {data['usage']['total_tokens']}")
+    print_json(data, "RAG Query Response")
     return True
 
 
 def main():
     """Run all tests."""
     print("\n" + "="*60)
-    print("  RAG API Test Suite")
+    print("  RAG API Test Suite (Ollama-like)")
     print("="*60)
     print(f"\nBase URL: {BASE_URL}")
     print("\nMake sure the API is running:")
@@ -177,14 +135,13 @@ def main():
 
     results = {
         "Health Check": test_health(),
-        "Models": test_models(),
-        "Chat Completions": test_chat_completions(),
-        "Responses": test_responses(),
+        "Tags": test_tags(),
+        "Chat": test_chat(),
+        "Generate": test_generate(),
         "Embeddings": test_embeddings(),
-        "Embeddings (Batch)": test_embeddings_batch(),
+        "RAG Query": test_rag_query(),
     }
 
-    # Summary
     print("\n" + "="*60)
     print("  Test Summary")
     print("="*60)

@@ -1,94 +1,46 @@
-"""Example using OpenAI SDK with the RAG API."""
+"""Example using the Ollama-like RAG API."""
 import pytest
-
-OpenAI = pytest.importorskip("openai").OpenAI
+import requests
 
 pytestmark = pytest.mark.integration
 
 
 def main():
-    """Example using OpenAI SDK."""
-
-    # Configure client to point to your local RAG API
-    client = OpenAI(
-        base_url="http://localhost:8000/v1",
-        api_key="not-needed"  # Your API doesn't require auth (yet)
-    )
+    """Example using the Ollama-like API."""
+    base_url = "http://localhost:8000"
 
     print("\n" + "="*60)
-    print("  OpenAI SDK with RAG API")
+    print("  Ollama-like RAG API Example")
     print("="*60)
 
-    # Example 1: List models
     print("\n1)  Listing available models...")
     print("-" * 60)
-    models = client.models.list()
-    for model in models.data:
-        print(f"  - {model.id} (owned by: {model.owned_by})")
+    models = requests.get(f"{base_url}/api/tags").json()
+    for model in models.get("models", []):
+        print(f"  - {model.get('name')}")
 
-    # Example 2: Simple chat completion
-    print("\n2)  Simple chat completion...")
+    print("\n2)  Simple chat...")
     print("-" * 60)
-    response = client.chat.completions.create(
-        model="rag-local",
-        messages=[
-            {"role": "user", "content": "What is machine learning?"}
-        ],
-        temperature=0.7,
-        max_tokens=300
-    )
-
-    answer = response.choices[0].message.content
+    payload = {
+        "model": "rag-default",
+        "messages": [{"role": "user", "content": "What is machine learning?"}],
+        "options": {"temperature": 0.7, "max_tokens": 300},
+    }
+    response = requests.post(f"{base_url}/api/chat", json=payload)
+    response.raise_for_status()
+    answer = response.json()["message"]["content"]
     print(f"\nAnswer:\n{answer}\n")
-    print(f"Usage: {response.usage.total_tokens} tokens")
 
-    # Example 3: Conversation with context
-    print("\n3)  Multi-turn conversation...")
+    print("\n3)  Generate embeddings...")
     print("-" * 60)
-    messages = [
-        {"role": "system", "content": "You are a helpful AI tutor."},
-        {"role": "user", "content": "Explain neural networks"},
-        {"role": "assistant", "content": "Neural networks are..."},
-        {"role": "user", "content": "How do they learn?"}
-    ]
-
-    response = client.chat.completions.create(
-        model="rag-local",
-        messages=messages,
-        temperature=0.7
+    embedding_response = requests.post(
+        f"{base_url}/api/embeddings",
+        json={"model": "text-embedding-ada-002", "input": "Hello, world!"},
     )
-
-    print(f"Answer:\n{response.choices[0].message.content}\n")
-
-    # Example 4: Generate embeddings
-    print("\n4)  Generating embeddings...")
-    print("-" * 60)
-    embedding_response = client.embeddings.create(
-        model="text-embedding-ada-002",
-        input="Hello, world!"
-    )
-
-    embedding = embedding_response.data[0].embedding
+    embedding_response.raise_for_status()
+    embedding = embedding_response.json()["embeddings"][0]
     print(f"OK Generated embedding with {len(embedding)} dimensions")
     print(f"First 5 values: {embedding[:5]}")
-
-    # Example 5: Batch embeddings
-    print("\n5)  Batch embeddings...")
-    print("-" * 60)
-    texts = [
-        "Machine learning",
-        "Deep learning",
-        "Artificial intelligence"
-    ]
-
-    embedding_response = client.embeddings.create(
-        model="text-embedding-ada-002",
-        input=texts
-    )
-
-    print(f"OK Generated {len(embedding_response.data)} embeddings")
-    for i, emb in enumerate(embedding_response.data):
-        print(f"  {i+1}. Dimension: {len(emb.embedding)}")
 
     print("\n" + "="*60)
     print("  All examples completed successfully!")
@@ -102,7 +54,6 @@ if __name__ == "__main__":
         print(f"\nERROR: {e}")
         print("\nMake sure:")
         print("  1. API is running: python -m src.api.app")
-        print("  2. OpenAI SDK is installed: pip install openai")
         print()
 
 

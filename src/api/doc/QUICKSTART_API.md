@@ -1,6 +1,6 @@
 # 🚀 Quick Start - REST API
 
-A quick guide to start the OpenAI-compatible REST API in minutes.
+A quick guide to start the Ollama-like REST API in minutes.
 
 ---
 
@@ -49,7 +49,7 @@ docker-compose -f docker-compose.api.yml up
 
 ```bash
 # In another terminal
-python tests/test_api.py
+python tests/integration/test_api.py
 ```
 
 ---
@@ -74,19 +74,20 @@ You should see:
 ### 2. List models
 
 ```bash
-curl http://localhost:8000/v1/models | jq
+curl http://localhost:8000/api/tags | jq
 ```
 
 ### 3. First query
 
 ```bash
-curl -X POST http://localhost:8000/v1/chat/completions \
+curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "rag-local",
+    "model": "rag-default",
     "messages": [
       {"role": "user", "content": "Hello, can you explain what you do?"}
-    ]
+    ],
+    "options": {"temperature": 0.7, "max_tokens": 256, "top_k": 5}
   }' | jq
 ```
 
@@ -103,54 +104,29 @@ From there you can try all endpoints interactively.
 
 ---
 
-## 💻 Use with the OpenAI SDK
+## 💻 Example Requests
 
-### Python
-
-```bash
-pip install openai
-```
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://localhost:8000/v1",
-    api_key="not-needed"
-)
-
-response = client.chat.completions.create(
-    model="rag-local",
-    messages=[
-        {"role": "user", "content": "What is machine learning?"}
-    ]
-)
-
-print(response.choices[0].message.content)
-```
-
-### JavaScript/TypeScript
+### Generate
 
 ```bash
-npm install openai
+curl -X POST http://localhost:8000/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "rag-default",
+    "prompt": "Explain neural networks",
+    "options": {"temperature": 0.7, "max_tokens": 256}
+  }' | jq
 ```
 
-```typescript
-import OpenAI from 'openai';
+### RAG Query
 
-const client = new OpenAI({
-  baseURL: 'http://localhost:8000/v1',
-  apiKey: 'not-needed',
-});
-
-const response = await client.chat.completions.create({
-  model: 'rag-local',
-  messages: [
-    { role: 'user', content: 'What is machine learning?' }
-  ],
-});
-
-console.log(response.choices[0].message.content);
+```bash
+curl -X POST http://localhost:8000/rag/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What are the main topics?",
+    "top_k": 3
+  }' | jq
 ```
 
 ---
@@ -235,12 +211,12 @@ pip install -r requirements.txt
 
 **Solution**: Reduce `top_k` in your requests:
 
-```python
-response = client.chat.completions.create(
-    model="rag-local",
-    messages=[...],
-    top_k=3  # Instead of the default (5)
-)
+```json
+{
+  "model": "rag-default",
+  "messages": [...],
+  "options": {"top_k": 3}
+}
 ```
 
 ---
@@ -250,10 +226,12 @@ response = client.chat.completions.create(
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/health` | GET | Health check |
-| `/v1/models` | GET | List models |
-| `/v1/chat/completions` | POST | Chat (OpenAI legacy) |
-| `/v1/responses` | POST | Responses (modern) |
-| `/v1/embeddings` | POST | Generate embeddings |
+| `/api/tags` | GET | List models |
+| `/api/chat` | POST | Chat (Ollama-like) |
+| `/api/generate` | POST | Generate (Ollama-like) |
+| `/api/embeddings` | POST | Generate embeddings |
+| `/rag/ingest` | POST | Ingest files |
+| `/rag/query` | POST | RAG query |
 | `/docs` | GET | Swagger UI |
 | `/redoc` | GET | ReDoc |
 
@@ -299,8 +277,7 @@ docker run -d \
 ## 📖 More Resources
 
 - **Full documentation**: [src/api/README.md](src/api/README.md)
-- **Tests**: `python tests/test_api.py`
-- **Test OpenAI SDK**: `python tests/test_openai_sdk.py`
+- **Tests**: `python tests/integration/test_api.py`
 
 ---
 
@@ -313,7 +290,7 @@ docker run -d \
 
 2. **Explore the interactive docs**: http://localhost:8000/docs
 
-3. **Integrate into your app**: Use the OpenAI SDK pointing to `http://localhost:8000/v1`
+3. **Integrate into your app**: Use `/api/*` and `/rag/*` endpoints
 
 4. **Configure authentication**: Add API keys if you need them (see README)
 
@@ -328,4 +305,4 @@ docker run -d \
 
 ---
 
-Done! Your RAG is now exposed as an OpenAI-compatible API 🎉
+Done! Your RAG is now exposed as an Ollama-like API 🎉

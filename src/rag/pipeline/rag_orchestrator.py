@@ -46,16 +46,20 @@ Guidelines:
         self,
         question: str,
         top_k: Optional[int] = None,
+        filters: Optional[Dict[str, Any]] = None,
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        system_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Execute full RAG pipeline for a question.
 
         Args:
             question: User's question.
             top_k: Number of documents to retrieve (uses retriever default if None).
+            filters: Optional metadata filters for retrieval.
             temperature: LLM temperature (0.0-1.0).
             max_tokens: Maximum response tokens.
+            system_prompt: Override the default system prompt if provided.
 
         Returns:
             Dictionary with 'answer', 'sources', and 'metadata'.
@@ -63,7 +67,7 @@ Guidelines:
         log.info("Processing RAG query: %s", question[:100])
 
         # Step 1: Retrieve relevant documents
-        retrieved_docs = self.retriever.retrieve(query=question, top_k=top_k)
+        retrieved_docs = self.retriever.retrieve(query=question, top_k=top_k, filters=filters)
 
         if not retrieved_docs:
             log.warning("No documents retrieved for query")
@@ -87,6 +91,7 @@ Guidelines:
             context=context,
             temperature=temperature,
             max_tokens=max_tokens,
+            system_prompt=system_prompt,
         )
 
         # Step 4: Extract unique sources
@@ -133,6 +138,7 @@ Guidelines:
         context: str,
         temperature: float,
         max_tokens: int,
+        system_prompt: Optional[str] = None,
     ) -> str:
         """Generate answer using LLM with retrieved context.
 
@@ -147,7 +153,7 @@ Guidelines:
         """
         # Build prompt with system message, context, and question
         messages = [
-            {"role": "system", "content": self.system_prompt},
+            {"role": "system", "content": system_prompt or self.system_prompt},
             {
                 "role": "user",
                 "content": f"""Context:

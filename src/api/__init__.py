@@ -1,1 +1,1 @@
-"""OpenAI-compatible API for RAG system."""
+"""Ollama-like API for RAG system."""
