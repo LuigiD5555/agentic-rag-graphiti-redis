@@ -3,7 +3,7 @@ import pytest
 from src.ingestion.loaders.errors import LoaderFileNotFoundError, LoaderInvalidFormatError
 from src.ingestion.loaders.ppt_loader import PowerPointLoader
 from src.ingestion.loaders.xlsx_loader import ExcelLoader
-from src.ingestion.pipeline.loader_helpers import should_skip_path
+from src.ingestion.loaders.helpers import should_skip_path
 
 
 def test_should_skip_office_lock_file(tmp_path):

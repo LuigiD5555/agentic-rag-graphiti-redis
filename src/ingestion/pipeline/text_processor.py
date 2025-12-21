@@ -17,13 +17,13 @@ import time
 
 from src import logger
 
-from .loader_helpers import call_loader, resolve_loader_source
+from src.ingestion.loaders.helpers import call_loader, resolve_loader_source
 from .splitters import split_documents
 from .stage_reporting import IngestionFileContext, IngestionStageReporter
 from .state_helpers import finalize_file_ingestion
+from .utils.splitting import prepare_embedding_segments
 from src.utils.file_operations import gather_file_metadata
 from src.utils.hashing import generate_hash_presanitized
-from src.utils.splitting import prepare_embedding_segments
 from src.utils.metadata import prune_metadata, vector_store_contains
 from src.utils.text import (
     sanitize_text,

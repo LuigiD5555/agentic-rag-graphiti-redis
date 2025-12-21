@@ -13,7 +13,7 @@ from typing import Any, Dict
 
 from src import logger
 
-from .loader_helpers import call_loader
+from src.ingestion.loaders.helpers import call_loader
 from .stage_reporting import IngestionFileContext, IngestionStageReporter
 from .state_helpers import finalize_file_ingestion
 from src.utils.file_operations import gather_file_metadata

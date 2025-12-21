@@ -1,7 +1,7 @@
 """Module for Go code structure representation."""
 
 from src.ingestion.loaders.errors import LoaderUnreadableTextError, ensure_file_exists
-from src.utils.text_reading import read_text_with_fallbacks
+from src.ingestion.pipeline.utils.text_reading import read_text_with_fallbacks
 
 
 class GoCodeStructure:

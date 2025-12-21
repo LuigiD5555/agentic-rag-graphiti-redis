@@ -2,9 +2,8 @@ import os
 from typing import Any
 
 from src.ingestion.loaders.errors import LoaderError
+from src.ingestion.pipeline.failures import record_failure
 from src.rag.audit import get_logger
-
-from .failures import record_failure
 
 log = get_logger(__name__)
 

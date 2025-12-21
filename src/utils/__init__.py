@@ -4,12 +4,13 @@ Centralized utilities for the RAG Agentic Graphiti project.
 This package contains reusable utility functions organized by functionality:
 - hashing: File, directory, and text hashing utilities
 - text: Text processing, sanitization, and token management
-- splitting: Document splitting and chunking utilities
 - file_operations: File metadata and path operations
 - metadata: Metadata validation and storage utilities
 - path_discovery: Path discovery, exclusions, and filtering
-- language_routing: Script detection and language-specific splitting
 - progress: Progress tracking and reporting utilities
+
+Note: Ingestion-specific utilities (text_reading, language_routing, splitting)
+have been moved to src.ingestion.pipeline.utils for better organization.
 """
 
 from .hashing import (
@@ -39,10 +40,6 @@ from .metadata import (
     vector_store_batch_contains,
 )
 
-from .splitting import (
-    prepare_embedding_segments,
-)
-
 from .progress import (
     progress_ratio,
     render_bar,
@@ -56,14 +53,6 @@ from .path_discovery import (
     read_exclude_file,
     classify_exclude_entries,
     is_glob_like,
-)
-
-from .language_routing import (
-    ScriptFamily,
-    TextProfile,
-    SplitPolicy,
-    TextProfiler,
-    CjkTextSplitter,
 )
 
 __all__ = [
@@ -86,8 +75,6 @@ __all__ = [
     "prune_metadata",
     "vector_store_contains",
     "vector_store_batch_contains",
-    # Splitting
-    "prepare_embedding_segments",
     # Progress
     "progress_ratio",
     "render_bar",
@@ -99,10 +86,4 @@ __all__ = [
     "read_exclude_file",
     "classify_exclude_entries",
     "is_glob_like",
-    # Language Routing
-    "ScriptFamily",
-    "TextProfile",
-    "SplitPolicy",
-    "TextProfiler",
-    "CjkTextSplitter",
 ]

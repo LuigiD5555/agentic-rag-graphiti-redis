@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
 from src.rag.audit import get_logger
+from src.utils.hashing import generate_hash_presanitized
 
 log = get_logger(__name__)
 
@@ -33,7 +34,7 @@ def gather_file_metadata(path: Optional[str]) -> Dict[str, Any]:
         "parent_directory": os.path.dirname(resolved) if resolved else None,
         "file_size_bytes": None,
         "file_modified_at": None,
-        "file_id": _generate_hash(resolved) if resolved else None,
+        "file_id": generate_hash_presanitized(resolved) if resolved else None,
     }
 
     if resolved and os.path.isfile(resolved):
@@ -109,13 +110,6 @@ def should_skip_path(path: str) -> bool:
         return True
 
     return False
-
-
-def _generate_hash(text: str) -> str:
-    """Generate SHA256 hash for file IDs."""
-    import hashlib
-
-    return hashlib.sha256(str(text).encode("utf-8")).hexdigest()
 
 
 __all__ = [

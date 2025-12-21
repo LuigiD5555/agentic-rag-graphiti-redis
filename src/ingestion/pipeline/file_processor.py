@@ -19,7 +19,7 @@ from src.utils.file_operations import gather_file_metadata
 from src.utils.path_discovery import should_preserve_duplicates
 
 from .code_processor import process_code_document
-from .loader_helpers import should_skip_path
+from src.ingestion.loaders.helpers import should_skip_path
 from .state_helpers import register_observed_file
 from .text_processor import process_text_document
 
