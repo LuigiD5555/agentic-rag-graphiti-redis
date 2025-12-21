@@ -4,6 +4,13 @@
 
 This system is built for scenarios that require **document ingestion**, **code indexing**, and **semantic relationship mapping** between entities — enabling detailed, context-rich answers.
 
+## 📚 Documentation
+
+- **[Start Here](docs/START_HERE.md)** - Project overview and setup
+- **[Documentation Index](docs/DOCS_INDEX.md)** - Complete documentation navigation
+- **[Quick Start Guide](docs/QUICK_START_GUIDE.md)** - Getting started
+- **[Configuration](docs/CONFIGURATION.md)** - Configuration reference
+
 ---
 
 ## Overview
