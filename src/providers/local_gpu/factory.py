@@ -12,7 +12,7 @@ def build_local_gpu_embedding_service(config: Config) -> EmbeddingInterface:
     Create a LocalGPUEmbeddingService with optional Redis caching.
     """
     # Lazy import so torch/sentence-transformers stay optional unless needed.
-    from src.utils.local_gpu.embedding_service import LocalGPUEmbeddingService
+    from src.providers.local_gpu.embedding_service import LocalGPUEmbeddingService
 
     base_service = LocalGPUEmbeddingService(config)
 
