@@ -819,6 +819,83 @@ class SystemdManager:
 
         return status_info
 
+    def logs(self, tool: str = None, follow: bool = False, lines: int = None,
+             since: str = None, priority: str = None, all_tools: bool = False) -> bool:
+        """
+        View logs from systemd journal for tools.
+
+        Args:
+            tool: Tool name to view logs (office, archive, ocr, gpu)
+            follow: Follow log output in real-time
+            lines: Number of lines to show (default: all)
+            since: Show logs since this time (e.g., "1 hour ago", "today")
+            priority: Filter by priority level (emerg, alert, crit, err, warning, notice, info, debug)
+            all_tools: View logs from all tools combined
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self._check_systemd():
+            print(f"{Colors.RED}✗ journalctl not available{Colors.NC}")
+            return False
+
+        # Validate tool name if specified
+        if tool and not all_tools:
+            if tool not in self.TOOLS:
+                print(f"{Colors.RED}✗ Invalid tool:{Colors.NC} {tool}")
+                print(f"  Valid tools: {', '.join(self.TOOLS)}")
+                return False
+        elif not tool and not all_tools:
+            print(f"{Colors.RED}✗ Must specify a tool or use --all{Colors.NC}")
+            print(f"  Valid tools: {', '.join(self.TOOLS)}")
+            return False
+
+        # Build journalctl command
+        cmd = ['journalctl', '--user']
+
+        # Add unit filter
+        if all_tools:
+            # Show logs from all tool services
+            for t in self.TOOLS:
+                cmd.extend(['-u', f'tool-{t}.service'])
+        else:
+            cmd.extend(['-u', f'tool-{tool}.service'])
+
+        # Add optional filters
+        if follow:
+            cmd.append('-f')
+
+        if lines is not None:
+            cmd.extend(['-n', str(lines)])
+
+        if since:
+            cmd.extend(['--since', since])
+
+        if priority:
+            cmd.extend(['-p', priority])
+
+        # Add output format for better readability
+        cmd.extend(['-o', 'short-iso'])
+
+        # Print header (with flush to ensure it appears before journalctl output)
+        if all_tools:
+            print(f"{Colors.CYAN}Viewing logs from all tools...{Colors.NC}", flush=True)
+        else:
+            print(f"{Colors.CYAN}Viewing logs for tool-{tool}...{Colors.NC}", flush=True)
+
+        if follow:
+            print(f"{Colors.YELLOW}(Press Ctrl+C to stop){Colors.NC}\n", flush=True)
+        else:
+            print(flush=True)
+
+        # Execute journalctl (not captured, streams directly to terminal)
+        try:
+            result = subprocess.run(cmd, check=False)
+            return result.returncode == 0
+        except KeyboardInterrupt:
+            print(f"\n{Colors.YELLOW}Stopped{Colors.NC}")
+            return True
+
 
 def main():
     """CLI entry point."""
@@ -836,6 +913,7 @@ Commands:
   status    Show current status of all tools
   build     Build container images for tools
   restart   Restart a specific tool (socket + service)
+  logs      View logs from systemd journal
 
 Examples:
   # Initial setup
@@ -855,6 +933,14 @@ Examples:
   # Restart a specific tool
   python -m src.tools.systemd_manager restart office
 
+  # View logs
+  python -m src.tools.systemd_manager logs office           # Last 50 lines
+  python -m src.tools.systemd_manager logs office -f        # Follow in real-time
+  python -m src.tools.systemd_manager logs office -n 100    # Last 100 lines
+  python -m src.tools.systemd_manager logs office --since "1 hour ago"
+  python -m src.tools.systemd_manager logs office -p err    # Only errors
+  python -m src.tools.systemd_manager logs --all -f         # All tools
+
 How it works:
   - Sockets listen on ports (9101-9104) without overhead
   - Services are inactive until first request
@@ -866,14 +952,14 @@ How it works:
 
     parser.add_argument(
         'command',
-        choices=['install', 'enable', 'verify', 'fix', 'status', 'build', 'restart'],
+        choices=['install', 'enable', 'verify', 'fix', 'status', 'build', 'restart', 'logs'],
         help='Command to execute'
     )
 
     parser.add_argument(
         'tool',
         nargs='?',
-        help='Tool name for restart command (office, archive, ocr, gpu)'
+        help='Tool name for restart/logs command (office, archive, ocr, gpu)'
     )
 
     parser.add_argument(
@@ -886,6 +972,38 @@ How it works:
         '--tools',
         nargs='+',
         help='Specific tools to build (default: all)'
+    )
+
+    # Logs-specific arguments
+    parser.add_argument(
+        '-f', '--follow',
+        action='store_true',
+        help='Follow log output in real-time'
+    )
+
+    parser.add_argument(
+        '-n', '--lines',
+        type=int,
+        help='Number of log lines to show'
+    )
+
+    parser.add_argument(
+        '--since',
+        type=str,
+        help='Show logs since time (e.g., "1 hour ago", "today")'
+    )
+
+    parser.add_argument(
+        '-p', '--priority',
+        type=str,
+        choices=['emerg', 'alert', 'crit', 'err', 'warning', 'notice', 'info', 'debug'],
+        help='Filter by priority level'
+    )
+
+    parser.add_argument(
+        '--all',
+        action='store_true',
+        help='View logs from all tools (for logs command)'
     )
 
     args = parser.parse_args()
@@ -915,6 +1033,15 @@ How it works:
                 print(f"Valid tools: {', '.join(manager.TOOLS)}")
                 sys.exit(1)
             success = manager.restart(args.tool, verbose=verbose)
+        elif args.command == 'logs':
+            success = manager.logs(
+                tool=args.tool,
+                follow=args.follow,
+                lines=args.lines,
+                since=args.since,
+                priority=args.priority,
+                all_tools=args.all
+            )
 
         sys.exit(0 if success else 1)
 
