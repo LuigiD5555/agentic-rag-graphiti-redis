@@ -38,4 +38,5 @@ TimeoutStartSec=90
 TimeoutStopSec=30
 
 [Install]
-WantedBy=default.target
+# Socket-activated: DO NOT use WantedBy=default.target
+# The socket will start this service on-demand
