@@ -42,9 +42,8 @@ venv.bak/
 # -----------------------------
 # Editors & IDEs
 # -----------------------------
-**/.idea/**
 .idea
-**/.vscode/**
+.vscode
 *.sublime-workspace
 *.sublime-project
 .cspell/
