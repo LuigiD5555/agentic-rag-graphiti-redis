@@ -3,6 +3,7 @@ Description=RAG Tool Archive (container + proxy)
 Documentation=https://github.com/yourusername/rag-agentic-graphiti
 After=network-online.target
 Wants=network-online.target
+OnFailure=tool-alert@%n.service
 
 [Service]
 Type=simple

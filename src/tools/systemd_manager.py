@@ -167,6 +167,13 @@ class SystemdManager:
             if verbose:
                 print(f"  {Colors.GREEN}✓{Colors.NC} Installed tool-{tool} units")
 
+        # Install alert handler service
+        alert_service = self.systemd_dir / 'tool-alert@.service'
+        if alert_service.exists():
+            shutil.copy2(alert_service, self.user_systemd_dir)
+            if verbose:
+                print(f"  {Colors.GREEN}✓{Colors.NC} Installed alert handler")
+
         # Create cache directories
         cache_dir = Path.home() / '.cache' / 'rag-tools'
         for tool in self.TOOLS:
