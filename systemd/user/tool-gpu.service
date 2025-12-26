@@ -37,4 +37,10 @@ RestartSec=1
 TimeoutStartSec=90
 TimeoutStopSec=30
 
+# Auto-shutdown after idle timeout (default 10 minutes)
+# Service stops automatically, socket activation restarts it on next request
+# Service stops automatically, socket activation restarts it on next request
+# Service stops automatically, socket activation restarts it on next request
+RuntimeMaxSec=600
+
 [Install]

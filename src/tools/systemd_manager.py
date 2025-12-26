@@ -13,10 +13,18 @@ Usage:
     python -m src.tools.systemd_manager status    # Show status
     python -m src.tools.systemd_manager fix       # Auto-repair configuration
 
+Timeout Management:
+    Tools automatically shut down after inactivity (default: 10 minutes)
+    Use timeout_manager.py to configure per-tool timeouts:
+        python -m src.tools.timeout_manager show        # Show current timeouts
+        python -m src.tools.timeout_manager set office 900  # 15 minutes
+        python -m src.tools.timeout_manager apply       # Apply changes
+
 Design:
     - Sockets listen on ports (9101-9104) without overhead
     - Services are inactive until first request
     - On connection, systemd auto-starts the container
+    - Services auto-stop after idle timeout (RuntimeMaxSec)
     - No code changes needed in the RAG application
 """
 
@@ -953,7 +961,27 @@ How it works:
   - Services are inactive until first request
   - On connection, systemd auto-starts the container
   - Tools start in 1-2 seconds when needed
+  - Tools auto-stop after idle timeout (default: 10 minutes)
   - No code changes needed in RAG application
+
+Timeout Configuration:
+  - Default timeout: 10 minutes (600 seconds) per tool
+  - Configurable via data/settings.json or timeout_manager.py
+  - Set to 0 to disable auto-shutdown (keep containers running)
+
+  # View current timeouts
+  python -m src.tools.timeout_manager show
+
+  # Change timeout for specific tool
+  python -m src.tools.timeout_manager set office 900  # 15 minutes
+
+  # Change timeout for all tools
+  python -m src.tools.timeout_manager set all 1200    # 20 minutes
+
+  # Apply changes to systemd
+  python -m src.tools.timeout_manager apply
+  systemctl --user daemon-reload
+  python -m src.tools.systemd_manager restart office
         """
     )
 
