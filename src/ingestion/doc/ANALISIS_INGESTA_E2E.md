@@ -737,8 +737,8 @@ flowchart TB
 | Variable | Default | Ubicación | Impacto |
 |----------|---------|-----------|---------|
 | `RAG_PARALLEL_WORKERS` | 4 | pipeline.py:95 | Número de threads simultáneos |
-| `RAG_EMBED_BATCH_SIZE` | 32 | text_processor.py:268 | Tamaño de batch para embeddings |
-| `RAG_SPLIT_BATCH_SIZE` | 256 | text_processor.py:117 | Tamaño de batch para splitting |
+| `RAG_EMBED_BATCH_SIZE` | 16 | text_processor.py:268 | Tamaño de batch para embeddings |
+| `RAG_SPLIT_BATCH_SIZE` | 128 | text_processor.py:117 | Tamaño de batch para splitting |
 | `RAG_MAX_DOCS_PER_FILE` | 200,000 | text_processor.py:205 | Límite de documentos por archivo |
 | `RAG_EMBED_LOG_EVERY_N_CHUNKS` | 10 | text_processor.py:269 | Frecuencia de logs |
 | `WEAVIATE_TIMEOUT` | 30 | engine.py:61 | Timeout de Weaviate |

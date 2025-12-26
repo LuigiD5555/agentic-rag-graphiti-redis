@@ -98,7 +98,7 @@ def _split_documents_with_progress(
     returns a list of chunks. :contentReference[oaicite:1]{index=1}
 
     Environment variables:
-        RAG_SPLIT_BATCH_SIZE (default: 256)
+        RAG_SPLIT_BATCH_SIZE (default: 128)
         RAG_SPLIT_LOG_EVERY_SECONDS (default: 15)
 
     Args:
@@ -114,7 +114,7 @@ def _split_documents_with_progress(
     if total_docs == 0:
         return []
 
-    batch_size = _read_int_env("RAG_SPLIT_BATCH_SIZE", 256)
+    batch_size = _read_int_env("RAG_SPLIT_BATCH_SIZE", 128)
     if batch_size <= 0:
         raise ValueError("RAG_SPLIT_BATCH_SIZE must be a positive integer")
 
@@ -265,7 +265,7 @@ def process_text_document(pipeline: Any, loader: object) -> None:
     ingested_at = datetime.now(timezone.utc).isoformat()
 
     # Configure batching and logging
-    batch_size = int(os.getenv("RAG_EMBED_BATCH_SIZE", "32"))
+    batch_size = int(os.getenv("RAG_EMBED_BATCH_SIZE", "16"))
     log_every_n_chunks = int(os.getenv("RAG_EMBED_LOG_EVERY_N_CHUNKS", "10"))
     supports_batch = hasattr(pipeline.embedding_service, "generate_batch")
 

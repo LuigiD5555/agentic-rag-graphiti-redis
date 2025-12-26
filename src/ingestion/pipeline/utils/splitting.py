@@ -23,7 +23,7 @@ def prepare_embedding_segments(chunks: List[Document], limit: int) -> List[Tuple
     Returns:
         List of (text, metadata) tuples ready for embedding.
     """
-    from .text import effective_limit
+    from src.utils.text import effective_limit
 
     effective = effective_limit(limit)
     if effective <= 0:
