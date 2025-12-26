@@ -121,45 +121,29 @@ fi
 
 print_header "STEP 3: Configuring Systemd Sockets"
 
-# Check if systemd units are already installed
-if [ -f ~/.config/systemd/user/tool-office.socket ]; then
-    print_success "Systemd units are already installed"
+# Running inside a container? systemd --user sockets won't work here.
+if [ -f "/.dockerenv" ] || grep -qE "(podman|docker|container)" /proc/1/cgroup 2>/dev/null; then
+    print_warning "Detected container environment. systemd --user sockets must be configured on the host."
+    print_info "Run this on the host instead:"
+    print_info "  ./start-everything.sh"
+    print_info "Or use Python:"
+    print_info "  python -m src.tools.systemd_manager install"
+    print_info "  python -m src.tools.systemd_manager enable"
 else
-    print_step "Installing systemd units..."
-    cd tools
-    ./install-systemd.sh
-    cd ..
-fi
+    # Use Python module for systemd management
+    print_step "Installing and enabling systemd sockets..."
 
-# Enable sockets
-print_step "Enabling preprocessing sockets..."
-
-for tool in office archive; do
-    socket_name="tool-${tool}.socket"
-
-    if systemctl --user is-enabled "$socket_name" &>/dev/null; then
-        print_success "$socket_name is already enabled"
-    else
-        print_step "Enabling $socket_name..."
-        systemctl --user enable --now "$socket_name"
-        print_success "$socket_name enabled"
+    if ! python3 -m src.tools.systemd_manager install; then
+        print_error "Failed to install systemd units"
+        exit 1
     fi
-done
 
-# OCR (optional)
-if grep -q "ENABLE_OCR=true" .env 2>/dev/null; then
-    print_step "Enabling OCR (detected in .env)..."
-    systemctl --user enable --now tool-ocr.socket
-else
-    print_info "OCR disabled (ENABLE_OCR=false in .env)"
-fi
+    if ! python3 -m src.tools.systemd_manager enable; then
+        print_error "Failed to enable sockets"
+        exit 1
+    fi
 
-# GPU (optional)
-if grep -q "ENABLE_GPU_ACCELERATION=true" .env 2>/dev/null; then
-    print_step "Enabling GPU (detected in .env)..."
-    systemctl --user enable --now tool-gpu.socket
-else
-    print_info "GPU disabled (ENABLE_GPU_ACCELERATION=false in .env)"
+    print_success "Socket activation configured"
 fi
 
 # ============================================================================
@@ -302,7 +286,7 @@ echo "   python -m src.main"
 echo "   ${YELLOW}-> DOCX, ZIP, etc. will be processed automatically${NC}"
 echo ""
 echo -e "${CYAN}2. Run a query:${NC}"
-echo "   python -m src.rag.cli query \"your question here\""
+echo "   python -m src.query.cli \"your question here\""
 echo ""
 echo -e "${CYAN}3. View tool logs:${NC}"
 echo "   journalctl --user -u tool-office.service -f"
