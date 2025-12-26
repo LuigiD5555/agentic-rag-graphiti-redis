@@ -1,0 +1,16 @@
+[Unit]
+Description=RAG Memory Artifacts Cleanup Timer
+Documentation=file://%h/Documents/Documents/Programacion/Proyectos_Programacion/RAG Project/rag-agentic-graphiti/docs/MEMORY_SYSTEM_IMPLEMENTATION_PLAN.md
+
+[Timer]
+# Run every 6 hours (at 00:00, 06:00, 12:00, 18:00)
+OnCalendar=*-*-* 00,06,12,18:00:00
+
+# If system was off, run on next boot
+Persistent=true
+
+# Random delay to avoid load spikes
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=RAG Memory Artifacts Cleanup
+Documentation=file://%h/Documents/Documents/Programacion/Proyectos_Programacion/RAG Project/rag-agentic-graphiti/docs/MEMORY_SYSTEM_IMPLEMENTATION_PLAN.md
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Documents/Documents/Programacion/Proyectos_Programacion/RAG Project/rag-agentic-graphiti
+ExecStart=%h/Documents/Documents/Programacion/Proyectos_Programacion/RAG Project/rag-agentic-graphiti/.venv/bin/python -m src.memory.artifacts.cleanup
+Environment="PYTHONPATH=%h/Documents/Documents/Programacion/Proyectos_Programacion/RAG Project/rag-agentic-graphiti"
+
+# Logs
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rag-memory-cleanup
+
+[Install]
+WantedBy=default.target
