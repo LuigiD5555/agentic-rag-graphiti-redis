@@ -116,6 +116,7 @@ class AppConfig(BaseSettings):
     ])
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 50
+    INGEST_STREAMING: bool = True
     DOCS_ENABLED_PATHS: tuple = ()
     DUPLICATES_DOC_EXCEPTIONS: tuple = ("__init__.py",)
     DOCS_EXCLUDE_FILE: str = ""

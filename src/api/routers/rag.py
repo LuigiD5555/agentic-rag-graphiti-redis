@@ -67,6 +67,11 @@ async def rag_ingest(
         dry_run=bool(request.dry_run),
         per_file_mode=bool(request.per_file),
         maximum_files=int(request.max_files or 0),
+        stream_ingest=(
+            bool(request.streaming)
+            if request.streaming is not None
+            else True
+        ),
         scan_progress_every=int(request.scan_progress_every or 0),
     )
     report = ingestion.run_with_report(options)

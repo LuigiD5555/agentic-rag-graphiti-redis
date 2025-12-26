@@ -67,6 +67,11 @@ def build_ingestion_options_from_args(args: argparse.Namespace, config: object) 
         dry_run=bool(getattr(args, "dry_run", False)),
         per_file_mode=bool(getattr(args, "per_file", False)),
         maximum_files=int(getattr(args, "max_files", 0) or 0),
+        stream_ingest=(
+            bool(getattr(args, "streaming", False))
+            if getattr(args, "streaming", None) is not None
+            else bool(getattr(config, "INGEST_STREAMING", True))
+        ),
         log_level_name=(getattr(args, "log_level", None) or getattr(config, "INGEST_LOG_LEVEL", "INFO") or "INFO"),
         scan_progress_every=int(getattr(args, "scan_progress", 0) or 0),
     )

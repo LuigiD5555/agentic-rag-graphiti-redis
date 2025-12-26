@@ -245,7 +245,8 @@ def process_candidate_file(
 
         # File was converted (e.g., DOCX -> TXT) -> use preprocessed version
         full_path = str(processed_path)
-        logger.info("Using preprocessed file: %s", os.path.basename(full_path))
+        if str(file_path) != full_path:
+            logger.info("Using preprocessed file: %s", os.path.basename(full_path))
 
         # Update file_info with preprocessed file metadata
         file_info = gather_file_metadata(full_path)

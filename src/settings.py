@@ -135,6 +135,7 @@ DOCS_PATHS = [
 ]
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
+INGEST_STREAMING = True
 DOCS_ENABLED_PATHS = ()
 DUPLICATES_DOC_EXCEPTIONS = ("__init__.py",)  # Paths that should NOT be deduplicated
 DOCS_EXCLUDE_FILE = ""

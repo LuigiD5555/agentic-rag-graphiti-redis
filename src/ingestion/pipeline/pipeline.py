@@ -94,6 +94,23 @@ class IngestionPipeline:
         # Max parallel workers (default: 4, set to 1 to disable parallelization)
         self._max_workers = max(1, int(os.environ.get("RAG_PARALLEL_WORKERS", "4")))
 
+    def start_ingestion_run(self) -> None:
+        """Reset per-run state before ingesting."""
+        self._observed_files = set()
+        self._observed_directories = set()
+        self._existing_hash_cache = set()
+        self._file_context = {
+            "file_index": None,
+            "total_files": None,
+            "directory_path": None,
+        }
+        self._current_file_info = None
+        self.progress.reset()
+
+    def finish_ingestion_run(self) -> None:
+        """Finalize the ingestion run and persist catalog state."""
+        finalize_ingestion_run(self)
+
     @classmethod
     def from_options(
         cls,
@@ -145,13 +162,84 @@ class IngestionPipeline:
             logger.error(error_msg)
             return (full_path, False, str(e))
 
+    def ingest_files(
+        self,
+        file_paths: List[str],
+        *,
+        directory_path: Optional[str] = None,
+        per_file: bool = False,
+    ) -> tuple[int, int]:
+        """Ingest a list of file paths without rescanning the filesystem."""
+        if not file_paths:
+            return 0, 0
+
+        total_files = len(file_paths)
+        ingested = 0
+        failed = 0
+
+        if per_file or self._max_workers <= 1:
+            for idx, full_path in enumerate(file_paths, start=1):
+                dir_path = directory_path or os.path.dirname(full_path)
+                _, success, _ = self._process_single_file_safe(
+                    full_path,
+                    idx,
+                    total_files,
+                    dir_path,
+                )
+                if success:
+                    ingested += 1
+                else:
+                    failed += 1
+            return ingested, failed
+
+        bar: ProgressBar | None = None
+        if total_files > 0:
+            bar = ProgressBar(
+                total=total_files,
+                stream=sys.stdout,
+                prefix="Ingest",
+                rewrite=None,
+                min_interval_seconds=1.0,
+            )
+
+        try:
+            completed_count = 0
+            with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+                future_to_file = {
+                    executor.submit(
+                        self._process_single_file_safe,
+                        full_path,
+                        idx + 1,
+                        total_files,
+                        directory_path or os.path.dirname(full_path),
+                    ): (full_path, idx + 1)
+                    for idx, full_path in enumerate(file_paths)
+                }
+
+                for future in as_completed(future_to_file):
+                    file_path, _ = future_to_file[future]
+                    _, success, _ = future.result()
+                    completed_count += 1
+                    if success:
+                        ingested += 1
+                    else:
+                        failed += 1
+
+                    if bar:
+                        bar.update(
+                            completed_count,
+                            message=os.path.basename(file_path) or file_path,
+                        )
+        finally:
+            if bar:
+                bar.finish(message="done")
+
+        return ingested, failed
+
     @logged("Ingesting candidate paths")
     @timed()
     def ingest_paths(self, paths: List[str]) -> None:
-        self._observed_files = set()
-        self._observed_directories = set()
-        self._existing_hash_cache = set()
-        self.progress.reset()
+        self.start_ingestion_run()
 
         # Collect all files to process from all paths
         all_files_to_process: List[tuple[str, str]] = []  # (full_path, directory_path)
@@ -249,4 +337,4 @@ class IngestionPipeline:
         finally:
             if bar:
                 bar.finish(message="done")
-            finalize_ingestion_run(self)
+            self.finish_ingestion_run()

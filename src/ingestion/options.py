@@ -43,6 +43,7 @@ class IngestionOptions:
         dry_run: Only list candidates; do not ingest.
         per_file_mode: Ingest one file at a time (more logs, slower) vs batch.
         maximum_files: Cap number of files to ingest (0 = no limit).
+        stream_ingest: Ingest while scanning instead of waiting for discovery to finish.
         log_level_name: Logging level name.
         scan_progress_every: Scan progress cadence (0 disables).
     """
@@ -67,6 +68,7 @@ class IngestionOptions:
     dry_run: bool = False
     per_file_mode: bool = False
     maximum_files: int = 0
+    stream_ingest: bool = True
     log_level_name: str = "INFO"
     scan_progress_every: int = 0
 

@@ -70,6 +70,19 @@ class IngestionCLI:
             help="Ingest one file at a time (more logs, slower). Default is batch.",
         )
         parser.add_argument(
+            "--streaming",
+            dest="streaming",
+            action="store_true",
+            default=None,
+            help="Start ingestion while scanning (default: uses INGEST_STREAMING from .env).",
+        )
+        parser.add_argument(
+            "--no-streaming",
+            dest="streaming",
+            action="store_false",
+            help="Wait for discovery to finish before ingesting.",
+        )
+        parser.add_argument(
             "--max-files",
             type=int,
             default=0,

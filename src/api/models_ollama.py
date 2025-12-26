@@ -108,6 +108,7 @@ class RagIngestRequest(BaseModel):
     dry_run: Optional[bool] = False
     per_file: Optional[bool] = False
     max_files: Optional[int] = 0
+    streaming: Optional[bool] = None
     allowed_extensions: Optional[List[str]] = None
     excluded_dirs: Optional[List[str]] = None
     excluded_globs: Optional[List[str]] = None
@@ -147,4 +148,3 @@ class RagFileLocationResponse(BaseModel):
 class RagFileMetadataResponse(BaseModel):
     file_id: str
     metadata: Optional[Dict[str, Any]] = None
-

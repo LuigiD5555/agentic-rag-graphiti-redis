@@ -29,6 +29,7 @@ class DirectoryScanner:
             'paths_skipped_excluded': 0,
             'cache_hits_tree': 0
         }
+        self._last_dirs_scanned = 0
 
     def scan_directory(
         self,
@@ -170,6 +171,139 @@ class DirectoryScanner:
 
         return dirs_scanned
 
+    def scan_directory_stream(
+        self,
+        root: str,
+        current_path: str,
+        filters: list,
+        excluded_globs: Set[str],
+        follow_symlinks: bool,
+        progress_every: int,
+        options_hash: str,
+    ):
+        """
+        Scan directory recursively and yield (dirpath, files) per directory.
+
+        Yields:
+            Tuple of (directory_path, [file_paths]) for each visited directory.
+        """
+        stack = [(current_path, "")]
+        dirs_scanned = 0
+        accepted_files = 0
+        last_progress = time.monotonic()
+
+        try:
+            while stack:
+                dirpath, rel_dirpath = stack.pop()
+
+                # OPTIMIZATION 1: Check if already visited using path tree (O(k) lookup)
+                if self.path_tree.is_visited(dirpath):
+                    self._scan_stats['paths_skipped_visited'] += 1
+                    log.debug("SKIP already visited: %s", dirpath)
+                    continue
+
+                # OPTIMIZATION 2: Check tree-based exclusion first (O(k) vs O(n*m) for patterns)
+                if rel_dirpath and self.path_tree.is_path_excluded(rel_dirpath):
+                    self._scan_stats['paths_skipped_excluded'] += 1
+                    log.debug("SKIP tree exclusion for: %s", dirpath)
+                    continue
+
+                # OPTIMIZATION 3: Check cache for this specific directory
+                cached = self.cache_manager.is_dir_unchanged(dirpath, options_hash)
+                if cached:
+                    self.cache_manager.record_hit()
+                    self._scan_stats['cache_hits_tree'] += 1
+                    dirs_scanned += 1
+                    self.path_tree.mark_visited(dirpath)
+                    accepted_files += len(cached.files)
+                    yield dirpath, list(cached.files)
+                    continue
+
+                self.cache_manager.record_miss()
+                dirs_scanned += 1
+
+                # Verify if current directory is excluded by patterns (fallback for dynamic patterns)
+                if rel_dirpath and self.pattern_matcher.matches_any_glob(
+                    rel_dirpath, excluded_globs, absolute_path=dirpath
+                ):
+                    # Add to tree for future quick lookups
+                    self.path_tree.add_path(rel_dirpath, is_excluded=True)
+                    self._scan_stats['paths_skipped_excluded'] += 1
+                    log.debug("SKIP pattern exclusion for: %s (added to tree)", dirpath)
+                    continue
+
+                # Optimized logging
+                now = time.monotonic()
+                should_log = (progress_every and dirs_scanned % progress_every == 0) or \
+                    (not progress_every and (now - last_progress) >= 2.0)
+
+                if should_log:
+                    log.info(
+                        "Scanning... visited=%d dir(s), accepted=%d file(s), current=%s",
+                        dirs_scanned, accepted_files, dirpath
+                    )
+                    last_progress = now
+
+                dir_files: list[str] = []
+
+                try:
+                    # scandir is faster than listdir + multiple stat calls
+                    with os.scandir(dirpath) as entries:
+                        dirs_to_add = []
+
+                        for entry in entries:
+                            try:
+                                is_dir = entry.is_dir(follow_symlinks=follow_symlinks)
+
+                                if is_dir:
+                                    # Calculate the new relative path for the subdirectory
+                                    new_rel = entry.name if not rel_dirpath else f"{rel_dirpath}/{entry.name}"
+
+                                    # Check if this subdirectory matches any exclusion patterns
+                                    if self.pattern_matcher.matches_any_glob(
+                                        new_rel, excluded_globs, absolute_path=entry.path
+                                    ):
+                                        log.debug("Skipping excluded subdirectory before scanning: %s", entry.path)
+                                        continue
+
+                                    # Apply other filters (like excluded_dirs)
+                                    if all(s.allow_dir(rel_dirpath, entry.name, entry.path) for s in filters):
+                                        dirs_to_add.append((entry.path, new_rel))
+                                else:
+                                    # Process file
+                                    relative_file = entry.name if not rel_dirpath else f"{rel_dirpath}/{entry.name}"
+
+                                    if self.pattern_matcher.matches_any_glob(
+                                        relative_file, excluded_globs, absolute_path=entry.path
+                                    ):
+                                        continue
+
+                                    if all(s.allow_file(rel_dirpath, entry.name, entry.path) for s in filters):
+                                        dir_files.append(entry.path)
+
+                            except (OSError, PermissionError) as e:
+                                log.debug("Error accessing %s: %s", entry.path, e)
+                                continue
+
+                        # Add directories to stack (reverse order to maintain alphabetical order)
+                        stack.extend(reversed(dirs_to_add))
+
+                    # Cache this directory's results
+                    self.cache_manager.cache_directory(dirpath, dir_files, options_hash)
+
+                    # Mark as visited in path tree
+                    self.path_tree.mark_visited(dirpath)
+
+                    accepted_files += len(dir_files)
+                    yield dirpath, dir_files
+
+                except (OSError, PermissionError) as e:
+                    log.warning("Cannot access directory %s: %s", dirpath, e)
+                    continue
+
+        finally:
+            self._last_dirs_scanned = dirs_scanned
+
     def get_scan_stats(self) -> dict:
         """Get scanning statistics including path tree optimizations."""
         stats = self._scan_stats.copy()
@@ -184,6 +318,11 @@ class DirectoryScanner:
             'cache_hits_tree': 0
         }
         self.path_tree.clear_visited()
+        self._last_dirs_scanned = 0
+
+    @property
+    def last_dirs_scanned(self) -> int:
+        return self._last_dirs_scanned
 
 
 __all__ = ["DirectoryScanner"]

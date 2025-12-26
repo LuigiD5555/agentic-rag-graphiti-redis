@@ -7,6 +7,7 @@ from src.ingestion.discovery import FileDiscoveryService
 from src.storage.cache.ingestion import IngestionCacheManager
 from src.ingestion.options import DiscoveryOptions, IngestionOptions, PipelineOptions
 from src.ingestion.pipeline import IngestionPipeline
+from src.ingestion.pipeline.state_helpers import record_directory_listing
 from src.providers.factory import ProviderFactory
 from src.rag.audit import get_logger
 from src.rag.conf import Config
@@ -38,6 +39,20 @@ class IngestionOrchestrator:
             raise FileNotFoundError("None of the provided root paths exist.")
 
         self._log_discovery_intro(options)
+        if options.stream_ingest:
+            if options.dry_run:
+                candidates = self._stream_discover(options)
+                log.info("Visited directories: %d", self._discovery.last_visited_dirs)
+                log.info("Candidate files found: %d", candidates)
+                return
+
+            pipeline = self._build_pipeline()
+            ingested, failed, candidates = self._stream_ingest(options, pipeline)
+            log.info("Visited directories: %d", self._discovery.last_visited_dirs)
+            log.info("Candidate files found: %d", candidates)
+            self._report_final(ingested, failed)
+            return
+
         candidates, visited_dirs = self._discover_files(options)
         candidates = sort_paths_by_size_desc(candidates)
         candidates = self._cap_candidates(candidates, options.maximum_files)
@@ -61,6 +76,30 @@ class IngestionOrchestrator:
             raise FileNotFoundError("None of the provided root paths exist.")
 
         self._log_discovery_intro(options)
+        if options.stream_ingest:
+            if options.dry_run:
+                candidates = self._stream_discover(options)
+                log.info("Visited directories: %d", self._discovery.last_visited_dirs)
+                log.info("Candidate files found: %d", candidates)
+                return {
+                    "status": "dry_run",
+                    "ingested": 0,
+                    "failed": 0,
+                    "candidates": candidates,
+                }
+
+            pipeline = self._build_pipeline()
+            ingested, failed, candidates = self._stream_ingest(options, pipeline)
+            log.info("Visited directories: %d", self._discovery.last_visited_dirs)
+            log.info("Candidate files found: %d", candidates)
+            self._report_final(ingested, failed)
+            return {
+                "status": "ok",
+                "ingested": ingested,
+                "failed": failed,
+                "candidates": candidates,
+            }
+
         candidates, visited_dirs = self._discover_files(options)
         candidates = sort_paths_by_size_desc(candidates)
         candidates = self._cap_candidates(candidates, options.maximum_files)
@@ -114,6 +153,43 @@ class IngestionOrchestrator:
         )
         return self._discovery.discover(disc_opts)
 
+    def _stream_discover(self, options: IngestionOptions) -> int:
+        disc_opts = DiscoveryOptions(
+            roots=options.root_paths,
+            enabled_paths=options.enabled_paths,
+            allowed_exts=options.allowed_extensions,
+            excluded_dirs=options.excluded_directory_names,
+            excluded_globs=options.excluded_path_globs,
+            follow_symlinks=options.follow_symbolic_links,
+            progress_every=options.scan_progress_every,
+        )
+        max_files = options.maximum_files
+        candidates = 0
+        seen_files = set()
+        stream = self._discovery.discover_stream(disc_opts)
+        try:
+            for _, files in stream:
+                if not files:
+                    continue
+                new_files = [path for path in files if path not in seen_files]
+                if not new_files:
+                    continue
+                if max_files > 0:
+                    remaining = max_files - candidates
+                    if remaining <= 0:
+                        break
+                    new_files = new_files[:remaining]
+                for path in new_files:
+                    print(path)
+                seen_files.update(new_files)
+                candidates += len(new_files)
+                if max_files > 0 and candidates >= max_files:
+                    break
+        finally:
+            stream.close()
+        log.info("Dry-run complete. No ingestion performed.")
+        return candidates
+
     @staticmethod
     def _cap_candidates(candidates: List[str], maximum: int) -> List[str]:
         if not maximum or maximum <= 0:
@@ -150,6 +226,58 @@ class IngestionOrchestrator:
             options=pipeline_options,
             cache_manager=self._cache_manager,
         )
+
+    def _stream_ingest(self, options: IngestionOptions, pipeline: IngestionPipeline):
+        disc_opts = DiscoveryOptions(
+            roots=options.root_paths,
+            enabled_paths=options.enabled_paths,
+            allowed_exts=options.allowed_extensions,
+            excluded_dirs=options.excluded_directory_names,
+            excluded_globs=options.excluded_path_globs,
+            follow_symlinks=options.follow_symbolic_links,
+            progress_every=options.scan_progress_every,
+        )
+        ingested = 0
+        failed = 0
+        candidates = 0
+        max_files = options.maximum_files
+        seen_files = set()
+        stream = self._discovery.discover_stream(disc_opts)
+        pipeline.start_ingestion_run()
+        try:
+            for directory, files in stream:
+                record_directory_listing(pipeline, directory, files)
+                if not files:
+                    continue
+
+                new_files = [path for path in files if path not in seen_files]
+                if not new_files:
+                    continue
+                if max_files > 0:
+                    remaining = max_files - candidates
+                    if remaining <= 0:
+                        break
+                    new_files = new_files[:remaining]
+                if not new_files:
+                    continue
+
+                new_files = sort_paths_by_size_desc(new_files)
+                seen_files.update(new_files)
+                candidates += len(new_files)
+                batch_ingested, batch_failed = pipeline.ingest_files(
+                    new_files,
+                    directory_path=directory,
+                    per_file=options.per_file_mode,
+                )
+                ingested += batch_ingested
+                failed += batch_failed
+
+                if max_files > 0 and candidates >= max_files:
+                    break
+        finally:
+            stream.close()
+            pipeline.finish_ingestion_run()
+        return ingested, failed, candidates
 
     @staticmethod
     def _ingest(candidates: List[str], pipeline: IngestionPipeline, per_file: bool):
