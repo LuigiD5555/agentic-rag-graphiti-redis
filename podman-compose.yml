@@ -35,8 +35,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${WEAVIATE_CPUS:-2.0}"
-          memory: "${WEAVIATE_MEMORY:-4g}"
+          cpus: "${WEAVIATE_CPUS:-4.0}"
+          memory: "${WEAVIATE_MEMORY:-8g}"
 
   neo4j:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_neo4j_1"
