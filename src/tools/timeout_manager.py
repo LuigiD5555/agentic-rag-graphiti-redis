@@ -239,8 +239,14 @@ class TimeoutManager:
             # Find and update RuntimeMaxSec line
             updated = False
             new_lines = []
+            skip_next = 0  # Counter to skip comment lines
 
             for i, line in enumerate(lines):
+                # Skip lines that are part of the timeout comment block
+                if skip_next > 0:
+                    skip_next -= 1
+                    continue
+
                 # If we find RuntimeMaxSec, update it
                 if line.strip().startswith('RuntimeMaxSec='):
                     if timeout > 0:
@@ -249,15 +255,23 @@ class TimeoutManager:
                     # If timeout is 0, skip the line (remove it)
                     continue
 
-                # If we find the comment before RuntimeMaxSec, update/remove based on timeout
+                # If we find the comment before RuntimeMaxSec, handle the entire block
                 if '# Auto-shutdown after idle timeout' in line:
                     if timeout > 0:
-                        new_lines.append(line)
-                        # Check if next lines are the comment block
-                        if i + 1 < len(lines) and '# Service stops automatically' in lines[i + 1]:
-                            new_lines.append(lines[i + 1])
-                            continue
-                    # If timeout is 0, skip all comment lines
+                        # Keep the comment block (only add once, skip duplicates)
+                        new_lines.append('# Auto-shutdown after idle timeout (default 10 minutes)\n')
+                        new_lines.append('# Service stops automatically, socket activation restarts it on next request\n')
+                        # Skip all duplicate comment lines
+                        j = i + 1
+                        while j < len(lines) and '# Service stops automatically' in lines[j]:
+                            j += 1
+                        skip_next = j - i - 1
+                    else:
+                        # Skip the entire comment block if timeout is 0
+                        j = i + 1
+                        while j < len(lines) and ('# Service stops automatically' in lines[j] or lines[j].strip().startswith('#')):
+                            j += 1
+                        skip_next = j - i - 1
                     continue
 
                 new_lines.append(line)
