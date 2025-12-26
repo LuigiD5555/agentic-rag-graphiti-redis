@@ -13,6 +13,7 @@ from src.api.routers.ollama import get_rag_orchestrator as ollama_get_rag
 from src.api.routers.ollama import get_embedding_service as ollama_get_embedding
 from src.api.routers.rag import get_rag_orchestrator as rag_get_rag
 from src.api.routers.rag import get_ingestion_orchestrator
+from src.api.middleware.thread_manager import ThreadManagerMiddleware
 from src.rag.engine import AppConfig
 from src.rag.retrieval import WeaviateRetriever
 from src.rag.chat import LMStudioChatService
@@ -20,6 +21,7 @@ from src.rag.pipeline.rag_orchestrator import RAGOrchestrator
 from src.rag.embeddings_factory import get_embedding_service as create_embedding_service
 from src.rag.conf import Config
 from src.ingestion.orchestrator import IngestionOrchestrator
+from src.memory.core.checkpointer import create_checkpointer
 
 
 # Configure logging
@@ -125,6 +127,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add Thread Manager middleware (for memory system)
+app.add_middleware(ThreadManagerMiddleware)
 
 
 # Dependency overrides

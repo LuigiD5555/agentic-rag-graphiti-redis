@@ -166,3 +166,84 @@ def _extract_question_from_messages(messages: List[OllamaMessage]) -> str:
         if message.role == "user":
             return message.content
     return "\n".join(msg.content for msg in messages)
+
+
+
+# Memory-aware chat endpoint
+@router.post("/chat/memory", response_model=OllamaChatResponse)
+async def chat_with_memory(
+    request: OllamaChatRequest,
+    thread_id: str = Depends(get_thread_id),
+    user_id: str = Depends(get_user_id),
+    rag: RAGOrchestrator = Depends(get_rag_orchestrator),
+) -> OllamaChatResponse:
+    """Chat endpoint with conversation memory (experimental).
+    
+    Uses thread_id from X-Thread-ID header to maintain conversation state.
+    State includes message history, tool memory, and compressed summaries.
+    """
+    from src.api.middleware.thread_manager import get_thread_id, get_user_id
+    from src.memory.helpers import (
+        load_or_create_state,
+        save_state,
+        should_compress_state,
+        compress_and_update_state,
+        build_llm_context,
+    )
+    
+    if request.stream:
+        raise HTTPException(status_code=501, detail="Streaming not supported with memory")
+    
+    # Load or create conversation state
+    state = load_or_create_state(user_id, thread_id)
+    
+    # Extract question
+    question = _extract_question_from_messages(request.messages)
+    
+    # RAG options
+    rag_options = request.rag
+    options = _resolve_generation_params(request.options)
+    use_rag = True if rag_options is None or rag_options.enabled is None else rag_options.enabled
+    filters = None if rag_options is None else rag_options.filters
+    
+    # Perform RAG if enabled
+    rag_results = None
+    if use_rag:
+        result = rag.query(
+            question=question,
+            top_k=options["top_k"],
+            filters=filters,
+            temperature=options["temperature"],
+            max_tokens=options["max_tokens"],
+        )
+        answer = result["answer"]
+        rag_results = result.get("sources", [])
+    else:
+        # Build context from memory
+        context = build_llm_context(state, question, rag_results)
+        
+        # Call LLM directly
+        answer = rag.chat_service.chat(
+            messages=[{"role": "user", "content": context}],
+            temperature=options["temperature"],
+            max_tokens=options["max_tokens"],
+        )
+    
+    # Update state with new messages
+    state["messages"].append({"role": "user", "content": question})
+    state["messages"].append({"role": "assistant", "content": answer})
+    
+    # Compress if needed
+    if should_compress_state(state):
+        state = compress_and_update_state(state)
+    
+    # Save state
+    save_state(state, thread_id)
+    
+    # Return response
+    return OllamaChatResponse(
+        model=request.model,
+        message=OllamaMessage(role="assistant", content=answer),
+        sources=rag_results if use_rag else None,
+    )
+
