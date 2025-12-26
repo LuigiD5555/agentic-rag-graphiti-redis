@@ -149,29 +149,43 @@ else
 fi
 
 # ============================================================================
-# STEP 4: START CORE SERVICES
+# STEP 4: BUILD AND START ALL SERVICES
 # ============================================================================
 
-print_header "STEP 4: Starting Core Services (Weaviate, Neo4j, Redis)"
+print_header "STEP 4: Building and Starting All Services"
 
 print_step "Checking if services are already running..."
 
-if podman ps | grep -q "weaviate\|neo4j\|redis"; then
-    print_success "Core services are already running"
-    read -p "Restart services? (y/N): " restart
+if podman ps | grep -q "weaviate\|neo4j\|redis\|rag-api\|open-webui"; then
+    print_success "Services are already running"
+    read -p "Rebuild and restart all services? (y/N): " restart
     if [[ "$restart" =~ ^[yY]$ ]]; then
-        print_step "Restarting services..."
+        print_step "Stopping all services..."
         podman-compose down
+
+        print_step "Building custom images (rag-api)..."
+        podman-compose build rag-api
+
+        print_step "Starting all services..."
         podman-compose up -d
+
+        print_step "Waiting for services to initialize..."
+        sleep 10
     else
         print_info "Using existing services"
     fi
 else
-    print_step "Starting core services..."
+    print_step "Building custom images (rag-api)..."
+    if ! podman-compose build rag-api; then
+        print_error "Failed to build rag-api image"
+        exit 1
+    fi
+
+    print_step "Starting all services (Weaviate, Neo4j, Redis, RAG API, Open WebUI)..."
     podman-compose up -d
 
-    print_step "Waiting for services to be ready..."
-    sleep 5
+    print_step "Waiting for services to initialize..."
+    sleep 10
 fi
 
 # ============================================================================
@@ -211,9 +225,11 @@ check_service() {
 }
 
 print_info "Waiting up to ${SERVICE_WAIT_SECONDS}s for services..."
-check_service "Weaviate" "8080"
-check_service "Neo4j  " "7474"
-check_service "Redis  " "6379" "no" || print_info "Redis has no HTTP endpoint (normal)"
+check_service "Weaviate  " "8080"
+check_service "Neo4j     " "7474"
+check_service "Redis     " "6379" "no" || print_info "Redis has no HTTP endpoint (normal)"
+check_service "RAG API   " "8000"
+check_service "Open WebUI" "5555"
 
 # Verify sockets
 print_step "Verifying preprocessing sockets..."
@@ -264,14 +280,23 @@ echo -e "${GREEN}${BOLD}OK: EVERYTHING IS CONFIGURED AND RUNNING${NC}"
 echo ""
 echo "==================================================================="
 echo ""
-echo -e "${BOLD}Core Services:${NC}"
-echo "  - Weaviate: http://localhost:8080"
-echo "  - Neo4j:    http://localhost:7474 (user: neo4j)"
-echo "  - Redis:    localhost:6379"
+echo -e "${BOLD}🌐 Web Interfaces:${NC}"
+echo -e "  ${GREEN}${BOLD}➜ Open WebUI:${NC}  http://localhost:5555"
+echo "    └─ ChatGPT-like interface for your RAG system"
+echo ""
+echo -e "  ${CYAN}➜ RAG API:${NC}     http://localhost:8000"
+echo "    ├─ Docs:      http://localhost:8000/docs"
+echo "    ├─ Health:    http://localhost:8000/health"
+echo "    └─ Ollama-compatible endpoints at /api/*"
+echo ""
+echo -e "${BOLD}Database Services:${NC}"
+echo "  - Weaviate:    http://localhost:8080 (Vector DB)"
+echo "  - Neo4j:       http://localhost:7474 (Graph DB, user: neo4j)"
+echo "  - Redis:       localhost:6379 (Cache)"
 echo ""
 echo -e "${BOLD}Preprocessing Tools (Socket-Activated):${NC}"
-echo "  - tool-office:  http://127.0.0.1:9102 (DOCX/XLSX/PPTX -> TXT)"
-echo "  - tool-archive: http://127.0.0.1:9101 (ZIP/7z/tar)"
+echo "  - tool-office:  http://127.0.0.1:9102 (DOCX/XLSX/PPTX → TXT)"
+echo "  - tool-archive: http://127.0.0.1:9101 (ZIP/7z/tar extraction)"
 if grep -q "ENABLE_OCR=true" .env 2>/dev/null; then
 echo "  - tool-ocr:     http://127.0.0.1:9103 (OCR with Tesseract)"
 fi
@@ -281,49 +306,48 @@ fi
 echo ""
 echo "==================================================================="
 echo ""
-echo -e "${BOLD}Useful Commands:${NC}"
+echo -e "${BOLD}Quick Start:${NC}"
 echo ""
-echo -e "${CYAN}1. Run ingestion:${NC}"
+echo -e "${CYAN}➜ Use the Web Interface (Recommended):${NC}"
+echo -e "   Open: ${GREEN}${BOLD}http://localhost:5555${NC}"
+echo "   - Create an account (local only, no data leaves your machine)"
+echo "   - Start chatting with your RAG system"
+echo "   - Upload documents, ask questions, view sources"
+echo ""
+echo -e "${CYAN}➜ Use the API directly:${NC}"
+echo "   curl -X POST http://localhost:8000/api/chat \\"
+echo "     -H \"Content-Type: application/json\" \\"
+echo "     -d '{\"model\": \"rag\", \"messages\": [{\"role\": \"user\", \"content\": \"hello\"}]}'"
+echo ""
+echo -e "${CYAN}➜ Run ingestion (Terminal):${NC}"
 echo "   python -m src.main"
-echo "   ${YELLOW}-> DOCX, ZIP, etc. will be processed automatically${NC}"
+echo "   ${YELLOW}→ DOCX, ZIP, etc. will be processed automatically${NC}"
 echo ""
-echo -e "${CYAN}2. Run a query:${NC}"
+echo -e "${CYAN}➜ Run a query (Terminal):${NC}"
 echo "   python -m src.query.cli \"your question here\""
 echo ""
-echo -e "${CYAN}3. View tool logs:${NC}"
+echo "==================================================================="
+echo ""
+echo -e "${BOLD}Monitoring & Management:${NC}"
+echo ""
+echo -e "${CYAN}View service status:${NC}"
+echo "   podman ps                                    # All running containers"
+echo "   podman-compose logs -f rag-api               # RAG API logs"
+echo "   podman-compose logs -f open-webui            # Web interface logs"
+echo "   systemctl --user list-sockets | grep tool-   # Tool sockets"
+echo ""
+echo -e "${CYAN}View tool logs:${NC}"
 echo "   journalctl --user -u tool-office.service -f"
 echo "   journalctl --user -u tool-archive.service -f"
 echo ""
-echo -e "${CYAN}4. View service status:${NC}"
-echo "   podman ps                                    # Core services"
-echo "   systemctl --user list-sockets | grep tool-  # Tool sockets"
-echo ""
-echo -e "${CYAN}5. Stop everything:${NC}"
-echo "   podman-compose down                          # Core services"
+echo -e "${CYAN}Stop everything:${NC}"
+echo "   podman-compose down                          # All services"
 echo "   systemctl --user stop tool-*.service         # Tools (optional)"
 echo ""
 echo "==================================================================="
 echo ""
-echo -e "${BOLD}How Automatic Preprocessing Works:${NC}"
+echo -e "${GREEN}${BOLD}✓ System is ready to use!${NC}"
 echo ""
-echo "1. You run: ${CYAN}python -m src.main${NC}"
-echo ""
-echo "2. The pipeline discovers a file ${YELLOW}report.docx${NC}"
-echo ""
-echo "3. ${GREEN}Automatically:${NC}"
-echo "   - Detects an Office file"
-echo "   - Sends HTTP request to tool-office (127.0.0.1:9102)"
-echo "   - systemd detects the socket request"
-echo "   - systemd starts the container automatically (5-10s first time)"
-echo "   - Container converts DOCX -> TXT"
-echo "   - Pipeline processes the converted TXT"
-echo ""
-echo "4. ${CYAN}Next Office files:${NC} < 1 second (container already running)"
-echo ""
-echo "==================================================================="
-echo ""
-echo -e "${GREEN}${BOLD}Ready to use!${NC}"
-echo ""
-echo "Run ingestion now:"
-echo -e "  ${CYAN}python -m src.main${NC}"
+echo -e "Start using your RAG system now:"
+echo -e "  ${GREEN}${BOLD}→ Open http://localhost:5555 in your browser${NC}"
 echo ""

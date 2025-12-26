@@ -145,15 +145,18 @@ services:
       LMSTUDIO_PORT: "${HOST_LMSTUDIO_HTTP_PORT:-1234}"
       PROVIDER: "${PROVIDER:-lmstudio}"
 
+      # RAG API port
+      API_PORT: "${HOST_RAG_API_PORT:-8000}"
+
     volumes:
       # Mount source for hot-reload during development
       - ./src:/app/src:ro,Z
       - ./tests:/app/tests:ro,Z
       - ${HOST_DATA_DIR:-./data}:/app/data:Z
 
-    # API binds to 0.0.0.0:5555 inside container, accessible at 127.0.0.1:5555 on host via host network
+    # API binds to 0.0.0.0:8000 inside container, accessible at 127.0.0.1:8000 on host via host network
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://127.0.0.1:5555/health')"]
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://127.0.0.1:${HOST_RAG_API_PORT:-8000}/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -167,6 +170,42 @@ services:
         limits:
           cpus: "${API_CPUS:-1.0}"
           memory: "${API_MEMORY:-1g}"
+
+  open-webui:
+    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_open-webui_1"
+    image: "ghcr.io/open-webui/open-webui:${OPEN_WEBUI_IMAGE_TAG:-main}"
+    restart: unless-stopped
+    logging:
+      driver: journald
+    depends_on:
+      - rag-api
+    ports:
+      - "127.0.0.1:${HOST_OPEN_WEBUI_PORT:-5555}:8080"
+    environment:
+      # Point to RAG API (using host network)
+      OLLAMA_BASE_URL: "http://127.0.0.1:${HOST_RAG_API_PORT:-8000}"
+      WEBUI_SECRET_KEY: "${WEBUI_SECRET_KEY:-change-this-secret-in-production}"
+      # Disable internal Ollama since we use external API
+      ENABLE_OLLAMA_API: "false"
+      # Optional: Enable other features
+      ENABLE_RAG_WEB_SEARCH: "false"
+      ENABLE_IMAGE_GENERATION: "false"
+    volumes:
+      - ${HOST_OPEN_WEBUI_DATA:-open-webui_data}:/app/backend/data:Z
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 20s
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+    deploy:
+      resources:
+        limits:
+          cpus: "${OPEN_WEBUI_CPUS:-1.0}"
+          memory: "${OPEN_WEBUI_MEMORY:-1g}"
 
   app:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_app_1"
@@ -249,3 +288,4 @@ volumes:
   neo4j_logs: {}
   weaviate_data: {}
   redis_data: {}
+  open-webui_data: {}
