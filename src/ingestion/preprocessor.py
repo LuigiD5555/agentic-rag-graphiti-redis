@@ -5,6 +5,7 @@ before ingestion (Office docs, archives, images needing OCR, etc.).
 """
 
 import os
+import time
 from pathlib import Path
 from typing import Optional, Dict, Any
 import requests
@@ -67,6 +68,18 @@ class FilePreprocessor:
             "FilePreprocessor initialized: office=%s, archive=%s, ocr=%s, gpu=%s",
             self.enable_office, self.enable_archive, self.enable_ocr, self.enable_gpu
         )
+
+    def _post_with_retries(self, url: str, payload: Dict[str, Any]) -> requests.Response:
+        retries = int(os.getenv("TOOL_CONNECT_RETRIES", "10"))
+        delay = float(os.getenv("TOOL_CONNECT_RETRY_DELAY", "0.5"))
+        last_exc = None
+        for _ in range(max(1, retries)):
+            try:
+                return requests.post(url, json=payload, timeout=self.timeout)
+            except requests.exceptions.ConnectionError as exc:
+                last_exc = exc
+                time.sleep(delay)
+        raise requests.exceptions.ConnectionError(str(last_exc))
 
     def should_preprocess(self, file_path: Path) -> bool:
         """Check if a file needs preprocessing.
@@ -137,13 +150,12 @@ class FilePreprocessor:
         log.info("Converting Office document: %s", file_path)
 
         try:
-            response = requests.post(
+            response = self._post_with_retries(
                 f"{self.office_url}/convert",
-                json={
+                {
                     "input_path": str(file_path.absolute()),
                     "output_format": "txt",
                 },
-                timeout=self.timeout,
             )
             response.raise_for_status()
             result = response.json()
@@ -152,9 +164,10 @@ class FilePreprocessor:
                 output_path = Path(result["output_path"])
                 log.info("Successfully converted %s -> %s", file_path.name, output_path.name)
                 return output_path
-            else:
-                log.error("Office conversion failed: %s", result.get("error"))
-                return None
+
+            log.error("Office conversion failed: %s", result.get("error"))
+            log.info("Falling back to direct ingestion for %s", file_path.name)
+            return file_path
 
         except requests.exceptions.ConnectionError:
             log.warning(
@@ -162,10 +175,12 @@ class FilePreprocessor:
                 "Make sure socket is enabled: systemctl --user status tool-office.socket",
                 self.office_url
             )
-            return None
+            log.info("Falling back to direct ingestion for %s", file_path.name)
+            return file_path
         except Exception as e:
             log.error("Office conversion error: %s", e)
-            return None
+            log.info("Falling back to direct ingestion for %s", file_path.name)
+            return file_path
 
     def convert_office_document(self, file_path: Path) -> Optional[Path]:
         """Public wrapper to convert an Office document to text."""
@@ -183,13 +198,12 @@ class FilePreprocessor:
         log.info("Extracting archive: %s", file_path)
 
         try:
-            response = requests.post(
+            response = self._post_with_retries(
                 f"{self.archive_url}/extract",
-                json={
+                {
                     "archive_path": str(file_path.absolute()),
                     "max_size_mb": int(os.getenv("ARCHIVE_MAX_SIZE_MB", "500")),
                 },
-                timeout=self.timeout,
             )
             response.raise_for_status()
             result = response.json()
@@ -235,14 +249,13 @@ class FilePreprocessor:
         log.info("Performing OCR on: %s", file_path)
 
         try:
-            response = requests.post(
+            response = self._post_with_retries(
                 f"{self.ocr_url}/ocr",
-                json={
+                {
                     "input_path": str(file_path.absolute()),
                     "language": os.getenv("OCR_DEFAULT_LANGUAGE", "eng"),
                     "output_format": "txt",
                 },
-                timeout=self.timeout,
             )
             response.raise_for_status()
             result = response.json()
