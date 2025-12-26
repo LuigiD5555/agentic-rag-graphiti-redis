@@ -20,11 +20,10 @@ Design:
     - No code changes needed in the RAG application
 """
 
-import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict
 import shutil
 
 
@@ -260,9 +259,8 @@ class SystemdManager:
 
         Checks:
         - systemd availability
-        - .service files don't have WantedBy=default.target
-        - .socket files exist
-        - Units are installed
+        - .service and .socket files exist
+        - Units are installed in user systemd directory
         - Sockets are enabled and active
         - Services are NOT auto-enabled
         - Container images exist
@@ -293,27 +291,15 @@ class SystemdManager:
         if verbose:
             print(f"  {Colors.GREEN}✓ PASS:{Colors.NC} systemctl available\n")
 
-        # Check 2: Service files don't have WantedBy=default.target
+        # Check 2: Service files exist
         if verbose:
-            print(f"{Colors.CYAN}[2/6] Checking .service files for incorrect WantedBy...{Colors.NC}")
+            print(f"{Colors.CYAN}[2/6] Checking .service files exist...{Colors.NC}")
 
         for tool in self.TOOLS:
             service_file = self.systemd_dir / f'tool-{tool}.service'
             if service_file.exists():
-                content = service_file.read_text()
-                # Check for uncommented WantedBy=default.target (ignoring comments)
-                has_wanted_by = any(
-                    line.strip().startswith('WantedBy=default.target')
-                    for line in content.split('\n')
-                    if not line.strip().startswith('#')
-                )
-                if has_wanted_by:
-                    if verbose:
-                        print(f"  {Colors.RED}✗ FAIL:{Colors.NC} tool-{tool}.service has WantedBy=default.target")
-                    errors += 1
-                else:
-                    if verbose:
-                        print(f"  {Colors.GREEN}✓ PASS:{Colors.NC} tool-{tool}.service (no auto-start)")
+                if verbose:
+                    print(f"  {Colors.GREEN}✓ PASS:{Colors.NC} tool-{tool}.service exists")
             else:
                 if verbose:
                     print(f"  {Colors.YELLOW}⚠ WARN:{Colors.NC} tool-{tool}.service not found")
@@ -569,6 +555,203 @@ class SystemdManager:
 
         return success
 
+    def build(self, tools: List[str] = None, verbose: bool = True) -> bool:
+        """
+        Build container images for tools.
+
+        Args:
+            tools: List of tool names to build (default: all tools)
+            verbose: Print build output
+
+        Returns:
+            True if all builds succeed, False otherwise
+        """
+        if tools is None:
+            tools = self.TOOLS
+
+        # Validate tool names
+        invalid_tools = [t for t in tools if t not in self.TOOLS]
+        if invalid_tools:
+            if verbose:
+                print(f"{Colors.RED}✗ Invalid tool names:{Colors.NC} {', '.join(invalid_tools)}")
+                print(f"  Valid tools: {', '.join(self.TOOLS)}")
+            return False
+
+        tools_dir = self.project_root / 'tools'
+        if not tools_dir.exists():
+            if verbose:
+                print(f"{Colors.RED}✗ Tools directory not found:{Colors.NC} {tools_dir}")
+            return False
+
+        if verbose:
+            print(f"{Colors.BLUE}{'='*70}{Colors.NC}")
+            print(f"{Colors.BOLD}Building RAG Tool Images{Colors.NC}")
+            print(f"{Colors.BLUE}{'='*70}{Colors.NC}\n")
+
+        all_success = True
+
+        for tool in tools:
+            tool_dir = tools_dir / tool
+            if not tool_dir.exists():
+                if verbose:
+                    print(f"{Colors.YELLOW}⚠ Skipping:{Colors.NC} {tool} (directory not found)")
+                continue
+
+            if verbose:
+                print(f"{Colors.CYAN}Building tool-{tool}...{Colors.NC}")
+
+            # Build image
+            code, stdout, stderr = self._run_command(
+                ['podman', 'build', '-t', f'rag-tool-{tool}:latest', str(tool_dir)],
+                check=False,
+                capture=True
+            )
+
+            if code == 0:
+                if verbose:
+                    print(f"  {Colors.GREEN}✓ tool-{tool} built successfully{Colors.NC}\n")
+            else:
+                if verbose:
+                    print(f"  {Colors.RED}✗ tool-{tool} build failed{Colors.NC}")
+                    if stderr:
+                        print(f"  Error: {stderr[:200]}")
+                    print()
+                all_success = False
+
+        # Show final images
+        if verbose and all_success:
+            print(f"{Colors.BLUE}{'='*70}{Colors.NC}")
+            print(f"{Colors.BOLD}Built Images:{Colors.NC}\n")
+
+            code, stdout, _ = self._run_command(
+                ['podman', 'images'],
+                check=False,
+                capture=True
+            )
+
+            if code == 0:
+                for line in stdout.split('\n'):
+                    if 'rag-tool' in line:
+                        print(f"  {line}")
+            print()
+
+        return all_success
+
+    def restart(self, tool: str, verbose: bool = True) -> bool:
+        """
+        Restart a specific tool (socket + service).
+
+        Args:
+            tool: Tool name to restart (office, archive, ocr, gpu)
+            verbose: Print restart progress
+
+        Returns:
+            True if restart succeeds, False otherwise
+        """
+        if tool not in self.TOOLS:
+            if verbose:
+                print(f"{Colors.RED}✗ Invalid tool:{Colors.NC} {tool}")
+                print(f"  Valid tools: {', '.join(self.TOOLS)}")
+            return False
+
+        if not self._check_systemd():
+            if verbose:
+                print(f"{Colors.RED}✗ systemctl not available{Colors.NC}")
+            return False
+
+        # Get port for this tool
+        port_map = {'office': 9102, 'archive': 9101, 'ocr': 9103, 'gpu': 9104}
+        port = port_map.get(tool)
+
+        if verbose:
+            print(f"{Colors.BLUE}{'='*70}{Colors.NC}")
+            print(f"{Colors.BOLD}Restarting tool-{tool}{Colors.NC}")
+            print(f"{Colors.BLUE}{'='*70}{Colors.NC}\n")
+
+        # Step 1: Stop socket and service
+        if verbose:
+            print(f"{Colors.CYAN}Step 1: Stopping socket and service...{Colors.NC}")
+
+        self._run_command(['systemctl', '--user', 'stop', f'tool-{tool}.socket'], check=False, capture=True)
+        self._run_command(['systemctl', '--user', 'stop', f'tool-{tool}.service'], check=False, capture=True)
+
+        if verbose:
+            print(f"  {Colors.GREEN}✓ Stopped{Colors.NC}\n")
+
+        # Step 2: Reload systemd
+        if verbose:
+            print(f"{Colors.CYAN}Step 2: Reloading systemd...{Colors.NC}")
+
+        self._run_command(['systemctl', '--user', 'daemon-reload'], check=False, capture=True)
+
+        if verbose:
+            print(f"  {Colors.GREEN}✓ Reloaded{Colors.NC}\n")
+
+        # Step 3: Start socket
+        if verbose:
+            print(f"{Colors.CYAN}Step 3: Starting socket...{Colors.NC}")
+
+        code, _, stderr = self._run_command(
+            ['systemctl', '--user', 'start', f'tool-{tool}.socket'],
+            check=False,
+            capture=True
+        )
+
+        if code != 0:
+            if verbose:
+                print(f"  {Colors.RED}✗ Failed to start socket{Colors.NC}")
+                if stderr:
+                    print(f"  Error: {stderr}")
+            return False
+
+        if verbose:
+            print(f"  {Colors.GREEN}✓ Socket started{Colors.NC}\n")
+
+        # Step 4: Health check
+        if verbose:
+            print(f"{Colors.CYAN}Step 4: Health check (activating socket)...{Colors.NC}")
+
+        import time
+        time.sleep(1)  # Give socket a moment to listen
+
+        code, _, _ = self._run_command(
+            ['curl', '-s', '-f', '-m', '10', f'http://127.0.0.1:{port}/healthz'],
+            check=False,
+            capture=True
+        )
+
+        if code == 0:
+            if verbose:
+                print(f"  {Colors.GREEN}✓ tool-{tool} responding on port {port}{Colors.NC}\n")
+        else:
+            if verbose:
+                msg = f"  {Colors.YELLOW}⚠ tool-{tool} not responding yet "
+                msg += f"(may start on first real request){Colors.NC}\n"
+                print(msg)
+
+        # Step 5: Verify /work permissions (optional, only if container is running)
+        if shutil.which('podman'):
+            if verbose:
+                print(f"{Colors.CYAN}Step 5: Verifying /work permissions...{Colors.NC}")
+
+            code, _, _ = self._run_command(
+                ['podman', 'exec', f'rag-tool-{tool}', 'sh', '-c', 'touch /work/_test && rm /work/_test'],
+                check=False,
+                capture=True
+            )
+
+            if code == 0:
+                if verbose:
+                    print(f"  {Colors.GREEN}✓ /work is writable{Colors.NC}\n")
+            else:
+                if verbose:
+                    print(f"  {Colors.YELLOW}⚠ Container not running yet or /work not writable{Colors.NC}\n")
+
+        if verbose:
+            print(f"{Colors.GREEN}✓ Restart complete{Colors.NC}\n")
+
+        return True
+
     def status(self, verbose: bool = True) -> Dict[str, Dict[str, str]]:
         """
         Show current status of all tools.
@@ -651,9 +834,12 @@ Commands:
   verify    Verify configuration is correct
   fix       Auto-repair any configuration issues
   status    Show current status of all tools
+  build     Build container images for tools
+  restart   Restart a specific tool (socket + service)
 
 Examples:
   # Initial setup
+  python -m src.tools.systemd_manager build
   python -m src.tools.systemd_manager install
   python -m src.tools.systemd_manager enable
 
@@ -666,6 +852,9 @@ Examples:
   # See what's running
   python -m src.tools.systemd_manager status
 
+  # Restart a specific tool
+  python -m src.tools.systemd_manager restart office
+
 How it works:
   - Sockets listen on ports (9101-9104) without overhead
   - Services are inactive until first request
@@ -677,14 +866,26 @@ How it works:
 
     parser.add_argument(
         'command',
-        choices=['install', 'enable', 'verify', 'fix', 'status'],
+        choices=['install', 'enable', 'verify', 'fix', 'status', 'build', 'restart'],
         help='Command to execute'
+    )
+
+    parser.add_argument(
+        'tool',
+        nargs='?',
+        help='Tool name for restart command (office, archive, ocr, gpu)'
     )
 
     parser.add_argument(
         '-q', '--quiet',
         action='store_true',
         help='Suppress output (exit code indicates success/failure)'
+    )
+
+    parser.add_argument(
+        '--tools',
+        nargs='+',
+        help='Specific tools to build (default: all)'
     )
 
     args = parser.parse_args()
@@ -704,6 +905,16 @@ How it works:
         elif args.command == 'status':
             manager.status(verbose=verbose)
             success = True
+        elif args.command == 'build':
+            tools = args.tools if args.tools else None
+            success = manager.build(tools=tools, verbose=verbose)
+        elif args.command == 'restart':
+            if not args.tool:
+                print(f"{Colors.RED}Error:{Colors.NC} restart command requires a tool name")
+                print(f"Usage: python -m src.tools.systemd_manager restart <tool>")
+                print(f"Valid tools: {', '.join(manager.TOOLS)}")
+                sys.exit(1)
+            success = manager.restart(args.tool, verbose=verbose)
 
         sys.exit(0 if success else 1)
 

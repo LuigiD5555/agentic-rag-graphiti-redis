@@ -103,16 +103,18 @@ if podman images | grep -q "rag-tool-office" && \
         print_info "Using existing images"
     else
         print_step "Rebuilding all images..."
-        cd tools
-        ./build-all.sh
-        cd ..
+        if ! python3 -m src.tools.systemd_manager build; then
+            print_error "Failed to build tool images"
+            exit 1
+        fi
     fi
 else
     print_step "Building images for the first time..."
     print_warning "This can take 10-15 minutes..."
-    cd tools
-    ./build-all.sh
-    cd ..
+    if ! python3 -m src.tools.systemd_manager build; then
+        print_error "Failed to build tool images"
+        exit 1
+    fi
 fi
 
 # ============================================================================
