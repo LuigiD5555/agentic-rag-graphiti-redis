@@ -145,6 +145,16 @@ else
         exit 1
     fi
 
+    # Apply timeout configuration from .env/settings.json to systemd services
+    print_step "Applying tool timeout configuration..."
+    if ! python3 -m src.tools.timeout_manager apply -q; then
+        print_warning "Could not apply timeout settings (continuing with defaults)"
+    else
+        print_success "Timeout configuration applied"
+        # Reload systemd to pick up the updated service files
+        systemctl --user daemon-reload
+    fi
+
     print_success "Socket activation configured"
 fi
 
