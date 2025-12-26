@@ -1,6 +1,6 @@
 [Unit]
 Description=RAG Tool Archive (socket)
-Documentation=https://github.com/yourusername/rag-agentic-graphiti
+Documentation=https://github.com/LuigiD5555/agentic-rag-graphiti-redis
 
 [Socket]
 ListenStream=127.0.0.1:9101

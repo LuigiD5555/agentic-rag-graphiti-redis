@@ -1,6 +1,6 @@
 [Unit]
 Description=RAG Tool OCR (container + proxy)
-Documentation=https://github.com/yourusername/rag-agentic-graphiti
+Documentation=https://github.com/LuigiD5555/agentic-rag-graphiti-redis
 After=network-online.target
 Wants=network-online.target
 OnFailure=tool-alert@%n.service
