@@ -7,8 +7,57 @@ from src.rag.retrieval import WeaviateRetriever
 from src.rag.chat import LMStudioChatService
 from src.rag.pipeline.rag_orchestrator import RAGOrchestrator
 from src.rag.audit import get_logger
+from src.providers.lmstudio.embeddings import EmbeddingService
+from src.providers.lmstudio.model_manager import ModelManager
 
 log = get_logger(__name__)
+
+
+class EmbeddingWeaviateRetriever:
+    """Wrapper around WeaviateRetriever that handles embedding generation."""
+
+    def __init__(self, weaviate_retriever: WeaviateRetriever, embedding_service: EmbeddingService):
+        self.weaviate_retriever = weaviate_retriever
+        self.embedding_service = embedding_service
+
+    def retrieve(self, query: str, top_k: int = None, filters: dict = None):
+        """Retrieve documents by generating embedding for the query."""
+        # Generate embedding for query
+        query_vector = self.embedding_service.generate(query)
+
+        # Use near_vector search instead of hybrid
+        from weaviate.classes.query import MetadataQuery
+        k = top_k or self.weaviate_retriever.top_k
+
+        try:
+            log.debug("Executing vector search: query=%s, top_k=%d", query[:50], k)
+
+            active_filters = self.weaviate_retriever._build_filters(filters)
+            response = self.weaviate_retriever.collection.query.near_vector(
+                near_vector=query_vector,
+                limit=k,
+                filters=active_filters,
+                return_metadata=MetadataQuery(score=True, distance=True),
+            )
+
+            results = []
+            for obj in response.objects:
+                doc = {
+                    "uuid": str(obj.uuid),
+                    "text": obj.properties.get("text", ""),
+                    "source": obj.properties.get("source", ""),
+                    "chunk_index": obj.properties.get("chunk_index", 0),
+                    "score": obj.metadata.score if obj.metadata else 0.0,
+                    "distance": obj.metadata.distance if obj.metadata else None,
+                }
+                results.append(doc)
+
+            log.info("Retrieved %d documents for query: %s", len(results), query[:50])
+            return results
+
+        except Exception as e:
+            log.error("Retrieval failed for query '%s': %s", query[:50], e)
+            return []
 
 
 def create_rag_system(config: AppConfig) -> RAGOrchestrator:
@@ -28,18 +77,35 @@ def create_rag_system(config: AppConfig) -> RAGOrchestrator:
         grpc_port=config.WEAVIATE_GRPC_PORT,
     )
 
-    # Create retriever
-    retriever = WeaviateRetriever(
+    # Initialize embedding service
+    log.info("Initializing embedding service")
+    model_manager = ModelManager(
+        api_roots=config._lmstudio_api_roots,
+        require_live=config.LMSTUDIO_REQUIRE_SERVER
+    )
+    embedding_service = EmbeddingService(config, model_manager)
+
+    # Create Weaviate retriever
+    weaviate_retriever = WeaviateRetriever(
         client=weaviate_client,
         collection_name=config.WEAVIATE_CLASS,
-        tenant=config.WEAVIATE_DEFAULT_TENANT,
+        tenant=config.WEAVIATE_DEFAULT_TENANT if config.WEAVIATE_MULTI_TENANCY else None,
         top_k=5,  # Default number of results
     )
 
+    # Wrap with EmbeddingWeaviateRetriever to handle query embedding
+    retriever = EmbeddingWeaviateRetriever(
+        weaviate_retriever=weaviate_retriever,
+        embedding_service=embedding_service,
+    )
+
     # Create chat service
+    # Use the first language model (not embedding model)
+    language_model = model_manager.get_first_language_model() if not config.LMSTUDIO_CHAT_MODEL else config.LMSTUDIO_CHAT_MODEL
     chat_service = LMStudioChatService(
-        base_url=config.OPENAI_API_BASE,
-        api_key=config.OPENAI_API_KEY,
+        base_url=f"http://{config.LMSTUDIO_HOST}:{config.LMSTUDIO_PORT}/v1",
+        api_key="lm-studio",
+        model=language_model,
     )
 
     # Create RAG orchestrator
@@ -66,8 +132,10 @@ def interactive_mode(rag: RAGOrchestrator):
 
     while True:
         try:
-            # Get user input
+            # Get user input with explicit UTF-8 encoding handling
             question = input("\nYour question: ").strip()
+            # Clean any surrogate characters that might have been introduced
+            question = question.encode('utf-8', errors='surrogatepass').decode('utf-8', errors='ignore')
 
             if not question:
                 continue
@@ -148,18 +216,24 @@ Examples:
   # Interactive mode
   python -m src.query.cli
 
-  # Single question
-  python -m src.query.cli --question "What is the main topic of the documents?"
+  # Single query (positional)
+  python -m src.query.cli "What is the main topic of the documents?"
 
   # Retrieve more documents
-  python -m src.query.cli --question "Explain the architecture" --top-k 10
+  python -m src.query.cli "Explain the architecture" --top-k 10
         """,
+    )
+
+    parser.add_argument(
+        "query",
+        nargs="*",
+        help="Query text (if omitted, enters interactive mode)"
     )
 
     parser.add_argument(
         "--question", "-q",
         type=str,
-        help="Question to ask (if not provided, enters interactive mode)"
+        help="Deprecated: use the positional query text instead"
     )
 
     parser.add_argument(
@@ -188,8 +262,13 @@ Examples:
         sys.exit(1)
 
     # Run in appropriate mode
-    if args.question:
-        single_query_mode(rag, args.question, args.top_k)
+    if args.question and args.query:
+        print("Provide either a positional query or --question, not both.")
+        sys.exit(2)
+
+    question = args.question or (" ".join(args.query).strip() if args.query else None)
+    if question:
+        single_query_mode(rag, question, args.top_k)
     else:
         interactive_mode(rag)
 
