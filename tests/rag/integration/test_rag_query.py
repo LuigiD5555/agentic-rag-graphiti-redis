@@ -67,6 +67,8 @@ def main():
     print("OK All tests passed! RAG system is working.\n")
     print("To use interactively, run:")
     print("  python -m src.query.cli\n")
+    print("To run a single query, run:")
+    print("  python -m src.query.cli \"your question here\"\n")
     return 0
 
 

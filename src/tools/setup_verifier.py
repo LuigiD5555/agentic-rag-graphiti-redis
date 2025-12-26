@@ -298,7 +298,7 @@ class SetupVerifier:
         # Required docs
         required_docs = [
             (self.tools_dir / 'README.md', "Tools README"),
-            (self.tools_dir / 'client_example.py', "Client example"),
+            (self.project_root / 'tests' / 'tools' / 'client_example.py', "Client example"),
             (self.tools_dir / 'example.env', "Environment template"),
         ]
 
