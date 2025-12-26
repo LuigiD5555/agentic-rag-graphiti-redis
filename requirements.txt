@@ -36,3 +36,4 @@ requests
 pytest
 pydantic
 pydantic-settings
+langdetect

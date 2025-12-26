@@ -42,10 +42,40 @@ def looks_binary(data: bytes, *, suspicious_ratio: float = 0.30) -> bool:
 def read_text_with_fallbacks(
     path: str | Path,
     *,
-    encodings: Sequence[str] = ("utf-8", "cp1252", "latin-1"),
+    encodings: Sequence[str] = (
+        "utf-8",           # Universal, supports all languages
+        "utf-16",          # Common in Windows for Asian languages
+        "utf-16-le",       # Little-endian UTF-16
+        "utf-16-be",       # Big-endian UTF-16
+        "gb18030",         # Chinese (Simplified) - superset of GBK and GB2312
+        "gbk",             # Chinese (Simplified) - common encoding
+        "big5",            # Chinese (Traditional)
+        "shift_jis",       # Japanese
+        "euc-jp",          # Japanese (Extended Unix Code)
+        "iso-2022-jp",     # Japanese (email/legacy)
+        "euc-kr",          # Korean
+        "cp949",           # Korean (Windows)
+        "koi8-r",          # Russian (Cyrillic)
+        "cp1251",          # Russian/Cyrillic (Windows)
+        "iso-8859-5",      # Russian/Cyrillic
+        "cp1256",          # Arabic (Windows)
+        "iso-8859-6",      # Arabic
+        "cp1252",          # Western European (Windows)
+        "latin-1",         # ISO-8859-1 (fallback)
+        "ascii",           # Strict ASCII (last resort)
+    ),
     max_probe_bytes: int = 8192,
 ) -> TextReadResult:
-    """Read a file as text with encoding fallbacks.
+    """Read a file as text with encoding fallbacks supporting multiple languages.
+
+    Supports a wide range of encodings including:
+    - UTF-8/16: Universal Unicode encodings
+    - Chinese: GB18030, GBK, Big5
+    - Japanese: Shift-JIS, EUC-JP, ISO-2022-JP
+    - Korean: EUC-KR, CP949
+    - Russian: KOI8-R, CP1251, ISO-8859-5
+    - Arabic: CP1256, ISO-8859-6
+    - Western: CP1252, Latin-1
 
     Raises:
         UnicodeDecodeError: if all decoding attempts fail.
@@ -61,9 +91,14 @@ def read_text_with_fallbacks(
     last_error: UnicodeDecodeError | None = None
     for encoding in encodings:
         try:
-            return TextReadResult(text=data.decode(encoding), encoding=encoding)
-        except UnicodeDecodeError as exc:
-            last_error = exc
+            # Try decoding with the current encoding
+            text = data.decode(encoding)
+            # Additional validation: ensure no surrogate characters leaked through
+            text = text.encode('utf-8', errors='surrogatepass').decode('utf-8', errors='ignore')
+            return TextReadResult(text=text, encoding=encoding)
+        except (UnicodeDecodeError, LookupError) as exc:
+            # LookupError: unknown encoding name
+            last_error = exc if isinstance(exc, UnicodeDecodeError) else last_error
             continue
 
     assert last_error is not None

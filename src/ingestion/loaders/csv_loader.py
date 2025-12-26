@@ -21,7 +21,8 @@ class CSVLoader:
 
     def __init__(self, path: str):
         self._path = path
-        self.loader = _Loader(file_path=path)
+        # Specify UTF-8 encoding explicitly for multilingual support
+        self.loader = _Loader(file_path=path, encoding='utf-8')
 
     def load(self) -> List[Document]:
         """

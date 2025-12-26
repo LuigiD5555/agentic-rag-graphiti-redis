@@ -2,6 +2,7 @@
 from typing import List, Dict, Any, Optional
 from src.rag.retrieval import WeaviateRetriever
 from src.rag.chat import LMStudioChatService
+from src.rag.multilingual import LanguageDetector
 from src.rag.audit import get_logger
 
 log = get_logger(__name__)
@@ -26,6 +27,7 @@ Guidelines:
         chat_service: LMStudioChatService,
         system_prompt: Optional[str] = None,
         include_sources: bool = True,
+        enable_multilingual: bool = True,
     ):
         """Initialize RAG orchestrator.
 
@@ -34,13 +36,20 @@ Guidelines:
             chat_service: LLM chat service instance.
             system_prompt: Custom system prompt (uses default if None).
             include_sources: Whether to include source citations in response.
+            enable_multilingual: Enable automatic language detection and localization.
         """
         self.retriever = retriever
         self.chat_service = chat_service
         self.system_prompt = system_prompt or self.DEFAULT_SYSTEM_PROMPT
         self.include_sources = include_sources
+        self.enable_multilingual = enable_multilingual
+        self.language_detector = LanguageDetector()
 
-        log.info("Initialized RAGOrchestrator with system_prompt=%s chars", len(self.system_prompt))
+        log.info(
+            "Initialized RAGOrchestrator with system_prompt=%s chars, multilingual=%s",
+            len(self.system_prompt),
+            enable_multilingual
+        )
 
     def query(
         self,
@@ -147,13 +156,29 @@ Guidelines:
             context: Retrieved context.
             temperature: LLM temperature.
             max_tokens: Max response tokens.
+            system_prompt: Override system prompt.
 
         Returns:
             Generated answer.
         """
+        # Detect language and adapt system prompt if multilingual is enabled
+        if self.enable_multilingual and not system_prompt:
+            detected_lang = self.language_detector.detect_language(question)
+            lang_name = self.language_detector.get_language_name(detected_lang)
+            log.info("Detected query language: %s (%s)", lang_name, detected_lang)
+
+            # Get localized system prompt
+            localized_prompt = self.language_detector.get_system_prompt(detected_lang)
+            # Add explicit language instruction
+            final_prompt = self.language_detector.add_language_instruction(
+                localized_prompt, detected_lang
+            )
+        else:
+            final_prompt = system_prompt or self.system_prompt
+
         # Build prompt with system message, context, and question
         messages = [
-            {"role": "system", "content": system_prompt or self.system_prompt},
+            {"role": "system", "content": final_prompt},
             {
                 "role": "user",
                 "content": f"""Context:

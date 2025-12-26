@@ -90,9 +90,25 @@ class DocxLoader:
         except OSError:
             return []
 
-        text = raw.decode(errors="ignore").strip()
+        # Try UTF-8 first, then fallback to other encodings
+        text = None
+        for encoding in ("utf-8", "utf-16", "cp1252", "latin-1"):
+            try:
+                text = raw.decode(encoding).strip()
+                if text:
+                    break
+            except (UnicodeDecodeError, LookupError):
+                continue
+
+        # Final fallback: decode with errors='ignore'
+        if not text:
+            text = raw.decode("utf-8", errors="ignore").strip()
+
         if not text:
             return []
+
+        # Clean any surrogate characters
+        text = text.encode('utf-8', errors='surrogatepass').decode('utf-8', errors='ignore')
 
         return [
             Document(

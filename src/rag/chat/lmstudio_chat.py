@@ -75,14 +75,26 @@ class LMStudioChatService:
         tokens = max_tokens if max_tokens is not None else self.max_tokens
 
         try:
+            # Clean messages from potential encoding issues
+            cleaned_messages = []
+            for msg in messages:
+                cleaned_msg = msg.copy()
+                if 'content' in cleaned_msg:
+                    # Handle surrogate characters and encoding issues
+                    content = cleaned_msg['content']
+                    if isinstance(content, str):
+                        content = content.encode('utf-8', errors='surrogatepass').decode('utf-8', errors='ignore')
+                        cleaned_msg['content'] = content
+                cleaned_messages.append(cleaned_msg)
+
             log.debug(
                 "Sending chat request: %d messages, temp=%.2f, max_tokens=%d",
-                len(messages), temp, tokens
+                len(cleaned_messages), temp, tokens
             )
 
             response = self.client.chat.completions.create(
                 model=self.model,
-                messages=messages,
+                messages=cleaned_messages,
                 temperature=temp,
                 max_tokens=tokens,
             )
@@ -91,9 +103,14 @@ class LMStudioChatService:
             log.info("Generated response: %d chars", len(content))
             return content
 
+        except UnicodeEncodeError as e:
+            error_msg = f"Encoding error: Could not process the text. Please use only valid UTF-8 characters."
+            log.error("Chat completion encoding failed: %s", e)
+            return error_msg
         except Exception as e:
+            error_msg = f"Could not generate response. {str(e)}"
             log.error("Chat completion failed: %s", e)
-            return f"Error: Could not generate response. {e}"
+            return f"Error: {error_msg}"
 
     def complete(
         self,
