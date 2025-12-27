@@ -89,6 +89,24 @@ fi
 print_success "All dependencies are installed"
 
 # ============================================================================
+# STEP 1.5: PRE-FLIGHT CHECKS
+# ============================================================================
+
+print_header "STEP 1.5: Running Pre-Flight Checks"
+
+print_step "Running comprehensive system checks..."
+if ! python3 -m pytest tests/infrastructure/test_preflight.py -v --tb=short; then
+    print_error "Pre-flight checks failed"
+    print_warning "Some checks may have failed. Review the output above."
+    read -p "Continue anyway? (y/N): " continue_anyway
+    if [[ ! "$continue_anyway" =~ ^[yY]$ ]]; then
+        exit 1
+    fi
+fi
+
+print_success "Pre-flight checks completed"
+
+# ============================================================================
 # STEP 2: BUILD TOOL IMAGES
 # ============================================================================
 
@@ -159,10 +177,30 @@ else
 fi
 
 # ============================================================================
-# STEP 4: BUILD AND START ALL SERVICES
+# STEP 4: CHECK AND PREPARE VOLUMES
 # ============================================================================
 
-print_header "STEP 4: Building and Starting All Services"
+print_header "STEP 4: Checking and Preparing Volumes"
+
+print_step "Verifying external volumes and setting up fallbacks if needed..."
+if ! python3 -m pytest tests/infrastructure/test_volumes.py::TestVolumeIntegration::test_libros_volume_with_fallback_setup --setup-fallback -v -s; then
+    print_error "Volume check failed"
+    exit 1
+fi
+
+# Verify that volume configuration was written to .env
+if grep -q "^ACTIVE_LIBROS_DIR=" .env 2>/dev/null; then
+    print_success "Volume configuration written to .env"
+else
+    print_error "ACTIVE_LIBROS_DIR not found in .env - volume check may have failed"
+    exit 1
+fi
+
+# ============================================================================
+# STEP 5: BUILD AND START ALL SERVICES
+# ============================================================================
+
+print_header "STEP 5: Building and Starting All Services"
 
 print_step "Checking if services are already running..."
 
@@ -199,10 +237,10 @@ else
 fi
 
 # ============================================================================
-# STEP 5: VERIFY THE SYSTEM
+# STEP 6: VERIFY THE SYSTEM
 # ============================================================================
 
-print_header "STEP 5: System Verification"
+print_header "STEP 6: System Verification"
 
 # Verify core services
 print_step "Verifying core services..."
@@ -281,7 +319,7 @@ if grep -q "ENABLE_GPU_ACCELERATION=true" .env 2>/dev/null; then
 fi
 
 # ============================================================================
-# STEP 6: SUMMARY AND NEXT STEPS
+# STEP 7: SUMMARY AND NEXT STEPS
 # ============================================================================
 
 print_header "System Ready"

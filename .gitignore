@@ -128,3 +128,4 @@ tests/logs
 tests/scripts
 tests/systemd
 docs
+.volumes

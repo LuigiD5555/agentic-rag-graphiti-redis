@@ -1,8 +1,45 @@
 """Validation helpers for translating CLI args into ingestion options."""
 import argparse
+import os
+from pathlib import Path
 
 from src.ingestion.options import IngestionOptions
 from src.settings import _DEFAULT_EXCLUDED_FILES
+from src.rag.audit import get_logger
+
+logger = get_logger(__name__)
+
+
+def _detect_available_volumes() -> list[str]:
+    """
+    Detect which volumes are currently available.
+
+    This checks for external volumes and determines if they're using
+    fallback directories. Logs warnings when fallbacks are in use.
+
+    Returns:
+        List of available volume paths
+    """
+    available = []
+
+    # Check for Libros directory
+    libros_path = "/mnt/resources/Libros"
+    if os.path.exists(libros_path):
+        # Check if it's a fallback
+        fallback_marker = os.path.join(libros_path, ".using-fallback")
+        if os.path.exists(fallback_marker):
+            logger.warning(
+                f"Volume {libros_path} is using FALLBACK directory. "
+                "Primary volume is not accessible. Fix the mount to use the primary volume."
+            )
+        else:
+            logger.info(f"Volume {libros_path} is available (primary)")
+
+        available.append(libros_path)
+    else:
+        logger.debug(f"Volume {libros_path} is not mounted")
+
+    return available
 
 
 def build_ingestion_options_from_args(args: argparse.Namespace, config: object) -> IngestionOptions:
@@ -18,7 +55,13 @@ def build_ingestion_options_from_args(args: argparse.Namespace, config: object) 
         root_paths = tuple(args.paths)
     else:
         cfg_paths = getattr(config, "DOCS_PATHS", None) or []
-        root_paths = tuple(cfg_paths) if cfg_paths else ("/mnt/Documents/Documents",)
+        base_paths = list(cfg_paths) if cfg_paths else ["/mnt/Documents/Documents"]
+
+        # Add available external volumes dynamically
+        external_volumes = _detect_available_volumes()
+        base_paths.extend(external_volumes)
+
+        root_paths = tuple(base_paths)
 
     if getattr(args, "exts", None) is not None:
         allowed_extensions = {_normalize_ext(e) for e in args.exts}

@@ -5,11 +5,13 @@ This module lives under src.rag.cli to centralize CLI-related logic.
 """
 
 import argparse
+import atexit
 
 from .helpers import build_ingestion_options_from_args
 from src.ingestion.orchestrator import IngestionOrchestrator
 from src.rag.audit import configure_logging, get_logger, resolve_level
 from src.rag.conf import Config, sync_settings_json
+from src.utils.volume_watcher import setup_default_watchers
 
 
 class IngestionCLI:
@@ -110,6 +112,17 @@ class IngestionCLI:
 
 def main() -> None:
     """Entrypoint for `python -m src.main --ingest ...`."""
+    # Set up volume watcher to monitor for reconnections
+    try:
+        watcher = setup_default_watchers()
+        if watcher:
+            # Register cleanup on exit
+            atexit.register(lambda: watcher.stop())
+    except Exception as e:
+        # Don't fail if watcher setup fails
+        log = get_logger(__name__)
+        log.warning(f"Failed to set up volume watcher: {e}")
+
     IngestionCLI().run()
 
 
