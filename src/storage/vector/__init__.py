@@ -59,12 +59,17 @@ def _normalize_vector_store_cfg(store_cfg: Mapping[str, Any], config: "Config") 
     normalized = dict(store_cfg)
     options = normalized.get("OPTIONS") or {}
     if isinstance(options, dict):
-        # Bubble up common options into top-level keys when missing.
-        normalized.setdefault("GRPC_PORT", options.get("GRPC_PORT"))
-        normalized.setdefault("CONNECT_RETRIES", options.get("CONNECT_RETRIES"))
-        normalized.setdefault("CONNECT_BACKOFF", options.get("CONNECT_BACKOFF"))
-        normalized.setdefault("MULTI_TENANCY", options.get("MULTI_TENANCY"))
-        normalized.setdefault("DEFAULT_TENANT", options.get("DEFAULT_TENANT"))
+        # Bubble up common options into top-level keys when missing (only if not None).
+        if options.get("GRPC_PORT") is not None:
+            normalized.setdefault("GRPC_PORT", options["GRPC_PORT"])
+        if options.get("CONNECT_RETRIES") is not None:
+            normalized.setdefault("CONNECT_RETRIES", options["CONNECT_RETRIES"])
+        if options.get("CONNECT_BACKOFF") is not None:
+            normalized.setdefault("CONNECT_BACKOFF", options["CONNECT_BACKOFF"])
+        if options.get("MULTI_TENANCY") is not None:
+            normalized.setdefault("MULTI_TENANCY", options["MULTI_TENANCY"])
+        if options.get("DEFAULT_TENANT") is not None:
+            normalized.setdefault("DEFAULT_TENANT", options["DEFAULT_TENANT"])
 
     if "URL" not in normalized:
         host = normalized.get("HOST")

@@ -17,6 +17,7 @@ class WeaviateRetriever:
         tenant: Optional[str] = None,
         top_k: int = 5,
         alpha: float = 0.7,
+        embedding_service: Optional[Any] = None,
     ):
         """Initialize Weaviate retriever.
 
@@ -26,12 +27,14 @@ class WeaviateRetriever:
             tenant: Optional tenant ID for multi-tenancy.
             top_k: Number of top results to return (default: 5).
             alpha: Hybrid search weight (1.0=vector only, 0.0=keyword only, 0.7=balanced).
+            embedding_service: Optional embedding service for query vectorization.
         """
         self.client = client
         self.collection_name = collection_name
         self.tenant = tenant
         self.top_k = top_k
         self.alpha = alpha
+        self.embedding_service = embedding_service
 
         # Get collection reference
         if tenant:
@@ -40,8 +43,8 @@ class WeaviateRetriever:
             self.collection = client.collections.get(collection_name)
 
         log.info(
-            "Initialized WeaviateRetriever: collection=%s, tenant=%s, top_k=%d",
-            collection_name, tenant, top_k
+            "Initialized WeaviateRetriever: collection=%s, tenant=%s, top_k=%d, has_embedder=%s",
+            collection_name, tenant, top_k, embedding_service is not None
         )
 
     def retrieve(
@@ -63,17 +66,34 @@ class WeaviateRetriever:
         k = top_k or self.top_k
 
         try:
-            log.debug("Executing hybrid search: query=%s, top_k=%d", query[:50], k)
-
-            # Hybrid search (combines vector + keyword search)
             active_filters = self._build_filters(filters)
-            response = self.collection.query.hybrid(
-                query=query,
-                limit=k,
-                alpha=self.alpha,
-                filters=active_filters,
-                return_metadata=MetadataQuery(score=True, distance=True),
-            )
+
+            # If we have an embedding service, vectorize the query and use near_vector search
+            if self.embedding_service:
+                log.debug("Generating query embedding for: %s", query[:50])
+                query_vector = self.embedding_service.generate(query)
+                log.debug("Executing near_vector search with embedding (dim=%d), top_k=%d", len(query_vector), k)
+
+                # Use near_vector search with the generated embedding
+                response = self.collection.query.near_vector(
+                    near_vector=query_vector,
+                    limit=k,
+                    filters=active_filters,
+                    return_metadata=MetadataQuery(score=True, distance=True),
+                )
+            else:
+                # Fallback to hybrid search if no embedding service
+                # Note: This will fail if Weaviate doesn't have a vectorizer configured
+                log.warning("No embedding service configured, falling back to hybrid search (may fail)")
+                log.debug("Executing hybrid search: query=%s, top_k=%d", query[:50], k)
+
+                response = self.collection.query.hybrid(
+                    query=query,
+                    limit=k,
+                    alpha=self.alpha,
+                    filters=active_filters,
+                    return_metadata=MetadataQuery(score=True, distance=True),
+                )
 
             results = []
             for obj in response.objects:

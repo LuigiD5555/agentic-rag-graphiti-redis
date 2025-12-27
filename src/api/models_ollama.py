@@ -80,6 +80,10 @@ class OllamaPullRequest(BaseModel):
 
 class OllamaTagModel(BaseModel):
     name: str
+    model: Optional[str] = None  # Alias for name, some clients expect this
+    modified_at: str = Field(default_factory=_utc_now)
+    size: int = 0  # Model size in bytes (0 for unknown)
+    digest: str = ""  # Model digest/hash (empty for unknown)
     details: Dict[str, Any] = Field(default_factory=dict)
 
 

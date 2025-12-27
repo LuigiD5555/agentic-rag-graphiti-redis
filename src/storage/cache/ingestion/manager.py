@@ -27,7 +27,12 @@ class IngestionCacheManager(FileCacheOperations, DirectoryCacheOperations):
     This ensures predictable behavior and avoids silent performance degradation.
     """
 
-    def __init__(self, redis_client: "redis.Redis", ttl: int = FileCacheOperations.DEFAULT_TTL, paranoid_mode: bool = False):
+    def __init__(
+        self,
+        redis_client: "redis.Redis",
+        ttl: int = FileCacheOperations.DEFAULT_TTL,
+        paranoid_mode: bool = False
+    ):
         """Initialize cache manager.
 
         Args:
@@ -52,7 +57,7 @@ class IngestionCacheManager(FileCacheOperations, DirectoryCacheOperations):
         )
 
     @classmethod
-    def from_settings(cls, settings: Dict[str, Any], max_retries: int = 10) -> "IngestionCacheManager":
+    def from_settings(cls, settings: Dict[str, Any], max_retries: int = 60) -> "IngestionCacheManager":
         """Create cache manager from settings with connection retry logic.
 
         Args:
@@ -77,15 +82,18 @@ class IngestionCacheManager(FileCacheOperations, DirectoryCacheOperations):
 
         # Retry logic with exponential backoff
         delay = 1.0
-        max_delay = 30.0
+        max_delay = 10.0
         last_error = None
 
         for attempt in range(1, max_retries + 1):
             try:
-                log.info(
-                    "Attempting to connect to Redis at %s (attempt %d/%d)",
-                    location, attempt, max_retries
-                )
+                if attempt == 1:
+                    log.info("Connecting to Redis at %s...", location)
+                else:
+                    log.info(
+                        "Attempting to connect to Redis at %s (attempt %d/%d)",
+                        location, attempt, max_retries
+                    )
 
                 client = redis_module.from_url(
                     location,
@@ -99,7 +107,30 @@ class IngestionCacheManager(FileCacheOperations, DirectoryCacheOperations):
                 log.info("Successfully connected to Redis cache at %s", location)
                 return cls(redis_client=client)
 
+            except redis_module.exceptions.BusyLoadingError as e:
+                # Redis is loading dataset - this is expected on startup with AOF
+                last_error = e
+
+                if attempt == 1:
+                    log.info("Redis is loading dataset (AOF recovery). Waiting...")
+                elif attempt <= max_retries:
+                    log.debug(
+                        "Redis still loading (attempt %d/%d). Retrying in %.1f seconds...",
+                        attempt, max_retries, delay
+                    )
+
+                if attempt == max_retries:
+                    log.error(
+                        "Redis failed to complete loading after %d attempts (%.1f seconds)",
+                        max_retries, sum(min(1.0 * (2 ** i), max_delay) for i in range(max_retries))
+                    )
+                    break
+
+                time.sleep(delay)
+                delay = min(delay * 1.5, max_delay)  # Gentler backoff for loading
+
             except Exception as e:
+                # Other errors (connection refused, network, etc.)
                 last_error = e
 
                 if attempt == max_retries:

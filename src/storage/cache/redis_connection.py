@@ -56,7 +56,7 @@ def create_redis_client_with_retry(
             logger.info("Successfully connected to Redis at %s:%s", host, port)
             return client
 
-        except (redis.ConnectionError, redis.TimeoutError, OSError) as e:
+        except (redis.ConnectionError, redis.TimeoutError, redis.BusyLoadingError, OSError) as e:
             last_error = e
 
             if attempt == max_retries:

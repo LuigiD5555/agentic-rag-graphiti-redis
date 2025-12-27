@@ -87,10 +87,10 @@ class TTLRedisSaver(RedisSaver):
             if thread_id:
                 # Set TTL on all keys for this thread
                 pattern = f"langgraph:checkpoint:{thread_id}:*"
-                keys = self.conn.keys(pattern)
+                keys = self._redis.keys(pattern)
 
                 for key in keys:
-                    self.conn.expire(key, self.ttl)
+                    self._redis.expire(key, self.ttl)
 
                 logger.debug(
                     f"Set TTL={self.ttl}s on {len(keys)} keys for "
@@ -124,10 +124,10 @@ class TTLRedisSaver(RedisSaver):
                 thread_id = config.get("configurable", {}).get("thread_id")
                 if thread_id:
                     pattern = f"langgraph:checkpoint:{thread_id}:*"
-                    keys = self.conn.keys(pattern)
+                    keys = self._redis.keys(pattern)
 
                     for key in keys:
-                        self.conn.expire(key, self.ttl)
+                        self._redis.expire(key, self.ttl)
 
                     logger.debug(
                         f"Extended TTL={self.ttl}s on {len(keys)} keys for "
@@ -154,13 +154,13 @@ class TTLRedisSaver(RedisSaver):
         """
         try:
             pattern = f"langgraph:checkpoint:{thread_id}:*"
-            keys = self.conn.keys(pattern)
+            keys = self._redis.keys(pattern)
 
             if not keys:
                 return None
 
             # Return TTL of first key (all should have same TTL)
-            ttl = self.conn.ttl(keys[0])
+            ttl = self._redis.ttl(keys[0])
             return ttl if ttl > 0 else None
 
         except Exception as e:

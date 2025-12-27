@@ -233,28 +233,37 @@ MEMORY_TTL=172800  # 48 horas
 THREAD_SECRET=your-secret-key-here  # Generar con: openssl rand -hex 32
 ```
 
-## 📋 Próximas Fases
+## 📋 Estado de Implementación Completo
 
-### Fase 2: Compresión + Tool Memory (Próxima)
+### ✅ Fase 1: Fundamentos (COMPLETADA)
+- ✅ `core/identifiers.py` - Generación criptográfica de IDs
+- ✅ `core/state.py` - Definición de ConversationState
+- ✅ `core/checkpointer.py` - Redis checkpointer con TTL
 
-- [ ] `compression/pareto.py` - Compresión 80/20
-- [ ] `compression/summarizer.py` - LLM summarizer (LFM2-1.2B)
-- [ ] `layers/tool_memory.py` - Gestión de tool memory
-- [ ] `artifacts/manager.py` - Gestión de artefactos con TTL
-- [ ] `artifacts/cleanup.py` - Script de limpieza
+### ✅ Fase 2: Compresión + Tool Memory (COMPLETADA)
+- ✅ `compression/pareto.py` - Compresión 80/20
+- ✅ `compression/summarizer.py` - LLM summarizer (LFM2-1.2B)
+- ✅ `layers/tool_memory.py` - Gestión de tool memory
 
-### Fase 3: Context Assembly
+### ✅ Fase 3: Context Assembly (COMPLETADA)
+- ✅ `context/builder.py` - Constructor de contexto jerárquico
 
-- [ ] `context/builder.py` - Constructor de contexto jerárquico
-- [ ] `layers/short_term.py` - Memoria a corto plazo
-- [ ] `layers/semantic_memory.py` - Memoria semántica (embeddings)
+### ✅ Fase 4-5: ChatMemory (COMPLETADA)
+- ✅ `snapshot.py` - Creación de snapshots comprimidos
+- ✅ `storage/chat_memory_schema.py` - Esquema Weaviate para ChatMemory
+- ✅ `storage/chat_memory_persistence.py` - Persistencia de snapshots
+- ✅ `retrieval/cross_chat.py` - Cross-chat retrieval
 
-### Fase 4: Integración con API
+### ✅ Fase 6: RRF + MMR (COMPLETADA)
+- ✅ `retrieval/rrf_fusion.py` - Reciprocal Rank Fusion
+- ✅ `retrieval/mmr.py` - Maximal Marginal Relevance (anti-eco)
+- ✅ `integration.py` - ChatMemoryManager integrado
 
-- [ ] Middleware de thread management
-- [ ] Modificación de chat router
-- [ ] Integración con RAG orchestrator
-- [ ] Integración con tools (office/ocr/archive)
+### 🔄 Pendiente: Integración con API
+- [ ] Modificar `src/api/ollama/router.py` para usar ChatMemory
+- [ ] Integrar snapshot creation en flujo de conversación
+- [ ] Añadir cross-chat retrieval a RAG pipeline
+- [ ] Configurar cleanup automático de snapshots expirados
 
 ## 🐛 Troubleshooting
 

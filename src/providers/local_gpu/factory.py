@@ -42,6 +42,7 @@ def build_local_gpu_embedding_service(config: Config) -> EmbeddingInterface:
 
 def _get_redis_client(config: Config):
     try:
+        from src.storage.cache.redis_connection import create_redis_client_with_retry
         import redis
 
         redis_host = getattr(config, "REDIS_HOST", "127.0.0.1")
@@ -54,15 +55,14 @@ def _get_redis_client(config: Config):
             redis_port,
             redis_db,
         )
-        client = redis.Redis(
+        client = create_redis_client_with_retry(
             host=redis_host,
             port=redis_port,
-            db=redis_db,
             decode_responses=False,
-            socket_connect_timeout=2,
-            socket_timeout=2,
+            timeout=2,
         )
-        client.ping()
+        # Select database
+        client.execute_command('SELECT', redis_db)
         logger.info("Redis connection successful for local GPU embedding cache")
         return client
     except ImportError:

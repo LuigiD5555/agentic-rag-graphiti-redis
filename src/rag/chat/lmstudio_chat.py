@@ -6,6 +6,23 @@ from src.rag.audit import get_logger
 log = get_logger(__name__)
 
 
+def _normalize_model_name(model_name: str) -> str:
+    """Remove Ollama-style version tags from model name.
+
+    Open WebUI sends models like 'liquid/lfm2-1.2b:latest' but LM Studio
+    expects just 'liquid/lfm2-1.2b'. This function strips the tag.
+
+    Args:
+        model_name: Model name possibly with tag (e.g., 'model:latest', 'model:v1')
+
+    Returns:
+        Model name without tag
+    """
+    if ':' in model_name:
+        return model_name.split(':', 1)[0]
+    return model_name
+
+
 class LMStudioChatService:
     """Chat service using LM Studio's OpenAI-compatible API."""
 
@@ -26,6 +43,7 @@ class LMStudioChatService:
             temperature: Sampling temperature (0.0-1.0).
             max_tokens: Maximum tokens in response.
         """
+        log.info("Creating OpenAI client with base_url=%s", base_url)
         self.client = OpenAI(base_url=base_url, api_key=api_key)
         self.model = model
         self.temperature = temperature
@@ -55,11 +73,51 @@ class LMStudioChatService:
             log.error("Failed to list models: %s. Using 'default'", e)
             return "default"
 
+    def _ensure_model_loaded(self, model_name: str) -> bool:
+        """Ensure model is loaded in LM Studio.
+
+        LM Studio loads models on-demand when they're first used. This method
+        sends a minimal test request to warm up the model and verify it can load.
+
+        Args:
+            model_name: Name of the model to load
+
+        Returns:
+            True if model loaded successfully, False otherwise
+        """
+        try:
+            log.info("Checking if model %s is loaded...", model_name)
+            # Send a minimal warmup request to load the model
+            response = self.client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": "test"}],
+                max_tokens=1,  # Minimal tokens to speed up warmup
+                temperature=0.1,
+            )
+
+            if response and response.choices:
+                log.info("Model %s loaded successfully", model_name)
+                return True
+            else:
+                log.warning("Model %s warmup returned empty response", model_name)
+                return False
+
+        except Exception as e:
+            error_str = str(e)
+            if "Failed to load model" in error_str or "Operation canceled" in error_str:
+                log.error("Model %s failed to load: %s", model_name, error_str)
+                return False
+            else:
+                # Other errors might be transient
+                log.warning("Model %s warmup error (might still work): %s", model_name, error_str)
+                return True  # Try to proceed anyway
+
     def chat(
         self,
         messages: List[Dict[str, str]],
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        model: Optional[str] = None,
     ) -> str:
         """Send chat completion request.
 
@@ -67,14 +125,30 @@ class LMStudioChatService:
             messages: List of message dicts with 'role' and 'content'.
             temperature: Override default temperature.
             max_tokens: Override default max_tokens.
+            model: Override default model (allows per-request model selection).
 
         Returns:
             Generated response text.
         """
         temp = temperature if temperature is not None else self.temperature
         tokens = max_tokens if max_tokens is not None else self.max_tokens
+        selected_model = model if model is not None else self.model
+
+        # Normalize model name: remove Ollama-style tags like ':latest'
+        # Open WebUI sends 'liquid/lfm2-1.2b:latest' but LM Studio expects 'liquid/lfm2-1.2b'
+        if selected_model:
+            normalized_model = _normalize_model_name(selected_model)
+        else:
+            log.error("No model specified and no default model available")
+            return "Error: No model specified"
 
         try:
+            # Ensure model is loaded before making the actual request
+            if not self._ensure_model_loaded(normalized_model):
+                error_msg = f"Model {normalized_model} is not available or failed to load in LM Studio. Please load the model manually in LM Studio first."
+                log.error(error_msg)
+                return f"Error: {error_msg}"
+
             # Clean messages from potential encoding issues
             cleaned_messages = []
             for msg in messages:
@@ -88,19 +162,33 @@ class LMStudioChatService:
                 cleaned_messages.append(cleaned_msg)
 
             log.debug(
-                "Sending chat request: %d messages, temp=%.2f, max_tokens=%d",
-                len(cleaned_messages), temp, tokens
+                "Sending chat request: model=%s (normalized to %s), %d messages, temp=%.2f, max_tokens=%d",
+                selected_model, normalized_model, len(cleaned_messages), temp, tokens
             )
+            log.info("Messages to send: %s", cleaned_messages)
 
+            log.info("Calling LM Studio with model=%s", normalized_model)
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=normalized_model,
                 messages=cleaned_messages,
                 temperature=temp,
                 max_tokens=tokens,
             )
+            log.info("Received response type: %s, has choices: %s, choices length: %s",
+                    type(response),
+                    hasattr(response, 'choices'),
+                    len(response.choices) if hasattr(response, 'choices') and response.choices else 0)
+
+            if not response or not response.choices:
+                log.error("Empty response from LM Studio for model %s", normalized_model)
+                return f"Error: No response from LM Studio for model {normalized_model}"
 
             content = response.choices[0].message.content
-            log.info("Generated response: %d chars", len(content))
+            if content is None:
+                log.error("Response content is None for model %s", normalized_model)
+                return f"Error: Empty content from model {normalized_model}"
+
+            log.info("Generated response with model %s: %d chars", normalized_model, len(content))
             return content
 
         except UnicodeEncodeError as e:
@@ -108,9 +196,9 @@ class LMStudioChatService:
             log.error("Chat completion encoding failed: %s", e)
             return error_msg
         except Exception as e:
-            error_msg = f"Could not generate response. {str(e)}"
-            log.error("Chat completion failed: %s", e)
-            return f"Error: {error_msg}"
+            error_msg = "Could not generate response. " + str(e)
+            log.error("Chat completion failed with model %s: %s", selected_model, e, exc_info=True)
+            return "Error: " + error_msg
 
     def complete(
         self,

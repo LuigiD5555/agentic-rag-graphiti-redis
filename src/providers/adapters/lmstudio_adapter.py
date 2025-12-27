@@ -60,7 +60,7 @@ class LMStudioAdapter(ProviderAdapterBase):
         Get Redis client if available, return None otherwise.
         """
         try:
-            import redis
+            from src.storage.cache.redis_connection import create_redis_client_with_retry
 
             redis_host = getattr(config, "REDIS_HOST", "127.0.0.1")
             redis_port = int(getattr(config, "REDIS_PORT", 6379))
@@ -68,17 +68,17 @@ class LMStudioAdapter(ProviderAdapterBase):
 
             logger.info("Attempting to connect to Redis at %s:%d (db=%d)", redis_host, redis_port, redis_db)
 
-            client = redis.Redis(
+            # Use create_redis_client_with_retry for BusyLoadingError handling
+            import redis
+            client = create_redis_client_with_retry(
                 host=redis_host,
                 port=redis_port,
-                db=redis_db,
                 decode_responses=False,  # We'll handle encoding ourselves
-                socket_connect_timeout=2,
-                socket_timeout=2,
+                timeout=2,
             )
 
-            # Test connection
-            client.ping()
+            # Select database
+            client.execute_command('SELECT', redis_db)
             logger.info("Redis connection successful for embedding cache")
             return client
 

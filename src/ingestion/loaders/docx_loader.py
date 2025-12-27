@@ -5,12 +5,12 @@ from zipfile import BadZipFile
 from docx import Document as DocxDocument
 from docx.opc.exceptions import PackageNotFoundError
 from langchain_core.documents import Document
-from langchain_community.document_loaders import UnstructuredWordDocumentLoader
 
 from src.ingestion.loaders.errors import (
     LoaderInvalidFormatError,
     ensure_file_exists,
 )
+from src.ingestion.loaders.office_client import OfficeToolClient
 
 
 class DocxLoader:
@@ -18,6 +18,7 @@ class DocxLoader:
 
     def __init__(self, path: str):
         self._path = path
+        self._office_client = OfficeToolClient()
 
     def load(self) -> List[Document]:
         """
@@ -63,10 +64,11 @@ class DocxLoader:
         ]
 
     def _unstructured_loader(self, original_exc: Exception) -> List[Document]:
-        """Fallback loader that leverages unstructured for oddball docx files."""
+        """Fallback loader via rag-tool-office for oddball docx files."""
         try:
-            return UnstructuredWordDocumentLoader(self._path).load()
-        except ValueError as exc:
+            doc = self._office_client.load_as_document(self._path)
+            return [doc]
+        except RuntimeError as exc:
             plain = self._plain_text_fallback(exc)
             if plain:
                 return plain
