@@ -1,0 +1,17 @@
+# Minimal dependencies for lightweight API proxy
+# This API acts as a thin HTTP translation layer between OpenAI/Ollama formats
+# and the core RAG service running in the 'app' container
+
+# Web framework
+fastapi
+uvicorn[standard]
+
+# Data validation
+pydantic
+pydantic-settings
+
+# HTTP client for calling core service
+requests
+
+# Environment configuration
+python-dotenv

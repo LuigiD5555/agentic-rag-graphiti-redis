@@ -1,44 +1,46 @@
 # ============================================
-# RAG API - Personal/Local use
+# RAG API Proxy - Minimal (Alpine, no heavy deps)
 # ============================================
-FROM python:3.12-slim AS base
+FROM python:3.12-alpine AS base
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Minimal build dependencies for lightweight packages
+RUN apk add --no-cache \
     gcc \
-    g++ \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+    musl-dev \
+    libffi-dev
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy minimal requirements and install dependencies
+COPY requirements-api.txt .
+RUN pip install --no-cache-dir -r requirements-api.txt
 
 # ============================================
-# Development stage (default for local use)
+# Runtime stage (minimal proxy)
 # ============================================
-FROM base AS development
+FROM base AS runtime
 
-# Install development/testing tools
-RUN pip install --no-cache-dir pytest pytest-asyncio httpx ipdb
+# Copy only the proxy app (no full src/ tree needed)
+COPY src/api/app_proxy.py ./src/api/app_proxy.py
+COPY src/api/__init__.py ./src/api/__init__.py
 
-# Copy source code (will be overridden by volume mount in docker-compose)
-COPY src/ ./src/
-COPY tests/ ./tests/
-COPY data/ ./data/
-
-# Create data directory
-RUN mkdir -p data
-
-# Port is now configurable via API_PORT environment variable (default: 8000)
+# Port is configurable via API_PORT environment variable (default: 8000)
 EXPOSE 8000
 
-# Health check - uses API_PORT environment variable
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import os, requests; requests.get(f'http://localhost:{os.getenv(\"API_PORT\", \"8000\")}/health')" || exit 1
 
+# Run proxy
+CMD sh -c "uvicorn src.api.app_proxy:app --host 0.0.0.0 --port ${API_PORT:-8000}"
+
+# ============================================
+# Development stage (with hot-reload)
+# ============================================
+FROM runtime AS development
+
+# Install development tools
+RUN pip install --no-cache-dir pytest pytest-asyncio httpx ipdb
+
 # Run with auto-reload for local development
-# Port is controlled by API_PORT environment variable
-CMD sh -c "uvicorn src.api.app:app --host 0.0.0.0 --port ${API_PORT:-8000} --reload"
+CMD sh -c "uvicorn src.api.app_proxy:app --host 0.0.0.0 --port ${API_PORT:-8000} --reload"

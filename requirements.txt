@@ -14,20 +14,15 @@ neo4j
 weaviate-client>=4,<5
 grpcio
 
-# Ingestion
-unstructured
+# Ingestion (Office tools delegated to rag-tool-office)
 networkx
-pandas
-openpyxl
-xlrd
-msoffcrypto-tool
-python-docx
+python-docx  # Still needed for DOCX native parsing (fallback to rag-tool-office)
 pypdf
-python-pptx
 
 # API
 fastapi
 uvicorn[standard]
+python-multipart  # Required for file uploads in FastAPI
 openai
 
 # Utils

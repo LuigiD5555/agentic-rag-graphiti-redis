@@ -3,11 +3,13 @@
 # RAG Agentic Graphiti - Complete Setup & Start Script
 # ============================================================================
 # This script handles the full setup:
-# 1. Verify dependencies
+# 1. Verify system dependencies
 # 2. Build tool images (if missing)
 # 3. Install and enable systemd sockets
-# 4. Start core services (Weaviate, Neo4j, Redis)
-# 5. Verify everything is running
+# 4. Check and prepare volumes
+# 5. Build and start all services (Weaviate, Neo4j, Redis, RAG API, Open WebUI)
+# 6. Verify everything is running and run pre-flight checks
+# 7. Display summary and next steps
 # ============================================================================
 
 set -e
@@ -87,24 +89,6 @@ if [ "$deps_ok" = false ]; then
 fi
 
 print_success "All dependencies are installed"
-
-# ============================================================================
-# STEP 1.5: PRE-FLIGHT CHECKS
-# ============================================================================
-
-print_header "STEP 1.5: Running Pre-Flight Checks"
-
-print_step "Running comprehensive system checks..."
-if ! python3 -m pytest tests/infrastructure/test_preflight.py -v --tb=short; then
-    print_error "Pre-flight checks failed"
-    print_warning "Some checks may have failed. Review the output above."
-    read -p "Continue anyway? (y/N): " continue_anyway
-    if [[ ! "$continue_anyway" =~ ^[yY]$ ]]; then
-        exit 1
-    fi
-fi
-
-print_success "Pre-flight checks completed"
 
 # ============================================================================
 # STEP 2: BUILD TOOL IMAGES
@@ -316,6 +300,22 @@ fi
 
 if grep -q "ENABLE_GPU_ACCELERATION=true" .env 2>/dev/null; then
     test_tool_endpoint "tool-gpu    " "9104"
+fi
+
+# Run comprehensive pre-flight checks now that containers are running
+print_step "Running comprehensive pre-flight checks..."
+
+if python3 -c "import pytest" 2>/dev/null; then
+    if ! python3 -m pytest tests/infrastructure/test_preflight.py -v --tb=short; then
+        print_warning "Some pre-flight checks failed. Review the output above."
+        print_info "System is running but may have configuration issues."
+    else
+        print_success "All pre-flight checks passed"
+    fi
+else
+    print_warning "pytest not installed on host, skipping pre-flight checks"
+    print_info "To run checks later: pip install pytest && pytest tests/infrastructure/test_preflight.py -v"
+    print_info "Or run inside container: podman exec -it rag-api pytest tests/infrastructure/test_preflight.py -v"
 fi
 
 # ============================================================================

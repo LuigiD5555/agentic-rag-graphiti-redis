@@ -57,7 +57,7 @@ class SystemdManager:
         tools: List of tool names to manage
     """
 
-    TOOLS = ['office', 'archive', 'ocr', 'gpu']
+    TOOLS = ['office', 'archive', 'ocr', 'gpu', 'websearch']
 
     def __init__(self):
         """Initialize manager with project paths."""
@@ -124,12 +124,12 @@ class SystemdManager:
         Check if a tool should be enabled based on .env configuration.
 
         Args:
-            tool: Tool name (office, archive, ocr, gpu)
+            tool: Tool name (office, archive, ocr, gpu, websearch)
 
         Returns:
             True if tool should be enabled
         """
-        if tool in ['office', 'archive']:
+        if tool in ['office', 'archive', 'websearch']:
             return True  # Always enable
         elif tool == 'ocr':
             return self._read_env_var('ENABLE_OCR')
@@ -606,21 +606,41 @@ class SystemdManager:
         all_success = True
 
         for tool in tools:
-            tool_dir = tools_dir / tool
-            if not tool_dir.exists():
+            # Special handling for websearch: Containerfile is in project root
+            if tool == 'websearch':
+                containerfile = self.project_root / 'Containerfile.tool-websearch'
+                if not containerfile.exists():
+                    if verbose:
+                        print(f"{Colors.YELLOW}⚠ Skipping:{Colors.NC} {tool} (Containerfile not found)")
+                    continue
+
                 if verbose:
-                    print(f"{Colors.YELLOW}⚠ Skipping:{Colors.NC} {tool} (directory not found)")
-                continue
+                    print(f"{Colors.CYAN}Building tool-{tool}...{Colors.NC}")
 
-            if verbose:
-                print(f"{Colors.CYAN}Building tool-{tool}...{Colors.NC}")
+                # Build from project root with specific Containerfile
+                code, stdout, stderr = self._run_command(
+                    ['podman', 'build', '-t', f'rag-tool-{tool}:latest',
+                     '-f', str(containerfile), str(self.project_root)],
+                    check=False,
+                    capture=True
+                )
+            else:
+                # Standard tools: directory in tools/
+                tool_dir = tools_dir / tool
+                if not tool_dir.exists():
+                    if verbose:
+                        print(f"{Colors.YELLOW}⚠ Skipping:{Colors.NC} {tool} (directory not found)")
+                    continue
 
-            # Build image
-            code, stdout, stderr = self._run_command(
-                ['podman', 'build', '-t', f'rag-tool-{tool}:latest', str(tool_dir)],
-                check=False,
-                capture=True
-            )
+                if verbose:
+                    print(f"{Colors.CYAN}Building tool-{tool}...{Colors.NC}")
+
+                # Build image
+                code, stdout, stderr = self._run_command(
+                    ['podman', 'build', '-t', f'rag-tool-{tool}:latest', str(tool_dir)],
+                    check=False,
+                    capture=True
+                )
 
             if code == 0:
                 if verbose:
@@ -675,7 +695,7 @@ class SystemdManager:
             return False
 
         # Get port for this tool
-        port_map = {'office': 9102, 'archive': 9101, 'ocr': 9103, 'gpu': 9104}
+        port_map = {'office': 9102, 'archive': 9101, 'ocr': 9103, 'gpu': 9104, 'websearch': 9105}
         port = port_map.get(tool)
 
         if verbose:

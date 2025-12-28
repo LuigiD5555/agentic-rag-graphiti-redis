@@ -1,20 +1,21 @@
 ########################
-# Base (dependencies)
+# Base (dependencies) - Alpine, NO LibreOffice
 ########################
-FROM python:3.12-slim AS base
+FROM python:3.12-alpine AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-# System packages kept minimal; add only what you need
-# LibreOffice is required for processing .doc/.docx files via unstructured
-RUN apt-get update \
- && apt-get install -y --no-install-recommends \
+# Minimal build dependencies for Python packages
+RUN apk add --no-cache \
+    gcc \
+    g++ \
+    musl-dev \
+    linux-headers \
     curl \
-    libreoffice-writer \
-    libreoffice-calc \
- && rm -rf /var/lib/apt/lists/*
+    libffi-dev \
+    openssl-dev
 
 WORKDIR /app
 
@@ -45,7 +46,7 @@ ARG RUN_TESTS=0
 RUN if [ "$RUN_TESTS" = "1" ]; then pytest -q; fi
 
 ########################
-# Runtime (production)
+# Runtime (unified for both ingestion and API)
 ########################
 FROM base AS runtime
 
@@ -55,8 +56,30 @@ COPY .ingestignore /app/.ingestignore
 # Set environment variables for default paths
 ENV DOCS_EXCLUDE_FILE=/app/.ingestignore
 
-# Copy only the application code required at runtime
+# Copy application code
 COPY src/ src/
+COPY tests/ tests/
 
-# Default command
-CMD ["python", "-m", "src.main"]
+# Create data directory for API file uploads
+RUN mkdir -p data
+
+# Expose API port (configurable via API_PORT env var)
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD python -c "import os, requests; requests.get(f'http://localhost:{os.getenv(\"API_PORT\", \"8001\")}/health')" || exit 0
+
+# Default command: HTTP server mode (core RAG service)
+CMD sh -c "uvicorn src.api.app:app --host 0.0.0.0 --port ${API_PORT:-8001}"
+
+########################
+# Development stage (with hot-reload for API)
+########################
+FROM runtime AS development
+
+# Install development/testing tools
+RUN pip install --no-cache-dir pytest pytest-asyncio httpx ipdb
+
+# Default: HTTP server with auto-reload
+CMD sh -c "uvicorn src.api.app:app --host 0.0.0.0 --port ${API_PORT:-8001} --reload"

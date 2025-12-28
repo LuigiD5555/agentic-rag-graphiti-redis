@@ -1,0 +1,26 @@
+# Containerfile for SearXNG web search tool
+# Based on official SearXNG image with custom configuration
+
+FROM docker.io/searxng/searxng:latest
+
+# Metadata
+LABEL maintainer="RAG Agentic Graphiti Project"
+LABEL description="SearXNG metasearch engine for web search capabilities"
+LABEL version="1.0"
+
+# Create non-root user for security
+USER searxng
+
+# Copy custom configuration
+# The settings.yml will be mounted at runtime via volume
+# COPY --chown=searxng:searxng config/searxng/settings.yml /etc/searxng/settings.yml
+
+# Health check endpoint
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/healthz || exit 1
+
+# Expose port 8080 (SearXNG default)
+EXPOSE 8080
+
+# Use the default entrypoint from the base image
+# which runs: uwsgi --master --http-socket 0.0.0.0:8080 --module searx.webapp

@@ -1,0 +1,66 @@
+# SearXNG configuration for RAG web search tool
+# Based on official SearXNG documentation 2025
+
+# Use default settings as base, override only what we need
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "RAG Tool WebSearch"
+  enable_metrics: false
+
+search:
+  safe_search: 0  # 0=None, 1=Moderate, 2=Strict
+  autocomplete: ""
+  default_lang: "es"
+
+server:
+  # Secret key will be set via environment variable SEARXNG_SECRET
+  secret_key: "ultrasecretkey"  # This will be overridden by env var
+  bind_address: "0.0.0.0"
+  port: 8080
+  public_instance: false  # This is a private local instance
+  limiter: false  # Disabled - requires Redis/Valkey
+  image_proxy: false
+  http_protocol_version: "1.1"
+
+ui:
+  static_use_hash: true
+  default_locale: "es"
+  query_in_title: false
+  infinite_scroll: false
+  default_theme: "simple"
+
+outgoing:
+  request_timeout: 3.0
+  max_request_timeout: 6.0
+  enable_http2: true
+  pool_connections: 100
+  pool_maxsize: 20
+
+# Enable "public instance" mode to disable bot detection
+enabled_plugins:
+  []
+
+# Keep only fast and reliable free engines
+use_default_settings:
+  engines:
+    keep_only:
+      # General web search
+      - duckduckgo
+      - brave
+      - qwant
+      - startpage
+      # News
+      - duckduckgo news
+      - bing news
+      # Reference
+      - wikipedia
+      # Academic
+      - arxiv
+      - google scholar
+      # Tech
+      - github
+      - stackoverflow
+      # Media
+      - youtube

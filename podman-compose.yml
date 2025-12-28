@@ -86,7 +86,11 @@ services:
     restart: unless-stopped
     logging:
       driver: journald
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    # AOF persistence with 1-day session TTL
+    # - appendonly yes: Enable AOF (Append-Only File) for durability
+    # - appendfsync everysec: Fsync every second (balance durability/performance)
+    # - save "": Disable RDB snapshots (AOF is enough for sessions)
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--save", ""]
     ports:
       - "127.0.0.1:${HOST_REDIS_TCP_PORT:-6379}:6379"
     volumes:
@@ -97,11 +101,11 @@ services:
         aliases:
           - redis
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      test: ["CMD-SHELL", "redis-cli ping | grep -q '^PONG$' || exit 1"]
+      interval: 5s
       timeout: 3s
-      retries: 5
-      start_period: 10s
+      retries: 30
+      start_period: 60s
     stop_grace_period: 20s
     ulimits:
       nofile: { soft: 65536, hard: 65536 }
@@ -109,7 +113,7 @@ services:
       resources:
         limits:
           cpus: "${REDIS_CPUS:-1.0}"
-          memory: "${REDIS_MEMORY:-512m}"
+          memory: "${REDIS_MEMORY:-1g}"
 
   rag-api:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_rag-api_1"
@@ -121,42 +125,23 @@ services:
     logging:
       driver: journald
     depends_on:
-      - weaviate
-      - neo4j
-      - redis
+      app:
+        condition: service_healthy
     env_file: .env
 
     # Share the host network namespace so 127.0.0.1 == host loopback
     network_mode: "host"
 
     environment:
-      # Point to host-published ports (all bound to 127.0.0.1)
-      WEAVIATE_URL: "http://127.0.0.1:${HOST_WEAVIATE_HTTP_PORT:-8080}"
-      WEAVIATE_GRPC_PORT: "${HOST_WEAVIATE_GRPC_PORT:-50051}"
-      WEAVIATE_CLASS: "${WEAVIATE_CLASS:-RAGDocument}"
-      WEAVIATE_MULTI_TENANCY: "${WEAVIATE_MULTI_TENANCY:-true}"
-      WEAVIATE_DEFAULT_TENANT: "${WEAVIATE_DEFAULT_TENANT:-tenant-default}"
+      # Proxy to core service (app container on port 8001)
+      CORE_SERVICE_URL: "http://127.0.0.1:${HOST_CORE_SERVICE_PORT:-8001}"
+      CORE_TIMEOUT: "${CORE_TIMEOUT:-120}"
 
-      NEO4J_URI: "bolt://127.0.0.1:${HOST_NEO4J_BOLT_PORT:-7687}"
-      NEO4J_USER: "${NEO4J_USER:-neo4j}"
-      NEO4J_PASSWORD: "${NEO4J_PASSWORD:-neo4j123}"
+      # API mode (openai or ollama)
+      API_MODE: "${API_MODE:-ollama}"
 
-      REDIS_HOST: "127.0.0.1"
-      REDIS_PORT: "${HOST_REDIS_TCP_PORT:-6379}"
-      CACHE_TTL: "${CACHE_TTL:-3600}"
-
-      LMSTUDIO_HOST: "127.0.0.1"
-      LMSTUDIO_PORT: "${HOST_LMSTUDIO_HTTP_PORT:-1234}"
-      PROVIDER: "${PROVIDER:-lmstudio}"
-
-      # RAG API port
+      # RAG API port (public-facing proxy)
       API_PORT: "${HOST_RAG_API_PORT:-8000}"
-
-    volumes:
-      # Mount source for hot-reload during development
-      - ./src:/app/src:ro,Z
-      - ./tests:/app/tests:ro,Z
-      - ${HOST_DATA_DIR:-./data}:/app/data:Z
 
     # API binds to 0.0.0.0:8000 inside container, accessible at 127.0.0.1:8000 on host via host network
     healthcheck:
@@ -172,65 +157,116 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${API_CPUS:-1.0}"
-          memory: "${API_MEMORY:-1g}"
+          cpus: "${API_CPUS:-0.5}"
+          memory: "${API_MEMORY:-256m}"
 
-  open-webui:
-    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_open-webui_1"
-    image: "ghcr.io/open-webui/open-webui:${OPEN_WEBUI_IMAGE_TAG:-main}"
+  librechat:
+    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_librechat_1"
+    image: "ghcr.io/danny-avila/librechat:${LIBRECHAT_IMAGE_TAG:-latest}"
     restart: unless-stopped
     logging:
       driver: journald
     depends_on:
-      - rag-api
+      rag-api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
-    # Use host network to access rag-api on 127.0.0.1:8000
+    # Use host network to access rag-api and redis on 127.0.0.1
     network_mode: "host"
 
     environment:
-      # Point to RAG API on host network
-      OLLAMA_BASE_URL: "http://127.0.0.1:${HOST_RAG_API_PORT:-8000}"
-      WEBUI_SECRET_KEY: "${WEBUI_SECRET_KEY:-change-this-secret-in-production}"
-      # Enable Ollama API to connect to external RAG API
-      ENABLE_OLLAMA_API: "true"
-      # Disable OpenAI API completely
-      ENABLE_OPENAI_API: "false"
-      OPENAI_API_BASE_URLS: ""
-      OPENAI_API_KEYS: ""
-      # Optional: Enable other features
-      ENABLE_RAG_WEB_SEARCH: "false"
-      ENABLE_IMAGE_GENERATION: "false"
-      # Port for Open WebUI (when using host network)
-      PORT: "${HOST_OPEN_WEBUI_PORT:-5555}"
+      # Host and port (LibreChat binds to this when using host network)
+      HOST: "0.0.0.0"
+      PORT: "${HOST_LIBRECHAT_PORT:-3080}"
+
+      # MongoDB (LibreChat's internal DB) - use host network
+      MONGO_URI: "mongodb://127.0.0.1:27017/LibreChat"
+
+      # Custom OpenAI endpoint pointing to RAG API
+      ENDPOINTS: "custom"
+
+      # Custom endpoint configuration
+      CUSTOM_OPENAI_BASE_URL: "http://127.0.0.1:${HOST_RAG_API_PORT:-8000}"
+      CUSTOM_OPENAI_API_KEY: "not-needed"
+      CUSTOM_OPENAI_MODELS: "default"
+
+      # Session secret
+      CREDS_KEY: "${LIBRECHAT_CREDS_KEY:-change-this-secret-in-production}"
+      CREDS_IV: "${LIBRECHAT_CREDS_IV:-change-this-iv-in-production}"
+      JWT_SECRET: "${LIBRECHAT_JWT_SECRET:-change-this-jwt-secret}"
+      JWT_REFRESH_SECRET: "${LIBRECHAT_JWT_REFRESH_SECRET:-change-this-refresh-secret}"
+
+      # File uploads (for temporal RAG)
+      ENABLE_FILE_UPLOADS: "true"
+      FILE_UPLOAD_SIZE_LIMIT: "${TEMPORAL_FILE_MAX_SIZE_MB:-50}"
+      FILES_ENDPOINT: "http://127.0.0.1:${HOST_RAG_API_PORT:-8000}/v1/files"
+
+      # Disable telemetry
+      ALLOW_SOCIAL_LOGIN: "false"
+      ALLOW_EMAIL_LOGIN: "true"
+      ALLOW_REGISTRATION: "true"
+
     volumes:
-      - ${HOST_OPEN_WEBUI_DATA:-open-webui_data}:/app/backend/data:Z
+      - ${HOST_LIBRECHAT_DATA:-librechat_data}:/app/client/public/images:Z
+      - ${HOST_LIBRECHAT_CONFIG:-./config/librechat.yaml}:/app/librechat.yaml:ro,Z
+
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:${HOST_OPEN_WEBUI_PORT:-5555}/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:${HOST_LIBRECHAT_PORT:-3080}/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 60s
     stop_grace_period: 20s
     ulimits:
       nofile: { soft: 65536, hard: 65536 }
     deploy:
       resources:
         limits:
-          cpus: "${OPEN_WEBUI_CPUS:-1.0}"
-          memory: "${OPEN_WEBUI_MEMORY:-1g}"
+          cpus: "${LIBRECHAT_CPUS:-1.0}"
+          memory: "${LIBRECHAT_MEMORY:-1g}"
+
+  mongodb:
+    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_mongodb_1"
+    image: "docker.io/library/mongo:${MONGODB_IMAGE_TAG:-7}"
+    restart: unless-stopped
+    logging:
+      driver: journald
+    ports:
+      - "127.0.0.1:27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: "LibreChat"
+    volumes:
+      - ${HOST_MONGODB_DATA:-mongodb_data}:/data/db:Z
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "${MONGODB_CPUS:-1.0}"
+          memory: "${MONGODB_MEMORY:-512m}"
 
   app:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_app_1"
     build:
       context: .
       dockerfile: Dockerfile
+      target: development
     restart: unless-stopped
     logging:
       driver: journald
     depends_on:
-      - weaviate
-      - neo4j
-      - redis
+      weaviate:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     env_file: .env
 
     # Share the host network namespace so 127.0.0.1 == host loopback
@@ -245,6 +281,7 @@ services:
       WEAVIATE_TIMEOUT: "${WEAVIATE_TIMEOUT:-60}"
       WEAVIATE_CLASS: "${WEAVIATE_CLASS:-RAGDocument}"
       WEAVIATE_MULTI_TENANCY: "${WEAVIATE_MULTI_TENANCY:-true}"
+      WEAVIATE_DEFAULT_TENANT: "${WEAVIATE_DEFAULT_TENANT:-tenant-default}"
       WEAVIATE_SKIP_INIT_CHECKS: "${WEAVIATE_SKIP_INIT_CHECKS:-true}"
       EMBEDDING_DIM: "${EMBEDDING_DIM:-768}"
       WEAVIATE_LOG_LEVEL: "${WEAVIATE_LOG_LEVEL:-INFO}"
@@ -259,6 +296,7 @@ services:
       # EXACT LM Studio URL kept as requested
       OPENAI_API_BASE: "http://127.0.0.1:${HOST_LMSTUDIO_HTTP_PORT:-1234}/v1"
       LMSTUDIO_HOST: "127.0.0.1"
+      LM_LLM_URL: "http://127.0.0.1:${HOST_LMSTUDIO_HTTP_PORT:-1234}/v1"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-lm-studio}"
 
       MODEL_SELECTION: "${MODEL_SELECTION:-first-active}"
@@ -269,23 +307,28 @@ services:
       CHUNK_SIZE: "${CHUNK_SIZE:-500}"
       CHUNK_OVERLAP: "${CHUNK_OVERLAP:-50}"
 
-      SOCKET_PORT: "${SOCKET_PORT:-5555}"
+      # Core service port (internal HTTP API)
+      API_PORT: "${HOST_CORE_SERVICE_PORT:-8001}"
+      API_MODE: "${API_MODE:-ollama}"
 
     volumes:
       - ${HOST_DOCS_DIR:?HOST_DOCS_DIR is required}:/mnt/Documents/Documents:Z
       # Libros directory - ACTIVE_LIBROS_DIR is set by check-volumes.sh
       - ${ACTIVE_LIBROS_DIR:?ACTIVE_LIBROS_DIR must be set by check-volumes.sh}:/mnt/resources/Libros:z
-      - ${HOST_DATA_DIR:-./data}:/data:Z
+      - ${HOST_DATA_DIR:-./data}:/app/data:Z
       - ./.ingestignore:/app/.ingestignore:ro,Z
+      # Mount source for hot-reload during development
+      - ./src:/app/src:ro,Z
+      - ./tests:/app/tests:ro,Z
 
-    # Do NOT publish container ports; app binds to 127.0.0.1 via host network
-    command: ["python", "-m", "src.main"]
-
+    # Run as HTTP server (core RAG service)
+    # App binds to 0.0.0.0:8001 inside container, accessible at 127.0.0.1:8001 on host via host network
     healthcheck:
-      test: ["CMD", "python", "-c", "import os,socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1',int(os.environ.get('SOCKET_PORT','5555')))); s.close()"]
-      interval: 15s
-      timeout: 3s
-      retries: 10
+      test: ["CMD", "python", "-c", "import os, requests; requests.get(f'http://127.0.0.1:{os.getenv(\"API_PORT\", \"8001\")}/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
     stop_grace_period: 30s
     ulimits:
@@ -301,4 +344,5 @@ volumes:
   neo4j_logs: {}
   weaviate_data: {}
   redis_data: {}
-  open-webui_data: {}
+  librechat_data: {}
+  mongodb_data: {}
