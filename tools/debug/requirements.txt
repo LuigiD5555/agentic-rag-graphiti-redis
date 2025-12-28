@@ -1,0 +1,21 @@
+# ============================================
+# Debugging Tools Dependencies
+# ============================================
+# Minimal dependencies for diagnostic scripts
+
+# HTTP clients for API testing
+requests==2.31.0
+httpx==0.27.0
+
+# Weaviate client for verify_data.py
+weaviate-client==4.9.3
+
+# Redis client for diagnose_config.py
+redis==5.0.1
+
+# Rich for beautiful terminal output
+rich==13.7.0
+
+# Testing utilities
+pytest==8.0.0
+pytest-asyncio==0.23.3
