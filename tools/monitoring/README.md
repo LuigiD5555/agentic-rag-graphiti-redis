@@ -214,7 +214,7 @@ El daemon ejecuta health checks periódicos:
 ## 📁 Estructura del Proyecto
 
 ```
-monitoring/
+tools/monitoring/
 ├── Dockerfile              # Imagen del contenedor
 ├── requirements.txt        # Dependencias Python
 ├── entrypoint.sh          # Script de entrada
@@ -244,7 +244,7 @@ monitoring/
 
 ```bash
 # Build manual
-podman build -t rag-monitoring -f monitoring/Dockerfile .
+podman build -t rag-monitoring -f tools/monitoring/Dockerfile .
 
 # Build con compose
 podman-compose build monitoring
@@ -252,13 +252,13 @@ podman-compose build monitoring
 
 ### Agregar Nuevas Herramientas
 
-1. Crear script en `monitoring/src/tools/` o `monitoring/scripts/`
+1. Crear script en `tools/monitoring/src/tools/` o `tools/monitoring/scripts/`
 2. Agregar modo en `entrypoint.sh`
 3. Documentar en este README
 
 ### Extender el Daemon
 
-Editar `monitoring/src/monitor_daemon.py` para agregar:
+Editar `tools/monitoring/src/monitor_daemon.py` para agregar:
 - Nuevos health checks
 - Nuevas métricas
 - Alertas personalizadas
@@ -332,7 +332,7 @@ podman inspect rag-graphiti-agentic_monitoring_1 | grep -A 5 Mounts
 Para contribuir:
 
 1. Crear feature branch
-2. Agregar herramienta en `monitoring/`
+2. Agregar herramienta en `tools/monitoring/`
 3. Actualizar `entrypoint.sh`
 4. Documentar en README
 5. Crear pull request

@@ -18,13 +18,13 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements first for better layer caching
-COPY monitoring/requirements.txt .
+COPY tools/monitoring/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy monitoring scripts and utilities
-COPY monitoring/src/ ./src/
-COPY monitoring/scripts/ ./scripts/
-COPY monitoring/config/ ./config/
+COPY tools/monitoring/src/ ./src/
+COPY tools/monitoring/scripts/ ./scripts/
+COPY tools/monitoring/config/ ./config/
 
 # Copy shared utilities from main project (if needed)
 COPY src/utils/volume_monitor.py ./src/utils/
@@ -46,7 +46,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import sys; sys.exit(0)"
 
 # Entry point script
-COPY monitoring/entrypoint.sh /entrypoint.sh
+COPY tools/monitoring/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]

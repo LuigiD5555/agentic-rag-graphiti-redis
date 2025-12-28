@@ -339,6 +339,75 @@ services:
           cpus: "${APP_CPUS:-2.0}"
           memory: "${APP_MEMORY:-3g}"
 
+  monitoring:
+    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_monitoring_1"
+    build:
+      context: .
+      dockerfile: tools/monitoring/Dockerfile
+    restart: unless-stopped
+    logging:
+      driver: journald
+    depends_on:
+      app:
+        condition: service_healthy
+      weaviate:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+
+    # Share host network to access all services
+    network_mode: "host"
+
+    environment:
+      # Monitoring configuration
+      MONITORING_INTERVAL: "${MONITORING_INTERVAL:-300}"
+      ENABLE_LOG_ANALYSIS: "${ENABLE_LOG_ANALYSIS:-true}"
+      ENABLE_VOLUME_MONITORING: "${ENABLE_VOLUME_MONITORING:-true}"
+      ENABLE_HEALTH_CHECKS: "${ENABLE_HEALTH_CHECKS:-true}"
+      LOG_LEVEL: "${MONITORING_LOG_LEVEL:-INFO}"
+
+      # Service endpoints (via host network)
+      REDIS_HOST: "127.0.0.1"
+      REDIS_PORT: "${HOST_REDIS_TCP_PORT:-6379}"
+      WEAVIATE_URL: "http://127.0.0.1:${HOST_WEAVIATE_HTTP_PORT:-8080}"
+      WEAVIATE_GRPC_PORT: "${HOST_WEAVIATE_GRPC_PORT:-50051}"
+      NEO4J_URI: "bolt://127.0.0.1:${HOST_NEO4J_BOLT_PORT:-7687}"
+      NEO4J_USER: "${NEO4J_USER:-neo4j}"
+      NEO4J_PASSWORD: "${NEO4J_PASSWORD:-neo4j123}"
+
+      # Dashboard port (optional)
+      DASHBOARD_PORT: "${MONITORING_DASHBOARD_PORT:-8888}"
+
+    volumes:
+      # Access to systemd journal logs (read-only)
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      # Persistent data
+      - ${HOST_MONITORING_LOGS:-monitoring_logs}:/app/logs:Z
+      - ${HOST_MONITORING_REPORTS:-monitoring_reports}:/app/reports:Z
+      - ${HOST_MONITORING_DATA:-monitoring_data}:/app/data:Z
+
+    # Optional: expose dashboard
+    # ports:
+    #   - "127.0.0.1:${MONITORING_DASHBOARD_PORT:-8888}:8888"
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; exit(0)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    stop_grace_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "${MONITORING_CPUS:-0.5}"
+          memory: "${MONITORING_MEMORY:-512m}"
+
 volumes:
   neo4j_data: {}
   neo4j_logs: {}
@@ -346,3 +415,6 @@ volumes:
   redis_data: {}
   librechat_data: {}
   mongodb_data: {}
+  monitoring_logs: {}
+  monitoring_reports: {}
+  monitoring_data: {}
