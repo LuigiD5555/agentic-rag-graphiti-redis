@@ -398,29 +398,3 @@ class TestVolumeIntegration:
         assert content.count('ACTIVE_LIBROS_DIR') == 1
         assert new_path in content
         assert test_path not in content
-
-
-# ============================================================================
-# Pytest Configuration
-# ============================================================================
-
-def pytest_configure(config):
-    """Register custom markers."""
-    config.addinivalue_line(
-        'markers',
-        'infrastructure: marks tests as infrastructure tests (deselect with "-m \'not infrastructure\'")'
-    )
-    config.addinivalue_line(
-        'markers',
-        'volumes: marks tests as volume verification tests'
-    )
-
-
-def pytest_addoption(parser):
-    """Add custom command line options."""
-    parser.addoption(
-        '--setup-fallback',
-        action='store_true',
-        default=False,
-        help='Setup fallback directories when volumes are not accessible'
-    )

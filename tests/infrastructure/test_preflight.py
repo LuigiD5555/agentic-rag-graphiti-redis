@@ -285,15 +285,36 @@ class TestPythonEnvironment:
         "pydantic",
     ])
     def test_required_package_installed(self, package: str):
-        """Test that required Python packages are installed."""
+        """Test that required Python packages are installed.
+
+        Note: This test is designed to run inside the container where
+        all dependencies are installed. When running locally (host),
+        the test will be skipped since dependencies are container-only.
+        """
         try:
             __import__(package)
             print(f"\n✓ {package}: installed")
         except ImportError:
-            pytest.fail(
-                f"Required Python package '{package}' not installed. "
-                f"Install dependencies: pip install -r requirements.txt"
+            # Check if we're running inside a container
+            # Container environments usually have /.dockerenv or container env vars
+            is_container = (
+                os.path.exists("/.dockerenv") or
+                os.path.exists("/run/.containerenv") or
+                os.getenv("container") is not None
             )
+
+            if is_container:
+                # Inside container - this is a real failure
+                pytest.fail(
+                    f"Required Python package '{package}' not installed. "
+                    f"Install dependencies: pip install -r requirements.txt"
+                )
+            else:
+                # Outside container - skip this test (packages are container-only)
+                pytest.skip(
+                    f"Package '{package}' not available (test runs inside container). "
+                    f"Run: podman exec -it rag-api pytest tests/infrastructure/test_preflight.py"
+                )
 
     def test_python_version_sufficient(self):
         """Test that Python version is 3.9 or higher."""

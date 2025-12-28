@@ -34,6 +34,16 @@ def pytest_runtest_setup(item):
         pytest.skip("Set RUN_INTEGRATION=1 to run integration tests.")
 
 
+def pytest_addoption(parser):
+    """Add custom command line options."""
+    parser.addoption(
+        '--setup-fallback',
+        action='store_true',
+        default=False,
+        help='Setup fallback directories when volumes are not accessible'
+    )
+
+
 def pytest_configure(config):
     """Register custom markers."""
     # Test category markers
