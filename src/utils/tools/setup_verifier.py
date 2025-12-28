@@ -7,16 +7,16 @@ Can be used via CLI or imported programmatically (e.g., by a GUI).
 
 Usage:
     # CLI mode (human-readable output)
-    python -m src.tools.setup_verifier
+    python -m src.utils.tools.setup_verifier
 
     # Quiet mode (exit code only)
-    python -m src.tools.setup_verifier --quiet
+    python -m src.utils.tools.setup_verifier --quiet
 
     # JSON output (machine-readable, for GUI integration)
-    python -m src.tools.setup_verifier --json
+    python -m src.utils.tools.setup_verifier --json
 
     # Programmatic usage
-    from src.tools.setup_verifier import SetupVerifier
+    from src.utils.tools.setup_verifier import SetupVerifier
     verifier = SetupVerifier()
     results = verifier.verify_all()
     if results['success']:
@@ -87,7 +87,7 @@ class SetupVerifier:
 
     def __init__(self):
         """Initialize verifier with project paths."""
-        self.script_dir = Path(__file__).parent.parent.parent
+        self.script_dir = Path(__file__).parent.parent.parent.parent
         self.project_root = self.script_dir
         self.tools_dir = self.project_root / 'tools'
         self.systemd_dir = self.project_root / 'systemd' / 'user'
@@ -514,10 +514,10 @@ class SetupVerifier:
             print(f"{Colors.GREEN}✓ All checks passed!{Colors.NC}")
             print()
             print("Next steps:")
-            print("  1. python -m src.tools.systemd_manager build")
-            print("  2. python -m src.tools.systemd_manager install")
-            print("  3. python -m src.tools.systemd_manager enable")
-            print("  4. python -m src.tools.systemd_manager verify")
+            print("  1. python -m src.utils.tools.systemd_manager build")
+            print("  2. python -m src.utils.tools.systemd_manager install")
+            print("  3. python -m src.utils.tools.systemd_manager enable")
+            print("  4. python -m src.utils.tools.systemd_manager verify")
             print()
         elif errors == 0:
             print(
@@ -579,13 +579,13 @@ def main():
         epilog="""
 Examples:
   # Run verification with human-readable output
-  python -m src.tools.setup_verifier
+  python -m src.utils.tools.setup_verifier
 
   # Run verification in quiet mode (exit code only)
-  python -m src.tools.setup_verifier --quiet
+  python -m src.utils.tools.setup_verifier --quiet
 
   # Get JSON output for machine parsing or GUI
-  python -m src.tools.setup_verifier --json
+  python -m src.utils.tools.setup_verifier --json
 
 Exit codes:
   0 - All checks passed

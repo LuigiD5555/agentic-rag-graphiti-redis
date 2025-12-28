@@ -35,13 +35,13 @@ tests/
 - `tests/tools/gui_verifier_demo.py` - Examples of programmatic setup verification
 
 ### Setup Verification
-Located in `src/tools/setup_verifier.py` (not in tests/ since it's production code):
+Located in `src/utils/tools/setup_verifier.py` (not in tests/ since it's production code):
 ```bash
 # Verify entire system setup
-python -m src.tools.setup_verifier
+python -m src.utils.tools.setup_verifier
 
 # Get JSON output for automation
-python -m src.tools.setup_verifier --json
+python -m src.utils.tools.setup_verifier --json
 ```
 
 ### Memory Verification

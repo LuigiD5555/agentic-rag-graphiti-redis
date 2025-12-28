@@ -7,18 +7,18 @@ socket activation. Tools (office, archive, ocr, gpu) start on-demand when needed
 and stop when idle, saving resources.
 
 Usage:
-    python -m src.tools.systemd_manager install   # Install systemd units
-    python -m src.tools.systemd_manager enable    # Enable sockets (on-demand)
-    python -m src.tools.systemd_manager verify    # Verify configuration
-    python -m src.tools.systemd_manager status    # Show status
-    python -m src.tools.systemd_manager fix       # Auto-repair configuration
+    python -m src.utils.tools.systemd_manager install   # Install systemd units
+    python -m src.utils.tools.systemd_manager enable    # Enable sockets (on-demand)
+    python -m src.utils.tools.systemd_manager verify    # Verify configuration
+    python -m src.utils.tools.systemd_manager status    # Show status
+    python -m src.utils.tools.systemd_manager fix       # Auto-repair configuration
 
 Timeout Management:
     Tools automatically shut down after inactivity (default: 10 minutes)
     Use timeout_manager.py to configure per-tool timeouts:
-        python -m src.tools.timeout_manager show        # Show current timeouts
-        python -m src.tools.timeout_manager set office 900  # 15 minutes
-        python -m src.tools.timeout_manager apply       # Apply changes
+        python -m src.utils.tools.timeout_manager show        # Show current timeouts
+        python -m src.utils.tools.timeout_manager set office 900  # 15 minutes
+        python -m src.utils.tools.timeout_manager apply       # Apply changes
 
 Design:
     - Sockets listen on ports (9101-9104) without overhead
@@ -61,7 +61,7 @@ class SystemdManager:
 
     def __init__(self):
         """Initialize manager with project paths."""
-        self.project_root = Path(__file__).parent.parent.parent
+        self.project_root = Path(__file__).parent.parent.parent.parent
         self.systemd_dir = self.project_root / 'systemd' / 'user'
         self.user_systemd_dir = Path.home() / '.config' / 'systemd' / 'user'
         self.env_file = self.project_root / '.env'
@@ -482,7 +482,7 @@ class SystemdManager:
             else:
                 print(f"{Colors.RED}{Colors.BOLD}✗ ERRORS: {errors}, WARNINGS: {warnings}{Colors.NC}\n")
                 print("Configuration has issues that need to be fixed.")
-                print(f"Run: {Colors.CYAN}python -m src.tools.systemd_manager fix{Colors.NC}")
+                print(f"Run: {Colors.CYAN}python -m src.utils.tools.systemd_manager fix{Colors.NC}")
 
         return success, errors, warnings
 
@@ -952,29 +952,29 @@ Commands:
 
 Examples:
   # Initial setup
-  python -m src.tools.systemd_manager build
-  python -m src.tools.systemd_manager install
-  python -m src.tools.systemd_manager enable
+  python -m src.utils.tools.systemd_manager build
+  python -m src.utils.tools.systemd_manager install
+  python -m src.utils.tools.systemd_manager enable
 
   # Check if everything is working
-  python -m src.tools.systemd_manager verify
+  python -m src.utils.tools.systemd_manager verify
 
   # Fix problems automatically
-  python -m src.tools.systemd_manager fix
+  python -m src.utils.tools.systemd_manager fix
 
   # See what's running
-  python -m src.tools.systemd_manager status
+  python -m src.utils.tools.systemd_manager status
 
   # Restart a specific tool
-  python -m src.tools.systemd_manager restart office
+  python -m src.utils.tools.systemd_manager restart office
 
   # View logs
-  python -m src.tools.systemd_manager logs office           # Last 50 lines
-  python -m src.tools.systemd_manager logs office -f        # Follow in real-time
-  python -m src.tools.systemd_manager logs office -n 100    # Last 100 lines
-  python -m src.tools.systemd_manager logs office --since "1 hour ago"
-  python -m src.tools.systemd_manager logs office -p err    # Only errors
-  python -m src.tools.systemd_manager logs --all -f         # All tools
+  python -m src.utils.tools.systemd_manager logs office           # Last 50 lines
+  python -m src.utils.tools.systemd_manager logs office -f        # Follow in real-time
+  python -m src.utils.tools.systemd_manager logs office -n 100    # Last 100 lines
+  python -m src.utils.tools.systemd_manager logs office --since "1 hour ago"
+  python -m src.utils.tools.systemd_manager logs office -p err    # Only errors
+  python -m src.utils.tools.systemd_manager logs --all -f         # All tools
 
 How it works:
   - Sockets listen on ports (9101-9104) without overhead
@@ -990,18 +990,18 @@ Timeout Configuration:
   - Set to 0 to disable auto-shutdown (keep containers running)
 
   # View current timeouts
-  python -m src.tools.timeout_manager show
+  python -m src.utils.tools.timeout_manager show
 
   # Change timeout for specific tool
-  python -m src.tools.timeout_manager set office 900  # 15 minutes
+  python -m src.utils.tools.timeout_manager set office 900  # 15 minutes
 
   # Change timeout for all tools
-  python -m src.tools.timeout_manager set all 1200    # 20 minutes
+  python -m src.utils.tools.timeout_manager set all 1200    # 20 minutes
 
   # Apply changes to systemd
-  python -m src.tools.timeout_manager apply
+  python -m src.utils.tools.timeout_manager apply
   systemctl --user daemon-reload
-  python -m src.tools.systemd_manager restart office
+  python -m src.utils.tools.systemd_manager restart office
         """
     )
 
@@ -1084,7 +1084,7 @@ Timeout Configuration:
         elif args.command == 'restart':
             if not args.tool:
                 print(f"{Colors.RED}Error:{Colors.NC} restart command requires a tool name")
-                print(f"Usage: python -m src.tools.systemd_manager restart <tool>")
+                print(f"Usage: python -m src.utils.tools.systemd_manager restart <tool>")
                 print(f"Valid tools: {', '.join(manager.TOOLS)}")
                 sys.exit(1)
             success = manager.restart(args.tool, verbose=verbose)

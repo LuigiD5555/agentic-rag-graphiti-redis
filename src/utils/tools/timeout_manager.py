@@ -6,10 +6,10 @@ Manages auto-shutdown timeouts for socket-activated RAG tools.
 Reads timeout values from data/settings.json and regenerates systemd service files.
 
 Usage:
-    python -m src.tools.timeout_manager show              # Show current timeouts
-    python -m src.tools.timeout_manager set office 900    # Set office timeout to 15 minutes
-    python -m src.tools.timeout_manager set all 1200      # Set all tools to 20 minutes
-    python -m src.tools.timeout_manager apply             # Apply changes to systemd
+    python -m src.utils.tools.timeout_manager show              # Show current timeouts
+    python -m src.utils.tools.timeout_manager set office 900    # Set office timeout to 15 minutes
+    python -m src.utils.tools.timeout_manager set all 1200      # Set all tools to 20 minutes
+    python -m src.utils.tools.timeout_manager apply             # Apply changes to systemd
 """
 
 import sys
@@ -39,7 +39,7 @@ class TimeoutManager:
 
     def __init__(self):
         """Initialize timeout manager."""
-        self.project_root = Path(__file__).parent.parent.parent
+        self.project_root = Path(__file__).parent.parent.parent.parent
         self.settings_file = self.project_root / 'data' / 'settings.json'
         self.systemd_dir = self.project_root / 'systemd' / 'user'
         self.user_systemd_dir = Path.home() / '.config' / 'systemd' / 'user'
@@ -131,7 +131,7 @@ class TimeoutManager:
 
         if verbose:
             print(f"\n{Colors.YELLOW}⚠ Changes saved to settings.json{Colors.NC}")
-            print(f"Run {Colors.CYAN}python -m src.tools.timeout_manager apply{Colors.NC} to update systemd services")
+            print(f"Run {Colors.CYAN}python -m src.utils.tools.timeout_manager apply{Colors.NC} to update systemd services")
 
         return True
 
@@ -215,7 +215,7 @@ class TimeoutManager:
         if verbose:
             print(f"\n{Colors.CYAN}Next steps:{Colors.NC}")
             print(f"  1. Reload systemd: {Colors.BOLD}systemctl --user daemon-reload{Colors.NC}")
-            print(f"  2. Restart tools: {Colors.BOLD}python -m src.tools.systemd_manager restart <tool>{Colors.NC}")
+            print(f"  2. Restart tools: {Colors.BOLD}python -m src.utils.tools.systemd_manager restart <tool>{Colors.NC}")
             print()
 
         return success
@@ -332,23 +332,23 @@ def main():
         epilog="""
 Examples:
   # Show current timeouts
-  python -m src.tools.timeout_manager show
+  python -m src.utils.tools.timeout_manager show
 
   # Set office tool to 15 minutes
-  python -m src.tools.timeout_manager set office 900
+  python -m src.utils.tools.timeout_manager set office 900
 
   # Set all tools to 20 minutes
-  python -m src.tools.timeout_manager set all 1200
+  python -m src.utils.tools.timeout_manager set all 1200
 
   # Disable auto-shutdown for GPU tool
-  python -m src.tools.timeout_manager set gpu 0
+  python -m src.utils.tools.timeout_manager set gpu 0
 
   # Apply changes to systemd services
-  python -m src.tools.timeout_manager apply
+  python -m src.utils.tools.timeout_manager apply
 
   # Set and apply in one step
-  python -m src.tools.timeout_manager set office 600
-  python -m src.tools.timeout_manager apply
+  python -m src.utils.tools.timeout_manager set office 600
+  python -m src.utils.tools.timeout_manager apply
         """
     )
 
@@ -390,13 +390,13 @@ Examples:
         elif args.command == 'set':
             if not args.tool:
                 print(f"{Colors.RED}Error:{Colors.NC} set command requires a tool name")
-                print(f"Usage: python -m src.tools.timeout_manager set <tool> <timeout>")
+                print(f"Usage: python -m src.utils.tools.timeout_manager set <tool> <timeout>")
                 print(f"Valid tools: {', '.join(manager.TOOLS)} or 'all'")
                 sys.exit(1)
 
             if args.timeout is None:
                 print(f"{Colors.RED}Error:{Colors.NC} set command requires a timeout value")
-                print(f"Usage: python -m src.tools.timeout_manager set <tool> <timeout>")
+                print(f"Usage: python -m src.utils.tools.timeout_manager set <tool> <timeout>")
                 sys.exit(1)
 
             success = manager.set_timeout(args.tool, args.timeout, verbose=verbose)

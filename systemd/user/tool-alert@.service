@@ -5,7 +5,7 @@ Documentation=https://github.com/LuigiD5555/agentic-rag-graphiti-redis
 [Service]
 Type=oneshot
 # %i contains the failed unit name (e.g., tool-office.service)
-ExecStart=/usr/bin/python3 %h/Documents/Programacion/Proyectos_Programacion/RAG Project/rag-agentic-graphiti/src/tools/alert_notify.py %i
+ExecStart=/usr/bin/python3 %h/Documents/Programacion/Proyectos_Programacion/RAG Project/rag-agentic-graphiti/src/utils/tools/alert_notify.py %i
 
 # Don't fail if alert script has issues
 SuccessExitStatus=0 1

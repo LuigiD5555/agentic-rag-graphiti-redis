@@ -5,11 +5,11 @@ Log Analysis Tool for RAG Tools
 Analyzes systemd journal logs to detect error patterns, anomalies, and trends.
 
 Usage:
-    python -m src.tools.analyze_logs [--tool TOOL] [--since TIMESPEC] [--format FORMAT]
+    python -m src.utils.tools.analyze_logs [--tool TOOL] [--since TIMESPEC] [--format FORMAT]
 
 Examples:
-    python -m src.tools.analyze_logs --tool office --since "24 hours ago"
-    python -m src.tools.analyze_logs --all --since "1 week ago" --format json
+    python -m src.utils.tools.analyze_logs --tool office --since "24 hours ago"
+    python -m src.utils.tools.analyze_logs --all --since "1 week ago" --format json
 """
 
 import subprocess
@@ -65,7 +65,7 @@ class LogAnalyzer:
         """
         self.tools = tools if tools else self.TOOLS
         self.since = since
-        self.project_root = Path(__file__).parent.parent.parent
+        self.project_root = Path(__file__).parent.parent.parent.parent
 
     def get_logs(self, tool: str) -> str:
         """
@@ -309,16 +309,16 @@ def main():
         epilog="""
 Examples:
   # Analyze last 24 hours for all tools
-  python -m src.tools.analyze_logs
+  python -m src.utils.tools.analyze_logs
 
   # Analyze specific tool for last week
-  python -m src.tools.analyze_logs --tool office --since "1 week ago"
+  python -m src.utils.tools.analyze_logs --tool office --since "1 week ago"
 
   # Export results as JSON
-  python -m src.tools.analyze_logs --format json --output results.json
+  python -m src.utils.tools.analyze_logs --format json --output results.json
 
   # Analyze all tools since yesterday
-  python -m src.tools.analyze_logs --all --since yesterday
+  python -m src.utils.tools.analyze_logs --all --since yesterday
         """
     )
 

@@ -20,13 +20,13 @@ case "$MODE" in
     logs)
         echo "Running log analysis..."
         shift
-        exec python -m src.tools.analyze_logs "$@"
+        exec python -m src.utils.tools.analyze_logs "$@"
         ;;
 
     verify)
         echo "Running setup verification..."
         shift
-        exec python -m src.tools.setup_verifier "$@"
+        exec python -m src.utils.tools.setup_verifier "$@"
         ;;
 
     diagnose)

@@ -105,7 +105,7 @@ if podman images | grep -q "rag-tool-office" && \
         print_info "Using existing images"
     else
         print_step "Rebuilding all images..."
-        if ! python3 -m src.tools.systemd_manager build; then
+        if ! python3 -m src.utils.tools.systemd_manager build; then
             print_error "Failed to build tool images"
             exit 1
         fi
@@ -113,7 +113,7 @@ if podman images | grep -q "rag-tool-office" && \
 else
     print_step "Building images for the first time..."
     print_warning "This can take 10-15 minutes..."
-    if ! python3 -m src.tools.systemd_manager build; then
+    if ! python3 -m src.utils.tools.systemd_manager build; then
         print_error "Failed to build tool images"
         exit 1
     fi
@@ -131,25 +131,25 @@ if [ -f "/.dockerenv" ] || grep -qE "(podman|docker|container)" /proc/1/cgroup 2
     print_info "Run this on the host instead:"
     print_info "  ./start-everything.sh"
     print_info "Or use Python:"
-    print_info "  python -m src.tools.systemd_manager install"
-    print_info "  python -m src.tools.systemd_manager enable"
+    print_info "  python -m src.utils.tools.systemd_manager install"
+    print_info "  python -m src.utils.tools.systemd_manager enable"
 else
     # Use Python module for systemd management
     print_step "Installing and enabling systemd sockets..."
 
-    if ! python3 -m src.tools.systemd_manager install; then
+    if ! python3 -m src.utils.tools.systemd_manager install; then
         print_error "Failed to install systemd units"
         exit 1
     fi
 
-    if ! python3 -m src.tools.systemd_manager enable; then
+    if ! python3 -m src.utils.tools.systemd_manager enable; then
         print_error "Failed to enable sockets"
         exit 1
     fi
 
     # Apply timeout configuration from .env/settings.json to systemd services
     print_step "Applying tool timeout configuration..."
-    if ! python3 -m src.tools.timeout_manager apply -q; then
+    if ! python3 -m src.utils.tools.timeout_manager apply -q; then
         print_warning "Could not apply timeout settings (continuing with defaults)"
     else
         print_success "Timeout configuration applied"

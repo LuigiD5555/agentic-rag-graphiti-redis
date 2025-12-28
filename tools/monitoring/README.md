@@ -8,13 +8,13 @@ Este contenedor separa todas las funcionalidades de monitoreo, análisis de logs
 
 ## 🎯 Componentes Incluidos
 
-### 1. **Análisis de Logs** (`src/tools/analyze_logs.py`)
+### 1. **Análisis de Logs** (`src/utils/tools/analyze_logs.py`)
 - Analiza logs de systemd journal
 - Detección de patrones de error
 - Identificación de anomalías
 - Generación de reportes JSON y texto
 
-### 2. **Verificador de Setup** (`src/tools/setup_verifier.py`)
+### 2. **Verificador de Setup** (`src/utils/tools/setup_verifier.py`)
 - Verifica configuración del sistema
 - Comprueba archivos necesarios
 - Valida puertos y servicios
@@ -222,21 +222,15 @@ tools/monitoring/
 ├── config/                # Configuraciones
 ├── src/
 │   ├── __init__.py
-│   ├── monitor_daemon.py  # Daemon principal
-│   ├── tools/
-│   │   ├── __init__.py
-│   │   ├── analyze_logs.py      # Análisis de logs
-│   │   └── setup_verifier.py    # Verificador de setup
-│   └── utils/
-│       ├── __init__.py
-│       ├── volume_monitor.py    # Monitor de volúmenes
-│       └── volume_watcher.py    # Watcher de volúmenes
+│   └── monitor_daemon.py  # Daemon principal
 └── scripts/
     ├── __init__.py
     ├── diagnose_config.py       # Diagnóstico
     ├── verify_data.py           # Verificación de datos
     └── verify_streaming.py      # Verificación streaming
 ```
+
+El contenedor copia utilidades compartidas desde `src/utils` (incluye `volume_monitor.py`, `volume_watcher.py` y `src/utils/tools/*`).
 
 ## 🔧 Desarrollo
 
@@ -252,7 +246,7 @@ podman-compose build monitoring
 
 ### Agregar Nuevas Herramientas
 
-1. Crear script en `tools/monitoring/src/tools/` o `tools/monitoring/scripts/`
+1. Crear script en `src/utils/tools/` (si es compartido) o `tools/monitoring/scripts/` (si es específico del contenedor)
 2. Agregar modo en `entrypoint.sh`
 3. Documentar en este README
 

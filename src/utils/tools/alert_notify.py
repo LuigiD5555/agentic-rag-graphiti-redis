@@ -32,7 +32,7 @@ class AlertNotifier:
             unit_name: Name of the failed systemd unit
         """
         self.unit_name = unit_name
-        self.project_root = Path(__file__).parent.parent.parent
+        self.project_root = Path(__file__).parent.parent.parent.parent
         self.log_dir = self.project_root / 'logs' / 'alerts'
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -158,7 +158,7 @@ class AlertNotifier:
         message = (
             f"RAG Tool '{tool_name}' has failed!\n"
             f"Check logs: {log_file}\n"
-            f"Or run: python -m src.tools.systemd_manager logs {tool_name} -p err"
+            f"Or run: python -m src.utils.tools.systemd_manager logs {tool_name} -p err"
         )
 
         # Send desktop notification

@@ -199,7 +199,7 @@ class MonitoringDaemon:
         try:
             # Import from local tools module
             sys.path.insert(0, "/app/src")
-            from tools.analyze_logs import LogAnalyzer
+            from utils.tools.analyze_logs import LogAnalyzer
 
             analyzer = LogAnalyzer(since="1 hour ago")
             results = analyzer.analyze_all()

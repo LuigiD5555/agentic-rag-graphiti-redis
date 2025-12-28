@@ -27,8 +27,10 @@ COPY tools/monitoring/scripts/ ./scripts/
 COPY tools/monitoring/config/ ./config/
 
 # Copy shared utilities from main project (if needed)
+COPY src/utils/__init__.py ./src/utils/
 COPY src/utils/volume_monitor.py ./src/utils/
 COPY src/utils/volume_watcher.py ./src/utils/
+COPY src/utils/tools/ ./src/utils/tools/
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/data /app/reports
