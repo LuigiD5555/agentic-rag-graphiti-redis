@@ -1,24 +1,34 @@
 # ============================================
-# RAG API Proxy - Minimal (Alpine, no heavy deps)
+# RAG API Proxy - Minimal multi-stage build
 # ============================================
-FROM python:3.12-alpine AS base
 
-WORKDIR /app
+# Stage 1: Builder (compile dependencies with build tools)
+FROM python:3.12-alpine AS builder
 
-# Minimal build dependencies for lightweight packages
+WORKDIR /build
+
+# Install build dependencies
 RUN apk add --no-cache \
     gcc \
     musl-dev \
     libffi-dev
 
-# Copy minimal requirements and install dependencies
+# Install Python dependencies to /install prefix
 COPY requirements-api.txt .
-RUN pip install --no-cache-dir -r requirements-api.txt
+RUN pip install --no-cache-dir --prefix=/install -r requirements-api.txt
 
 # ============================================
-# Runtime stage (minimal proxy)
+# Stage 2: Runtime (minimal, production-only)
 # ============================================
-FROM base AS runtime
+FROM python:3.12-alpine AS runtime
+
+WORKDIR /app
+
+# Copy compiled dependencies from builder (no build tools!)
+COPY --from=builder /install /usr/local
+
+# Install ONLY runtime libraries needed (libffi for pydantic)
+RUN apk add --no-cache libffi
 
 # Copy only the proxy app (no full src/ tree needed)
 COPY src/api/app_proxy.py ./src/api/app_proxy.py
@@ -31,16 +41,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import os, requests; requests.get(f'http://localhost:{os.getenv(\"API_PORT\", \"8000\")}/health')" || exit 1
 
-# Run proxy
+# Run proxy (production mode, no reload)
 CMD sh -c "uvicorn src.api.app_proxy:app --host 0.0.0.0 --port ${API_PORT:-8000}"
-
-# ============================================
-# Development stage (with hot-reload)
-# ============================================
-FROM runtime AS development
-
-# Install development tools
-RUN pip install --no-cache-dir pytest pytest-asyncio httpx ipdb
-
-# Run with auto-reload for local development
-CMD sh -c "uvicorn src.api.app_proxy:app --host 0.0.0.0 --port ${API_PORT:-8000} --reload"

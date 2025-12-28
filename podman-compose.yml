@@ -120,7 +120,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
-      target: development
+      target: runtime
     restart: unless-stopped
     logging:
       driver: journald
