@@ -34,7 +34,6 @@ def check_redis_connection():
 
         redis_host = os.environ.get("REDIS_HOST", "127.0.0.1")
         redis_port = int(os.environ.get("REDIS_PORT", 6379))
-        redis_password = (os.environ.get("REDIS_PASSWORD") or "").strip() or None
 
         print(f"Connecting to Redis at {redis_host}:{redis_port}...")
 
@@ -45,7 +44,6 @@ def check_redis_connection():
             decode_responses=False,
             socket_connect_timeout=2,
             socket_timeout=2,
-            password=redis_password,
         )
 
         # Test connection

@@ -1,336 +1,271 @@
 # RAG Monitoring Container
 
-Contenedor dedicado para monitoreo, diagnóstico y análisis de logs del sistema RAG.
+Dedicated container for monitoring, diagnostics, and log analysis for the RAG system.
 
-## 📋 Descripción
+## Description
 
-Este contenedor separa todas las funcionalidades de monitoreo, análisis de logs y diagnóstico del contenedor principal de la aplicación, siguiendo el principio de separación de responsabilidades.
+This container separates monitoring, log analysis, and diagnostic tasks from the main application container, following the separation of responsibilities principle.
 
-## 🎯 Componentes Incluidos
+## Included Components
 
-### 1. **Análisis de Logs** (`src/utils/tools/analyze_logs.py`)
-- Analiza logs de systemd journal
-- Detección de patrones de error
-- Identificación de anomalías
-- Generación de reportes JSON y texto
+### 1. Log Analysis (`src/utils/tools/analyze_logs.py`)
+- Analyze systemd journal logs
+- Detect error patterns
+- Identify anomalies
+- Generate JSON and text reports
 
-### 2. **Verificador de Setup** (`src/utils/tools/setup_verifier.py`)
-- Verifica configuración del sistema
-- Comprueba archivos necesarios
-- Valida puertos y servicios
-- Verifica dependencias
+### 2. Setup Verifier (`src/utils/tools/setup_verifier.py`)
+- Verify system configuration
+- Check required files
+- Validate ports and services
+- Verify dependencies
 
-### 3. **Diagnóstico de Configuración** (`scripts/diagnose_config.py`)
-- Verifica conectividad de servicios
-- Comprueba Redis, Weaviate, Neo4j
-- Valida configuración de embeddings
-- Test de conectividad LM Studio
+### 3. Volume Monitoring (`src/utils/volume_monitor.py`, `src/utils/volume_watcher.py`)
+- Detect availability of external volumes
+- Monitor reconnections
+- Manage fallbacks
 
-### 4. **Verificación de Datos** (`scripts/verify_data.py`)
-- Verifica datos en Weaviate
-- Cuenta documentos
-- Muestra ejemplos
-- Ejecuta queries de prueba
+### 4. Monitoring Daemon (`src/monitor_daemon.py`)
+- Continuous monitoring service
+- Periodic health checks
+- Automatic log analysis
+- Report generation
 
-### 5. **Verificación de Streaming** (`scripts/verify_streaming.py`)
-- Verifica ingesta streaming
-- Queries concurrentes durante ingesta
-- Monitoreo de progreso
+### 5. Memory Monitoring (built into `src/monitor_daemon.py`)
+- Continuous memory usage tracking
+- Configurable warning/critical thresholds
+- Supports `podman`, `cgroup`, or `system` modes (auto)
 
-### 6. **Monitoreo de Volúmenes** (`src/utils/volume_monitor.py`, `src/utils/volume_watcher.py`)
-- Detecta disponibilidad de volúmenes externos
-- Monitorea reconexiones
-- Gestiona fallbacks
+### 6. Dead Code Monitoring (vulture)
+- Periodic dead-code scans for faster debugging
+- Configurable targets and confidence thresholds
+- Reports saved under `/app/reports`
 
-### 7. **Daemon de Monitoreo** (`src/monitor_daemon.py`)
-- Servicio continuo de monitoreo
-- Health checks periódicos
-- Análisis automático de logs
-- Generación de reportes
+## Usage
 
-## 🚀 Uso
-
-### Inicio del Contenedor
+### Start the Container
 
 ```bash
-# Iniciar con el resto del stack
+# Start with the rest of the stack
 podman-compose up -d monitoring
 
-# Ver logs del contenedor
+# View container logs
 podman-compose logs -f monitoring
 ```
 
-### Modos de Operación
+### Operation Modes
 
-El contenedor soporta múltiples modos de operación:
+The container supports multiple modes:
 
-#### 1. **Modo Daemon** (por defecto)
-Ejecuta monitoreo continuo en segundo plano:
+#### 1. Daemon Mode (default)
+Runs continuous monitoring in the background:
 
 ```bash
 podman-compose exec monitoring /entrypoint.sh daemon
 ```
 
-#### 2. **Análisis de Logs**
-Analizar logs manualmente:
+#### 2. Log Analysis
+Analyze logs manually:
 
 ```bash
-# Analizar últimas 24 horas
+# Analyze last 24 hours
 podman-compose exec monitoring /entrypoint.sh logs
 
-# Analizar última semana
+# Analyze last week
 podman-compose exec monitoring /entrypoint.sh logs --since "1 week ago"
 
-# Analizar herramienta específica
+# Analyze a specific tool
 podman-compose exec monitoring /entrypoint.sh logs --tool office
 
-# Exportar a JSON
+# Export to JSON
 podman-compose exec monitoring /entrypoint.sh logs --format json --output /app/reports/analysis.json
 ```
 
-#### 3. **Verificación de Setup**
-Verificar configuración del sistema:
+#### 3. Setup Verification
+Verify system configuration:
 
 ```bash
-# Verificación completa
+# Full verification
 podman-compose exec monitoring /entrypoint.sh verify
 
-# Salida JSON
+# JSON output
 podman-compose exec monitoring /entrypoint.sh verify --json
 
-# Modo silencioso (solo exit code)
+# Quiet mode (exit code only)
 podman-compose exec monitoring /entrypoint.sh verify --quiet
 ```
 
-#### 4. **Diagnóstico de Configuración**
-Diagnosticar conexiones y configuración:
-
-```bash
-podman-compose exec monitoring /entrypoint.sh diagnose
-```
-
-#### 5. **Verificación de Datos**
-Verificar datos en Weaviate:
-
-```bash
-podman-compose exec monitoring /entrypoint.sh verify-data
-```
-
-#### 6. **Monitoreo de Volúmenes**
-Monitorear disponibilidad de volúmenes:
+#### 4. Volume Monitoring
+Monitor volume availability:
 
 ```bash
 podman-compose exec monitoring /entrypoint.sh volumes
 ```
 
-#### 7. **Shell Interactivo**
-Acceder al contenedor:
+#### 5. Interactive Shell
+Access the container:
 
 ```bash
 podman-compose exec monitoring /entrypoint.sh shell
 ```
 
-## ⚙️ Configuración
+## Configuration
 
-### Variables de Entorno
+### Environment Variables
 
-Configurables en `.env`:
+Configurable in `.env`:
 
 ```bash
-# Intervalo de monitoreo (segundos)
+# Monitoring interval (seconds)
 MONITORING_INTERVAL=300
 
-# Habilitar análisis de logs
+# Enable log analysis
 ENABLE_LOG_ANALYSIS=true
 
-# Habilitar monitoreo de volúmenes
+# Enable volume monitoring
 ENABLE_VOLUME_MONITORING=true
 
-# Habilitar health checks
+# Enable health checks
 ENABLE_HEALTH_CHECKS=true
 
-# Nivel de log
+# Enable memory monitoring
+ENABLE_MEMORY_MONITORING=true
+
+# Enable dead-code monitoring (vulture)
+ENABLE_VULTURE_MONITORING=false
+
+# Vulture scan interval (seconds)
+VULTURE_INTERVAL=3600
+
+# Vulture min confidence (0-100)
+VULTURE_MIN_CONFIDENCE=80
+
+# Vulture scan targets (comma-separated)
+VULTURE_TARGETS=/workspace/src
+
+# Vulture exclude paths (comma-separated)
+VULTURE_EXCLUDE=.git,.venv,venv,dist,build,__pycache__
+
+# Memory monitor mode: auto | podman | cgroup | system
+MEMORY_MONITOR_MODE=auto
+
+# Sampling interval (seconds)
+MEMORY_MONITOR_INTERVAL=10
+
+# Alert thresholds (%)
+MEMORY_WARNING_THRESHOLD=70
+MEMORY_CRITICAL_THRESHOLD=85
+
+# Target container (podman mode only)
+MEMORY_MONITOR_CONTAINER=rag-graphiti-agentic_app_1
+
+# Log level
 MONITORING_LOG_LEVEL=INFO
 
-# Puerto del dashboard (opcional)
+# Dashboard port (optional)
 MONITORING_DASHBOARD_PORT=8888
 
-# Recursos del contenedor
+# Container resources
 MONITORING_CPUS=0.5
 MONITORING_MEMORY=512m
 ```
 
-### Endpoints de Servicios
+Note: `podman` mode requires `podman` to be available inside the container and access
+`/run/podman/podman.sock`. In `auto` mode, if `podman` is unavailable, the daemon
+falls back to `cgroup` or `system` stats.
 
-El contenedor utiliza `host` network mode para acceder a servicios:
+Note: vulture scans require the workspace to be mounted read-only at `/workspace`.
 
-- **Redis**: `127.0.0.1:6379`
-- **Weaviate**: `http://127.0.0.1:8080`
-- **Neo4j**: `bolt://127.0.0.1:7687`
-- **LM Studio**: `http://127.0.0.1:1234`
+### Service Endpoints
 
-## 📊 Reportes
+The container uses `host` network mode to access services:
 
-Los reportes se guardan en volúmenes persistentes:
+- Redis: `127.0.0.1:6379`
+- Weaviate: `http://127.0.0.1:8080`
+- Neo4j: `bolt://127.0.0.1:7687`
+- LM Studio: `http://127.0.0.1:1234`
+
+## Reports
+
+Reports are stored on persistent volumes:
 
 ```
-/app/logs/          # Logs del daemon de monitoreo
-/app/reports/       # Reportes JSON de análisis
-/app/data/          # Datos persistentes
+/app/logs/          # Monitoring daemon logs
+/app/reports/       # JSON analysis reports
+/app/data/          # Persistent data
 ```
 
-Acceder desde el host:
+Access from the host:
 
 ```bash
-# Ver reportes generados
+# View generated reports
 ls -la ./monitoring_reports/
 
-# Ver último reporte de salud
+# View latest health report
 cat ./monitoring_reports/health_*.json | jq .
 
-# Ver último reporte de logs
+# View latest log report
 cat ./monitoring_reports/logs_*.json | jq .
 ```
 
-## 🔍 Health Checks
+## Health Checks
 
-El daemon ejecuta health checks periódicos:
+The daemon runs periodic health checks:
 
 ### Redis
-- Conectividad
-- Memoria usada
-- Clientes conectados
-- Total de keys
+- Connectivity
+- Memory usage
+- Connected clients
+- Total keys
 
 ### Weaviate
-- Conectividad
-- Versión
-- Número de colecciones
+- Connectivity
+- Version
+- Number of collections
 
 ### Neo4j
-- Conectividad
-- Conteo de nodos
+- Connectivity
+- Node count
 
-## 📁 Estructura del Proyecto
+## Project Structure
 
 ```
 tools/monitoring/
-├── Dockerfile              # Imagen del contenedor
-├── requirements.txt        # Dependencias Python
-├── entrypoint.sh          # Script de entrada
-├── README.md              # Esta documentación
-├── config/                # Configuraciones
+├── Dockerfile              # Container image
+├── requirements.txt        # Python dependencies
+├── entrypoint.sh          # Entry script
+├── README.md              # This documentation
+├── config/                # Configurations
 ├── src/
 │   ├── __init__.py
-│   └── monitor_daemon.py  # Daemon principal
-└── scripts/
-    ├── __init__.py
-    ├── diagnose_config.py       # Diagnóstico
-    ├── verify_data.py           # Verificación de datos
-    └── verify_streaming.py      # Verificación streaming
+│   └── monitor_daemon.py  # Main daemon
 ```
 
-El contenedor copia utilidades compartidas desde `src/utils` (incluye `volume_monitor.py`, `volume_watcher.py` y `src/utils/tools/*`).
+The container copies shared utilities from `src/utils` (includes `volume_monitor.py`,
+`volume_watcher.py`, and `src/utils/tools/*`).
 
-## 🔧 Desarrollo
+## Development
 
-### Build del Contenedor
+### Adding New Checks
 
-```bash
-# Build manual
-podman build -t rag-monitoring -f tools/monitoring/Dockerfile .
+1. Edit `monitor_daemon.py` to add new checks
+2. Update this README with the new feature
+3. Rebuild the monitoring image
 
-# Build con compose
-podman-compose build monitoring
-```
-
-### Agregar Nuevas Herramientas
-
-1. Crear script en `src/utils/tools/` (si es compartido) o `tools/monitoring/scripts/` (si es específico del contenedor)
-2. Agregar modo en `entrypoint.sh`
-3. Documentar en este README
-
-### Extender el Daemon
-
-Editar `tools/monitoring/src/monitor_daemon.py` para agregar:
-- Nuevos health checks
-- Nuevas métricas
-- Alertas personalizadas
-
-## 📝 Logs y Debugging
+### Logs and Debugging
 
 ```bash
-# Ver logs en tiempo real
+# View daemon logs
 podman-compose logs -f monitoring
 
-# Ver logs históricos
-podman logs rag-graphiti-agentic_monitoring_1
-
-# Inspeccionar contenedor
-podman inspect rag-graphiti-agentic_monitoring_1
-
-# Acceder al shell
-podman-compose exec monitoring bash
+# View historical logs
+journalctl --user -u rag-monitoring.service
 ```
 
-## 🎨 Dashboard Web (Opcional)
+### Dashboard Setup (Optional)
 
-Para habilitar el dashboard web:
-
-1. Descomentar la sección de puertos en `podman-compose.yml`
-2. Implementar `src/dashboard.py` (actualmente no incluido)
-3. Acceder a `http://127.0.0.1:8888`
-
-## 🚨 Troubleshooting
-
-### El contenedor no inicia
-
-```bash
-# Verificar dependencias
-podman-compose ps
-
-# Ver logs de error
-podman-compose logs monitoring
-```
-
-### No puede acceder a servicios
-
-Verificar que el contenedor use `network_mode: "host"` y que los servicios estén corriendo:
-
-```bash
-# Verificar servicios
-podman-compose ps
-
-# Test de conectividad desde el contenedor
-podman-compose exec monitoring curl http://127.0.0.1:8080/v1/meta
-```
-
-### Permisos de journal logs
-
-El contenedor necesita acceso a `/var/log/journal` y `/run/log/journal`:
-
-```bash
-# Verificar montaje
-podman inspect rag-graphiti-agentic_monitoring_1 | grep -A 5 Mounts
-```
-
-## 📖 Referencias
-
-- [Systemd Journal](https://www.freedesktop.org/software/systemd/man/journalctl.html)
-- [Weaviate API](https://weaviate.io/developers/weaviate/api)
-- [Redis Commands](https://redis.io/commands)
-- [Neo4j Driver](https://neo4j.com/docs/python-manual/current/)
-
-## 🤝 Contribuciones
-
-Para contribuir:
-
-1. Crear feature branch
-2. Agregar herramienta en `tools/monitoring/`
-3. Actualizar `entrypoint.sh`
-4. Documentar en README
-5. Crear pull request
-
-## 📄 Licencia
-
-Mismo que el proyecto principal.
+1. Uncomment the ports section in `podman-compose.yml`
+2. Make sure the container uses `network_mode: "host"` and services are running:
+   - Redis on 6379
+   - Weaviate on 8080
+   - Neo4j on 7687

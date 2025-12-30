@@ -342,6 +342,17 @@ services:
       ENABLE_LOG_ANALYSIS: "${ENABLE_LOG_ANALYSIS:-true}"
       ENABLE_VOLUME_MONITORING: "${ENABLE_VOLUME_MONITORING:-true}"
       ENABLE_HEALTH_CHECKS: "${ENABLE_HEALTH_CHECKS:-true}"
+      ENABLE_MEMORY_MONITORING: "${ENABLE_MEMORY_MONITORING:-true}"
+      ENABLE_VULTURE_MONITORING: "${ENABLE_VULTURE_MONITORING:-false}"
+      VULTURE_INTERVAL: "${VULTURE_INTERVAL:-3600}"
+      VULTURE_MIN_CONFIDENCE: "${VULTURE_MIN_CONFIDENCE:-80}"
+      VULTURE_TARGETS: "${VULTURE_TARGETS:-/workspace/src}"
+      VULTURE_EXCLUDE: "${VULTURE_EXCLUDE:-.git,.venv,venv,dist,build,__pycache__}"
+      MEMORY_MONITOR_MODE: "${MEMORY_MONITOR_MODE:-auto}"
+      MEMORY_MONITOR_INTERVAL: "${MEMORY_MONITOR_INTERVAL:-10}"
+      MEMORY_WARNING_THRESHOLD: "${MEMORY_WARNING_THRESHOLD:-70}"
+      MEMORY_CRITICAL_THRESHOLD: "${MEMORY_CRITICAL_THRESHOLD:-85}"
+      MEMORY_MONITOR_CONTAINER: "${MEMORY_MONITOR_CONTAINER:-}"
       LOG_LEVEL: "${MONITORING_LOG_LEVEL:-INFO}"
 
       # Service endpoints (via host network)
@@ -360,6 +371,8 @@ services:
       # Access to systemd journal logs (read-only)
       - /var/log/journal:/var/log/journal:ro
       - /run/log/journal:/run/log/journal:ro
+      # Mount workspace for vulture scans (read-only)
+      - ./:/workspace:ro,Z
       # Persistent data
       - ${HOST_MONITORING_LOGS:-monitoring_logs}:/app/logs:Z
       - ${HOST_MONITORING_REPORTS:-monitoring_reports}:/app/reports:Z
