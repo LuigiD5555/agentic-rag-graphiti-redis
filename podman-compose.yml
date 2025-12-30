@@ -277,6 +277,43 @@ services:
           cpus: "${APP_CPUS:-2.0}"
           memory: "${APP_MEMORY:-3g}"
 
+  autoscan:
+    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_autoscan_1"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    restart: unless-stopped
+    logging:
+      driver: journald
+    depends_on:
+      weaviate:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      - AUTO_SCAN_ENABLED=true
+    network_mode: "host"
+    volumes:
+      - ${HOST_DOCS_DIR:?HOST_DOCS_DIR is required}:/mnt/Documents/Documents:Z
+      - ${HOST_LIBROS_DIR:-./data/libros-fallback}:/mnt/resources/Libros:Z
+      - ${HOST_DATA_DIR:-./data}:/app/data:Z
+      - ./.ingestignore:/app/.ingestignore:ro,Z
+      - ./src:/app/src:ro,Z
+      - ./tests:/app/tests:ro,Z
+    command: ["python", "-m", "src.ingestion.auto_scan.scheduler"]
+    stop_grace_period: 20s
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+    deploy:
+      resources:
+        limits:
+          cpus: "${AUTO_SCAN_CPUS:-0.5}"
+          memory: "${AUTO_SCAN_MEMORY:-1g}"
+
   monitoring:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_monitoring_1"
     build:
