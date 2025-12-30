@@ -24,7 +24,6 @@ class FileDiscoveryService:
         cache_file: Optional[str] = None,
         cache_manager: Optional[IngestionCacheManager] = None
     ):
-        # Initialize components
         self.cache_mgr = DiscoveryCacheManager(cache_file, cache_manager)
         self.pattern_matcher = PatternMatcher()
         self.scanner = DirectoryScanner(self.cache_mgr, self.pattern_matcher)
@@ -52,20 +51,15 @@ class FileDiscoveryService:
         visited_dirs = 0
         progress_every = getattr(opts, "progress_every", 0)
 
-        # Pre-compilation of patterns for reuse
         self.pattern_matcher.precompile_patterns(opts.excluded_globs)
 
-        # Compute options hash for cache validation
         options_hash = self.cache_mgr.compute_options_hash(opts)
 
-        # Preparing filters once
         filters = build_filters(opts, self.pattern_matcher)
 
-        # Pre-calculation if allowed extensions is empty
         check_ext = bool(opts.allowed_exts)
         allowed_exts_lower = {ext.lower() for ext in opts.allowed_exts} if opts.allowed_exts else set()
 
-        # Determine which paths to scan based on enabled_paths priority
         paths_to_scan = opts.enabled_paths if opts.enabled_paths else opts.roots
 
         if opts.enabled_paths:
@@ -95,12 +89,10 @@ class FileDiscoveryService:
                         files.append(root)
                 continue
 
-            # Check if the root directory itself is excluded before scanning
             if self.pattern_matcher.matches_any_glob("", opts.excluded_globs, absolute_path=root):
                 log.info("Skipping excluded root directory: %s", root)
                 continue
 
-            # Optimization: use cached results if available
             if use_cache:
                 cached = self.cache_mgr.is_dir_unchanged(root, options_hash)
                 if cached:
@@ -115,7 +107,6 @@ class FileDiscoveryService:
                 else:
                     self.cache_mgr.record_miss()
 
-            # Need to scan
             root_files: List[str] = []
             root_visited = self.scanner.scan_directory(
                 root, root, filters, opts.excluded_globs,
@@ -126,7 +117,6 @@ class FileDiscoveryService:
             files.extend(root_files)
             visited_dirs += root_visited
 
-        # Save cache to disk
         if use_cache:
             self.cache_mgr.save_cache()
             cache_stats = self.get_cache_stats()
@@ -143,7 +133,6 @@ class FileDiscoveryService:
                 scan_stats['path_tree']['total_nodes']
             )
 
-            # Calculate total optimizations
             total_skipped = (
                 scan_stats['paths_skipped_visited'] +
                 scan_stats['paths_skipped_excluded']
@@ -154,7 +143,6 @@ class FileDiscoveryService:
                     total_skipped
                 )
 
-        # Use set for deduplication
         files = list(dict.fromkeys(files))
         files.sort()
         return files, visited_dirs
@@ -171,20 +159,15 @@ class FileDiscoveryService:
         visited_dirs = 0
         progress_every = getattr(opts, "progress_every", 0)
 
-        # Pre-compilation of patterns for reuse
         self.pattern_matcher.precompile_patterns(opts.excluded_globs)
 
-        # Compute options hash for cache validation
         options_hash = self.cache_mgr.compute_options_hash(opts)
 
-        # Preparing filters once
         filters = build_filters(opts, self.pattern_matcher)
 
-        # Pre-calculation if allowed extensions is empty
         check_ext = bool(opts.allowed_exts)
         allowed_exts_lower = {ext.lower() for ext in opts.allowed_exts} if opts.allowed_exts else set()
 
-        # Determine which paths to scan based on enabled_paths priority
         paths_to_scan = opts.enabled_paths if opts.enabled_paths else opts.roots
 
         if opts.enabled_paths:
@@ -217,12 +200,10 @@ class FileDiscoveryService:
                     yield parent, [root]
                     continue
 
-                # Check if the root directory itself is excluded before scanning
                 if self.pattern_matcher.matches_any_glob("", opts.excluded_globs, absolute_path=root):
                     log.info("Skipping excluded root directory: %s", root)
                     continue
 
-                # Optimization: use cached results if available
                 if use_cache:
                     cached = self.cache_mgr.is_dir_unchanged(root, options_hash)
                     if cached:
@@ -253,7 +234,6 @@ class FileDiscoveryService:
         finally:
             self._last_visited_dirs = visited_dirs
 
-            # Save cache to disk
             if use_cache:
                 self.cache_mgr.save_cache()
                 cache_stats = self.get_cache_stats()
@@ -270,7 +250,6 @@ class FileDiscoveryService:
                     scan_stats['path_tree']['total_nodes']
                 )
 
-                # Calculate total optimizations
                 total_skipped = (
                     scan_stats['paths_skipped_visited'] +
                     scan_stats['paths_skipped_excluded']

@@ -77,7 +77,7 @@ async def generate(
             temperature=options["temperature"],
             max_tokens=options["max_tokens"],
             system_prompt=request.system,
-            model=request.model,  # Pass selected model
+            model=request.model,
             thread_id=thread_id,
         )
         sources = result.get("sources", []) if include_sources else None
@@ -95,7 +95,7 @@ async def generate(
         messages=messages,
         temperature=options["temperature"],
         max_tokens=options["max_tokens"],
-        model=request.model,  # Pass selected model
+        model=request.model,
     )
     return OllamaGenerateResponse(model=request.model, response=response_text, sources=None)
 
@@ -114,18 +114,14 @@ async def chat(
     Automatically creates ChatMemory snapshots every 24 hours to enable
     cross-chat retrieval from past conversations.
     """
-    # Note: We accept stream=true but return a complete response (not streaming)
-    # Open WebUI sends stream=true by default, but we don't support true streaming yet
     rag_options = request.rag
     options = _resolve_generation_params(request.options)
     use_rag = True if rag_options is None or rag_options.enabled is None else rag_options.enabled
     include_sources = True if rag_options is None or rag_options.include_sources is None else rag_options.include_sources
     filters = None if rag_options is None else rag_options.filters
 
-    # Generate response
     if use_rag:
         question = _extract_question_from_messages(request.messages)
-        # Pass full conversation history for context-aware responses
         conversation_history = [m.dict() for m in request.messages]
         result = rag.query(
             question=question,
@@ -134,8 +130,8 @@ async def chat(
             temperature=options["temperature"],
             max_tokens=options["max_tokens"],
             model=request.model,
-            user_id=user_id,  # Pass user_id for ChatMemory
-            conversation_history=conversation_history,  # NEW: Pass full conversation
+            user_id=user_id,
+            conversation_history=conversation_history,
             thread_id=thread_id,
         )
         sources = result.get("sources", []) if include_sources else None
@@ -149,7 +145,7 @@ async def chat(
             messages=[m.dict() for m in request.messages],
             temperature=options["temperature"],
             max_tokens=options["max_tokens"],
-            model=request.model,  # Pass selected model
+            model=request.model,
         )
         response = OllamaChatResponse(
             model=request.model,
@@ -157,22 +153,18 @@ async def chat(
             sources=None,
         )
 
-    # Check if we should create a snapshot (every 24h)
     try:
         if scheduler.should_create_snapshot(thread_id):
             from src.memory.core.state import create_initial_state
             from src.memory.snapshot import create_snapshot
 
-            # Build state from current conversation
             state = create_initial_state(user_id, thread_id)
             state["messages"] = [m.dict() for m in request.messages]
-            # Add assistant response
             state["messages"].append({
                 "role": "assistant",
                 "content": response.message.content
             })
 
-            # Create and save snapshot
             snapshot = create_snapshot(
                 state=state,
                 user_id=user_id,
@@ -192,7 +184,6 @@ async def chat(
                     len(snapshot.keywords)
                 )
     except Exception as e:
-        # Don't fail the request if snapshot creation fails
         from src.rag.audit import get_logger
         log = get_logger(__name__)
         log.warning("Failed to auto-create snapshot for thread %s: %s", thread_id[:16], e)
@@ -228,24 +219,21 @@ async def tags() -> OllamaTagsResponse:
         if not model_id:
             continue
 
-        # Add the model with its original name
         items.append(
             OllamaTagModel(
                 name=model_id,
-                model=model_id,  # Add model field (alias for name)
-                size=0,  # Unknown size
-                digest=f"sha256:{model_id[:16]}",  # Fake digest for compatibility
+                model=model_id,
+                size=0,
+                digest=f"sha256:{model_id[:16]}",
                 details={
                     "family": "lmstudio",
-                    "format": "gguf",  # Add format for compatibility
-                    "parameter_size": "unknown",  # Add parameter size
+                    "format": "gguf",
+                    "parameter_size": "unknown",
                 },
             )
         )
 
-        # Also add a version with :latest tag for Ollama compatibility
-        # Open WebUI may search for "model:latest" even if we return "model"
-        if ':' not in model_id:  # Only add :latest if there's no tag already
+        if ':' not in model_id:
             items.append(
                 OllamaTagModel(
                     name=f"{model_id}:latest",
@@ -297,7 +285,6 @@ async def show_model(request: Dict[str, Any]) -> Dict[str, Any]:
     """
     model_name = request.get("name", "")
 
-    # Return basic model information
     return {
         "modelfile": f"# Modelfile for {model_name}\nFROM {model_name}",
         "parameters": "",
@@ -325,9 +312,6 @@ def _extract_question_from_messages(messages: List[OllamaMessage]) -> str:
             return message.content
     return "\n".join(msg.content for msg in messages)
 
-
-
-# Memory-aware chat endpoint
 @router.post("/chat/memory", response_model=OllamaChatResponse)
 async def chat_with_memory(
     request: OllamaChatRequest,
@@ -351,19 +335,15 @@ async def chat_with_memory(
     if request.stream:
         raise HTTPException(status_code=501, detail="Streaming not supported with memory")
     
-    # Load or create conversation state
     state = load_or_create_state(user_id, thread_id)
     
-    # Extract question
     question = _extract_question_from_messages(request.messages)
     
-    # RAG options
     rag_options = request.rag
     options = _resolve_generation_params(request.options)
     use_rag = True if rag_options is None or rag_options.enabled is None else rag_options.enabled
     filters = None if rag_options is None else rag_options.filters
     
-    # Perform RAG if enabled
     rag_results = None
     if use_rag:
         result = rag.query(
@@ -372,38 +352,31 @@ async def chat_with_memory(
             filters=filters,
             temperature=options["temperature"],
             max_tokens=options["max_tokens"],
-            model=request.model,  # Pass selected model
+            model=request.model,
             thread_id=thread_id,
         )
         answer = result["answer"]
         rag_results = result.get("sources", [])
     else:
-        # Build context from memory
         context = build_llm_context(state, question, rag_results)
 
-        # Call LLM directly
         answer = rag.chat_service.chat(
             messages=[{"role": "user", "content": context}],
             temperature=options["temperature"],
             max_tokens=options["max_tokens"],
-            model=request.model,  # Pass selected model
+            model=request.model,
         )
     
-    # Update state with new messages
     state["messages"].append({"role": "user", "content": question})
     state["messages"].append({"role": "assistant", "content": answer})
     
-    # Compress if needed
     if should_compress_state(state):
         state = compress_and_update_state(state)
     
-    # Save state
     save_state(state, thread_id)
     
-    # Return response
     return OllamaChatResponse(
         model=request.model,
         message=OllamaMessage(role="assistant", content=answer),
         sources=rag_results if use_rag else None,
     )
-

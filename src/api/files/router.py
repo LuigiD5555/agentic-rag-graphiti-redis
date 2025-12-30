@@ -25,10 +25,8 @@ from src.ingestion.orchestrator import IngestionOrchestrator
 
 logger = logging.getLogger(__name__)
 
-# Create router
 router = APIRouter(prefix="/v1/files", tags=["files"])
 
-# Global instances (injected via dependencies)
 _file_tracker: Optional[FileTracker] = None
 _tenant_manager: Optional[TemporalTenantManager] = None
 _ingestion_orchestrator: Optional[IngestionOrchestrator] = None
@@ -38,7 +36,6 @@ _file_promoter = None
 _pareto_analyzer = None
 
 
-# Dependency injection
 def get_file_tracker() -> FileTracker:
     """Get FileTracker instance."""
     if _file_tracker is None:
@@ -106,11 +103,9 @@ async def upload_file(
         FileUploadResponse with file metadata
     """
     try:
-        # 1. Read file content
         content = await file.read()
         file_size = len(content)
 
-        # Validate file size (max 50MB by default)
         max_size = int(os.getenv("TEMPORAL_FILE_MAX_SIZE_MB", "50")) * 1024 * 1024
         if file_size > max_size:
             raise HTTPException(
@@ -118,23 +113,16 @@ async def upload_file(
                 detail=f"File too large. Maximum size: {max_size / 1024 / 1024:.1f}MB",
             )
 
-        # 2. Compute file hash
         file_hash = tracker.compute_file_hash(content)
         logger.info(f"Uploading file: {file.filename} (hash={file_hash[:8]}..., size={file_size})")
 
-        # 3. Check if file should be auto-promoted (uploaded multiple times)
         file_info = tracker.get_file_info(file_hash)
         if file_info and int(file_info.get("upload_count", 0)) >= tracker.promotion_threshold:
-            # Check if already promoted
             if file_info.get("promoted") == "1":
                 logger.info(f"File {file_hash[:8]}... already promoted, using permanent KB")
-                # TODO: In future, return reference to permanent KB version
-                # For now, continue with temporal upload
 
-        # 4. Create or get temporal tenant
         tenant_name = tenant_manager.get_or_create_temporal_tenant(thread_id)
 
-        # 5. Save file temporarily for ingestion
         file_id = f"file_{uuid.uuid4().hex[:16]}"
         temp_dir = os.getenv("PREPROCESSING_WORK_DIR", "/tmp/rag-preprocessing")
         os.makedirs(temp_dir, exist_ok=True)
@@ -145,11 +133,9 @@ async def upload_file(
             f.write(content)
 
         try:
-            # 6. Override tenant for this ingestion
             original_tenant = ingestion_orch._config.WEAVIATE_DEFAULT_TENANT
             ingestion_orch._config.WEAVIATE_DEFAULT_TENANT = tenant_name
 
-            # 7. Ingest the file
             from src.ingestion.options import IngestionOptions
 
             ingestion_options = IngestionOptions(
@@ -160,11 +146,8 @@ async def upload_file(
 
             result = ingestion_orch.run_with_report(ingestion_options)
 
-            # 8. Restore original tenant
             ingestion_orch._config.WEAVIATE_DEFAULT_TENANT = original_tenant
 
-            # 9. Track file upload in Redis
-            # For now, use placeholder chunk IDs (we don't have the real ones from ingestion)
             chunk_ids = [f"{file_id}_chunk_{i}" for i in range(result.get("ingested", 0))]
 
             tracking_result = tracker.track_file_upload(
@@ -175,7 +158,6 @@ async def upload_file(
                 chunk_ids=chunk_ids,
             )
 
-            # 10. Return response
             return FileUploadResponse(
                 id=file_id,
                 bytes=file_size,
@@ -191,7 +173,6 @@ async def upload_file(
             )
 
         finally:
-            # Clean up temp file
             if os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
 
@@ -218,7 +199,6 @@ async def list_files(
     """
     try:
         if thread_id:
-            # List files for specific thread
             file_ids = tracker.list_temporal_files(thread_id)
 
             files = []
@@ -228,7 +208,7 @@ async def list_files(
                     files.append(
                         FileUploadResponse(
                             id=file_id,
-                            bytes=0,  # We don't track size in Redis currently
+                            bytes=0,
                             created_at=int(float(file_info.get("uploaded_at", 0))),
                             filename=file_info.get("filename", "unknown"),
                             purpose="assistants",
@@ -244,7 +224,6 @@ async def list_files(
             return FileListResponse(data=files)
 
         else:
-            # List all files (not implemented yet)
             return FileListResponse(data=[])
 
     except Exception as e:
@@ -269,19 +248,15 @@ async def delete_file(
         FileDeleteResponse
     """
     try:
-        # Get file info
         file_info = tracker.get_temporal_file_info(thread_id, file_id)
 
         if not file_info:
             raise HTTPException(status_code=404, detail="File not found")
 
-        # Delete from Redis tracking
         temp_file_key = f"temp_file:{thread_id}:{file_id}"
         _redis_client.delete(temp_file_key)
         _redis_client.delete(f"{temp_file_key}:chunk_scores")
         _redis_client.srem(f"temp_files:{thread_id}", file_id)
-
-        # TODO: Delete chunks from Weaviate tenant
 
         logger.info(f"Deleted file {file_id} from thread {thread_id}")
 
@@ -316,13 +291,11 @@ async def promote_file(
         PromotionResponse
     """
     try:
-        # Get file info
         file_info = tracker.get_temporal_file_info(thread_id, file_id)
 
         if not file_info:
             raise HTTPException(status_code=404, detail="File not found")
 
-        # Use FilePromoter to perform promotion
         if _file_promoter is None:
             raise HTTPException(status_code=500, detail="File promoter not initialized")
 
@@ -357,7 +330,6 @@ async def promote_file(
         raise HTTPException(status_code=500, detail=f"Failed to promote file: {str(e)}")
 
 
-# Initialization function to be called from app.py
 def initialize_files_router(
     weaviate_client: weaviate.WeaviateClient,
     redis_client: redis.Redis,
@@ -376,13 +348,11 @@ def initialize_files_router(
     """
     global _file_tracker, _tenant_manager, _ingestion_orchestrator, _weaviate_client, _redis_client, _file_promoter, _pareto_analyzer
 
-    # Get configuration from environment
     promotion_threshold = int(os.getenv("TEMPORAL_PROMOTION_THRESHOLD", "3"))
     pareto_min_queries = int(os.getenv("TEMPORAL_PARETO_MIN_QUERIES", "5"))
     pareto_top_percent = int(os.getenv("TEMPORAL_PARETO_TOP_PERCENT", "20"))
     tenant_ttl = int(os.getenv("TEMPORAL_TENANT_TTL", "86400"))
 
-    # Initialize components
     _file_tracker = create_file_tracker(
         redis_client=redis_client,
         promotion_threshold=promotion_threshold,
@@ -395,7 +365,6 @@ def initialize_files_router(
         ttl_seconds=tenant_ttl,
     )
 
-    # Initialize Pareto analyzer
     from src.rag.temporal.pareto import create_pareto_analyzer
     _pareto_analyzer = create_pareto_analyzer(
         redis_client=redis_client,
@@ -403,7 +372,6 @@ def initialize_files_router(
         min_queries=pareto_min_queries,
     )
 
-    # Initialize file promoter
     from src.rag.temporal.promotion import create_file_promoter
     _file_promoter = create_file_promoter(
         weaviate_client=weaviate_client,

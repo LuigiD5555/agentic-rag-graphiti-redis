@@ -27,7 +27,6 @@ def _extract_question_from_messages(messages: list) -> str:
     for message in reversed(messages):
         if message.role == "user":
             return message.content
-    # Fallback: concatenate all messages
     return "\n".join(msg.content for msg in messages)
 
 
@@ -57,10 +56,8 @@ async def create_chat_completion(
     Returns:
         Chat completion response with answer and usage information.
     """
-    # Extract question from messages
     question = _extract_question_from_messages(request.messages)
 
-    # Execute RAG query
     try:
         result = rag.query(
             question=question,
@@ -73,7 +70,6 @@ async def create_chat_completion(
 
     answer = result["answer"]
 
-    # Add source citations if available
     if result.get("sources"):
         sources_text = "\n\nSources:\n" + "\n".join(
             f"- {src['path']} (score: {src['relevance_score']:.3f})"
@@ -81,12 +77,10 @@ async def create_chat_completion(
         )
         answer += sources_text
 
-    # Estimate token usage
     prompt_text = "\n".join(msg.content for msg in request.messages)
     prompt_tokens = _estimate_tokens(prompt_text)
     completion_tokens = _estimate_tokens(answer)
 
-    # Build response
     response = ChatCompletionResponse(
         id=f"chatcmpl-{uuid.uuid4().hex[:24]}",
         model=request.model,

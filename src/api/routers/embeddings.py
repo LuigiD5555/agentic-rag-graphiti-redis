@@ -35,13 +35,11 @@ async def create_embeddings(
     Returns:
         Embedding response with vectors and usage information.
     """
-    # Normalize input to list
     if isinstance(request.input, str):
         texts = [request.input]
     else:
         texts = request.input
 
-    # Generate embeddings
     try:
         embeddings: List[List[float]] = []
         for text in texts:
@@ -50,10 +48,8 @@ async def create_embeddings(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Embedding generation failed: {str(e)}")
 
-    # Calculate token usage
     total_tokens = sum(_estimate_tokens(text) for text in texts)
 
-    # Build response
     data = [
         Embedding(
             embedding=emb,
