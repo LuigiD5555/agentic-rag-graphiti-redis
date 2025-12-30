@@ -66,8 +66,6 @@ ${YELLOW}Commands:${NC}
 
   ${GREEN}Verification:${NC}
     verify [--json]        Verify setup and configuration
-    diagnose               Run full diagnostic suite
-    verify-data            Verify Weaviate data
     health                 Check service health
 
   ${GREEN}Volume Monitoring:${NC}
@@ -85,9 +83,6 @@ ${YELLOW}Examples:${NC}
 
     # Verify setup and export to JSON
     $0 verify --json > setup-status.json
-
-    # Run diagnostics
-    $0 diagnose
 
     # Watch logs in real-time
     $0 logs -f
@@ -150,18 +145,6 @@ cmd_verify() {
     check_container
     info "Running setup verification..."
     podman exec "$CONTAINER_NAME" /entrypoint.sh verify "$@"
-}
-
-cmd_diagnose() {
-    check_container
-    info "Running diagnostics..."
-    podman exec "$CONTAINER_NAME" /entrypoint.sh diagnose
-}
-
-cmd_verify_data() {
-    check_container
-    info "Verifying Weaviate data..."
-    podman exec "$CONTAINER_NAME" /entrypoint.sh verify-data
 }
 
 cmd_health() {
@@ -273,14 +256,6 @@ main() {
         verify)
             shift
             cmd_verify "$@"
-            ;;
-        diagnose)
-            shift
-            cmd_diagnose "$@"
-            ;;
-        verify-data)
-            shift
-            cmd_verify_data "$@"
             ;;
         health)
             shift

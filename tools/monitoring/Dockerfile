@@ -21,9 +21,7 @@ WORKDIR /app
 COPY tools/monitoring/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy monitoring scripts and utilities
 COPY tools/monitoring/src/ ./src/
-COPY tools/monitoring/scripts/ ./scripts/
 COPY tools/monitoring/config/ ./config/
 
 # Copy shared utilities from main project (if needed)

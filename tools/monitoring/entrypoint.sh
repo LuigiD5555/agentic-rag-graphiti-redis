@@ -29,22 +29,6 @@ case "$MODE" in
         exec python -m src.utils.tools.setup_verifier "$@"
         ;;
 
-    diagnose)
-        echo "Running configuration diagnostics..."
-        exec python scripts/diagnose_config.py
-        ;;
-
-    verify-data)
-        echo "Verifying Weaviate data..."
-        exec python scripts/verify_data.py
-        ;;
-
-    verify-streaming)
-        echo "Verifying streaming ingestion..."
-        shift
-        exec python scripts/verify_streaming.py "$@"
-        ;;
-
     volumes)
         echo "Monitoring volumes..."
         exec python -m src.volume_monitor_service
@@ -67,9 +51,6 @@ case "$MODE" in
         echo "  daemon          - Run monitoring daemon (default)"
         echo "  logs [ARGS]     - Analyze logs"
         echo "  verify [ARGS]   - Verify setup"
-        echo "  diagnose        - Diagnose configuration"
-        echo "  verify-data     - Verify Weaviate data"
-        echo "  verify-streaming - Verify streaming ingestion"
         echo "  volumes         - Monitor volumes"
         echo "  dashboard       - Start web dashboard"
         echo "  shell           - Interactive shell"
