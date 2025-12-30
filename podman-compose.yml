@@ -143,6 +143,8 @@ services:
 
       # WebUI configuration
       WEBUI_SECRET_KEY: "${WEBUI_SECRET_KEY:-change-this-secret-in-production}"
+      # Restrict CORS to localhost only
+      CORS_ALLOW_ORIGIN: "http://127.0.0.1:${HOST_OPEN_WEBUI_PORT:-5555},http://localhost:${HOST_OPEN_WEBUI_PORT:-5555}"
 
       # Optional: Disable features we don't need
       ENABLE_RAG_WEB_SEARCH: "false"
@@ -298,6 +300,17 @@ services:
       - AUTO_SCAN_ENABLED=true
       - REDIS_HOST=127.0.0.1
       - REDIS_PORT=${HOST_REDIS_TCP_PORT:-6379}
+      - WEAVIATE_URL=http://127.0.0.1:${HOST_WEAVIATE_HTTP_PORT:-8080}
+      - WEAVIATE_GRPC_PORT=${HOST_WEAVIATE_GRPC_PORT:-50051}
+      - WEAVIATE_TIMEOUT=${WEAVIATE_TIMEOUT:-60}
+      - WEAVIATE_CLASS=${WEAVIATE_CLASS:-RAGDocument}
+      - WEAVIATE_MULTI_TENANCY=${WEAVIATE_MULTI_TENANCY:-true}
+      - WEAVIATE_DEFAULT_TENANT=${WEAVIATE_DEFAULT_TENANT:-tenant-default}
+      - WEAVIATE_SKIP_INIT_CHECKS=${WEAVIATE_SKIP_INIT_CHECKS:-true}
+      - WEAVIATE_LOG_LEVEL=${WEAVIATE_LOG_LEVEL:-INFO}
+      - NEO4J_URI=bolt://127.0.0.1:${HOST_NEO4J_BOLT_PORT:-7687}
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-neo4j123}
     network_mode: "host"
     volumes:
       - ${HOST_DOCS_DIR:?HOST_DOCS_DIR is required}:/mnt/Documents/Documents:Z
