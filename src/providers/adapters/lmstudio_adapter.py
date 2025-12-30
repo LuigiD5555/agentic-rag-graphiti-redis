@@ -65,6 +65,9 @@ class LMStudioAdapter(ProviderAdapterBase):
             redis_host = getattr(config, "REDIS_HOST", "127.0.0.1")
             redis_port = int(getattr(config, "REDIS_PORT", 6379))
             redis_db = int(os.environ.get("RAG_EMBED_CACHE_DB", "0"))
+            redis_password = getattr(config, "REDIS_PASSWORD", None) or os.environ.get("REDIS_PASSWORD")
+            if isinstance(redis_password, str):
+                redis_password = redis_password.strip() or None
 
             logger.info("Attempting to connect to Redis at %s:%d (db=%d)", redis_host, redis_port, redis_db)
 
@@ -73,6 +76,7 @@ class LMStudioAdapter(ProviderAdapterBase):
             client = create_redis_client_with_retry(
                 host=redis_host,
                 port=redis_port,
+                password=redis_password,
                 decode_responses=False,  # We'll handle encoding ourselves
                 timeout=2,
             )

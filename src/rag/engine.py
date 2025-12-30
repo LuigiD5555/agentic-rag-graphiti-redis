@@ -94,6 +94,7 @@ class AppConfig(BaseSettings):
     # ===== Cache (Redis) =====
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
+    REDIS_PASSWORD: str = ""
     CACHE_TTL: int = 3600
 
     # ===== Provider (LM Studio) =====

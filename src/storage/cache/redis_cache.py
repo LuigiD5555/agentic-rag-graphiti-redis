@@ -17,9 +17,11 @@ class CacheService(CacheServiceProtocol):
         Initialize the Redis client using host and port from configuration.
         Retries connection with exponential backoff if Redis is temporarily unavailable.
         """
+        redis_password = getattr(config, "REDIS_PASSWORD", None) or None
         self.client = create_redis_client_with_retry(
             host=config.REDIS_HOST,
             port=config.REDIS_PORT,
+            password=redis_password,
             decode_responses=True,
             max_retries=10,
             initial_delay=1.0,

@@ -1,5 +1,6 @@
 """Main cache manager class."""
 from typing import TYPE_CHECKING, Dict, Any
+import os
 import time
 
 if TYPE_CHECKING:
@@ -75,10 +76,11 @@ class IngestionCacheManager(FileCacheOperations, DirectoryCacheOperations):
 
         # Build Redis URL from config or environment
         if not location:
-            import os
             redis_host = os.getenv("REDIS_HOST", "127.0.0.1")
             redis_port = os.getenv("REDIS_PORT", "6379")
             location = f"redis://{redis_host}:{redis_port}/0"
+
+        redis_password = (os.getenv("REDIS_PASSWORD") or "").strip() or None
 
         # Retry logic with exponential backoff
         delay = 1.0
@@ -97,6 +99,7 @@ class IngestionCacheManager(FileCacheOperations, DirectoryCacheOperations):
 
                 client = redis_module.from_url(
                     location,
+                    password=redis_password,
                     decode_responses=True,
                     socket_connect_timeout=5,
                     socket_timeout=5,

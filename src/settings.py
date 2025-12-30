@@ -70,6 +70,8 @@ CACHES = {
     }
 }
 
+REDIS_PASSWORD: str = ""
+
 # Provider adapters registry (aliases -> provider config dict).
 PROVIDERS = {
     "default": {

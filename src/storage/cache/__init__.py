@@ -26,6 +26,7 @@ class RedisEndpoint:
 
     host: str
     port: int
+    password: str | None = None
 
 
 class CacheFactory:
@@ -60,7 +61,11 @@ class CacheFactory:
         redis_endpoint = self._resolve_redis_endpoint(cache_config)
         updated_config = self._apply_config_update(
             config,
-            {"REDIS_HOST": redis_endpoint.host, "REDIS_PORT": redis_endpoint.port},
+            {
+                "REDIS_HOST": redis_endpoint.host,
+                "REDIS_PORT": redis_endpoint.port,
+                "REDIS_PASSWORD": redis_endpoint.password or "",
+            },
         )
         return RedisCacheService(updated_config)
 
@@ -110,6 +115,7 @@ class CacheFactory:
 
         redis_host = (os.getenv("REDIS_HOST") or "").strip()
         redis_port_text = (os.getenv("REDIS_PORT") or "").strip()
+        redis_password = (os.getenv("REDIS_PASSWORD") or "").strip() or None
 
         if not redis_host and not redis_port_text:
             return None
@@ -125,7 +131,7 @@ class CacheFactory:
         except ValueError as exc:
             raise ValueError("REDIS_PORT must be an integer") from exc
 
-        return RedisEndpoint(host=redis_host, port=redis_port)
+        return RedisEndpoint(host=redis_host, port=redis_port, password=redis_password)
 
     def _redis_endpoint_from_location(self, location: str) -> RedisEndpoint | None:
         """
@@ -149,7 +155,11 @@ class CacheFactory:
         if parsed.port is None:
             raise ValueError("Redis URL must include a port")
 
-        return RedisEndpoint(host=parsed.hostname, port=int(parsed.port))
+        return RedisEndpoint(
+            host=parsed.hostname,
+            port=int(parsed.port),
+            password=parsed.password,
+        )
 
     def _apply_config_update(self, config: Any, update: dict[str, Any]) -> Any:
         """

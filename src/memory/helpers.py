@@ -32,11 +32,13 @@ def get_checkpointer():
     if _checkpointer is None:
         redis_host = os.getenv("REDIS_HOST", "127.0.0.1")
         redis_port = int(os.getenv("REDIS_PORT", "6379"))
+        redis_password = (os.getenv("REDIS_PASSWORD") or "").strip() or None
         ttl_seconds = int(os.getenv("MEMORY_TTL", "172800"))
 
         _checkpointer = create_checkpointer(
             redis_host=redis_host,
             redis_port=redis_port,
+            redis_password=redis_password,
             ttl_seconds=ttl_seconds
         )
         logger.info("Checkpointer initialized")

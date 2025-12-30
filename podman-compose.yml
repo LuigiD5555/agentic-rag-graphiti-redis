@@ -90,18 +90,29 @@ services:
     # - appendonly yes: Enable AOF (Append-Only File) for durability
     # - appendfsync everysec: Fsync every second (balance durability/performance)
     # - save "": Disable RDB snapshots (AOF is enough for sessions)
-    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--save", ""]
-    ports:
-      - "127.0.0.1:${HOST_REDIS_TCP_PORT:-6379}:6379"
+    # - requirepass: Enforce authentication on all connections
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - "everysec"
+      - --save
+      - ""
+      - --requirepass
+      - "${REDIS_PASSWORD:-change-me-redis}"
+      - --bind
+      - "127.0.0.1"
+      - --protected-mode
+      - "yes"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-change-me-redis}
+    network_mode: "host"
     volumes:
       - ${HOST_REDIS_DATA:-redis_data}:/data:Z
     hostname: redis
-    networks:
-      default:
-        aliases:
-          - redis
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli ping | grep -q '^PONG$' || exit 1"]
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-change-me-redis} ping | grep -q '^PONG$' || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 30

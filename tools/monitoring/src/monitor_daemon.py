@@ -55,10 +55,12 @@ class MonitoringDaemon:
 
             redis_host = os.environ.get("REDIS_HOST", "127.0.0.1")
             redis_port = int(os.environ.get("REDIS_PORT", 6379))
+            redis_password = (os.environ.get("REDIS_PASSWORD") or "").strip() or None
 
             client = redis.Redis(
                 host=redis_host,
                 port=redis_port,
+                password=redis_password,
                 socket_connect_timeout=5,
                 socket_timeout=5
             )

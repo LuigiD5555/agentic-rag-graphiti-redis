@@ -8,6 +8,7 @@ from src import logger
 def create_redis_client_with_retry(
     host: str,
     port: int,
+    password: str | None = None,
     decode_responses: bool = True,
     max_retries: int = 10,
     initial_delay: float = 1.0,
@@ -45,6 +46,7 @@ def create_redis_client_with_retry(
             client = redis.Redis(
                 host=host,
                 port=port,
+                password=password,
                 decode_responses=decode_responses,
                 socket_timeout=timeout,
                 socket_connect_timeout=timeout,

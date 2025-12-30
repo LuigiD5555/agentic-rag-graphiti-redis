@@ -134,9 +134,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         from src.storage.cache.redis_connection import create_redis_client_with_retry
         redis_host = os.getenv("REDIS_HOST", "127.0.0.1")
         redis_port = int(os.getenv("REDIS_PORT", "6379"))
+        redis_password = (os.getenv("REDIS_PASSWORD") or "").strip() or None
         _redis_client = create_redis_client_with_retry(
             host=redis_host,
             port=redis_port,
+            password=redis_password,
             decode_responses=False,  # We handle encoding/decoding ourselves
         )
         logger.info(f"Redis client initialized: {redis_host}:{redis_port}")
@@ -149,6 +151,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             checkpointer = create_checkpointer(
                 redis_host=redis_host,
                 redis_port=redis_port,
+                redis_password=redis_password,
                 ttl_seconds=172800,  # 48 hours
             )
 

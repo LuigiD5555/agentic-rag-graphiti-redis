@@ -7,6 +7,7 @@ Provides LangGraph checkpoint persistence with automatic TTL:
 """
 import logging
 from typing import Any, Optional
+from urllib.parse import quote_plus
 
 from langgraph.checkpoint.redis import RedisSaver
 
@@ -171,6 +172,7 @@ class TTLRedisSaver(RedisSaver):
 def create_checkpointer(
     redis_host: str = "127.0.0.1",
     redis_port: int = 6379,
+    redis_password: str | None = None,
     redis_db: int = 0,
     ttl_seconds: int = 172800
 ) -> TTLRedisSaver:
@@ -179,6 +181,7 @@ def create_checkpointer(
     Args:
         redis_host: Redis hostname
         redis_port: Redis port
+        redis_password: Optional password used for AUTH
         redis_db: Redis database number
         ttl_seconds: TTL in seconds (default: 48h)
 
@@ -192,5 +195,8 @@ def create_checkpointer(
         ...     ttl_seconds=172800
         ... )
     """
-    redis_url = f"redis://{redis_host}:{redis_port}/{redis_db}"
+    auth_segment = ""
+    if redis_password:
+        auth_segment = f":{quote_plus(redis_password)}@"
+    redis_url = f"redis://{auth_segment}{redis_host}:{redis_port}/{redis_db}"
     return TTLRedisSaver(redis_url=redis_url, ttl_seconds=ttl_seconds)

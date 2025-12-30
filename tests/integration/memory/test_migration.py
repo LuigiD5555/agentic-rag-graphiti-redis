@@ -4,6 +4,7 @@
 Simula conversaciones antiguas en Redis y verifica que se migren
 automáticamente a Weaviate en el arranque.
 """
+import os
 import sys
 import time
 import pickle
@@ -55,7 +56,9 @@ def main():
 
     # 1. Setup Redis
     print("1. Setting up Redis test data...")
-    redis_client = Redis(host="127.0.0.1", port=6379, db=0)
+    redis_password = (os.getenv("REDIS_PASSWORD") or "").strip() or None
+
+    redis_client = Redis(host="127.0.0.1", port=6379, db=0, password=redis_password)
 
     try:
         # Create test checkpoints with different ages
@@ -113,6 +116,7 @@ def main():
         checkpointer = create_checkpointer(
             redis_host="127.0.0.1",
             redis_port=6379,
+            redis_password=redis_password,
             ttl_seconds=172800,
         )
 
