@@ -266,7 +266,10 @@ print_header "STEP 5.5: Optional Debug Container"
 
 DEBUG_COMPOSE_FILE="tools/debug/podman-compose.debug.yml"
 if [ -f "$DEBUG_COMPOSE_FILE" ]; then
-    read -p "Start debug container (on-demand tools)? (y/N): " start_debug
+    if ! read -r -t 10 -p "Start debug container (on-demand tools)? (y/N): " start_debug; then
+        echo ""
+        start_debug="n"
+    fi
     if [[ "$start_debug" =~ ^[yY]$ ]]; then
         print_step "Starting debug container..."
         if ! podman-compose -f "$DEBUG_COMPOSE_FILE" up -d; then
