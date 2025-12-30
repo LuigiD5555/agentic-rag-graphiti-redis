@@ -13,7 +13,7 @@ from src import logger
 from src.rag.conf import Config
 from src.providers.factory import ProviderFactory
 from src.storage.graph import get_graph_store
-from src.storage.graph.ner.extractor import NERExtractor
+from src.storage.graph.legacy_ner.extractor import NERExtractor
 from src.storage.vector import get_vector_store
 
 
