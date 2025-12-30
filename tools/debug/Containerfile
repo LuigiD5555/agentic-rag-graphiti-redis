@@ -26,9 +26,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy all debugging scripts
 COPY scripts/ ./scripts/
+COPY entrypoint.sh /debug/entrypoint.sh
 
 # Make shell scripts executable
-RUN chmod +x scripts/*.sh
+RUN chmod +x scripts/*.sh /debug/entrypoint.sh
 
 # Environment variables with defaults
 ENV COMPOSE_PROJECT_NAME=rag-graphiti-agentic \
@@ -38,7 +39,7 @@ ENV COMPOSE_PROJECT_NAME=rag-graphiti-agentic \
     MEMORY_THRESHOLD=85
 
 # Default command: show available tools
-CMD ["sh", "-c", "echo 'Available debugging tools:' && ls -1 scripts/ && echo '\nUsage: podman exec rag-debug ./scripts/<script_name>'"]
+CMD ["sh", "-c", "echo 'Available debugging tools:' && ls -1 scripts/ && echo '\nUsage: podman exec rag-debug /debug/entrypoint.sh <mode>'"]
 
 # ============================================
 # Health check
