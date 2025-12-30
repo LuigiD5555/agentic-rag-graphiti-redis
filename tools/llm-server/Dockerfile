@@ -1,9 +1,9 @@
-FROM docker.io/nvidia/cuda:12.2.0-base-ubuntu22.04
+FROM python:3.11-slim
 
-# Install system Python and pip (Ubuntu 22.04 ships Python 3.10)
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-pip \
+    git \
+    curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -11,22 +11,23 @@ WORKDIR /app
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN python3 -m pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application
 COPY src/ ./src/
 
-# Create work directory
-RUN mkdir -p /work && chmod 777 /work
+# Create directories for models and work
+RUN mkdir -p /models /work && chmod 777 /models /work
 
-# Security: run as non-root user (but keep GPU access)
+# Security: run as non-root user
 RUN useradd -m -u 1000 tooluser && \
-    chown -R tooluser:tooluser /app /work
+    chown -R tooluser:tooluser /app /models /work
 
 USER tooluser
 
 ENV PORT=8000
 ENV WORK_DIR=/work
+ENV MODELS_DIR=/models
 
 EXPOSE 8000
 
