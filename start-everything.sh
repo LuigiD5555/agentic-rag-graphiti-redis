@@ -14,6 +14,14 @@
 
 set -e
 
+# Prefer the project's virtual environment python if available.
+PYTHON_CMD="${PYTHON_CMD:-python3}"
+if [ -x "./.venv/bin/python" ]; then
+    PYTHON_CMD="./.venv/bin/python"
+elif [ -x "./.venv/bin/python3" ]; then
+    PYTHON_CMD="./.venv/bin/python3"
+fi
+
 # Ensure Podman Compose does not emit the Bake warning when we delegate.
 export COMPOSE_BAKE=false
 
@@ -105,7 +113,7 @@ if podman images | grep -q "rag-tool-office" && \
         print_info "Using existing images"
     else
         print_step "Rebuilding all images..."
-        if ! python3 -m src.utils.tools.systemd_manager build --tools extractor document-processor websearch; then
+        if ! "$PYTHON_CMD" -m src.utils.tools.systemd_manager build --tools extractor document-processor websearch; then
             print_error "Failed to build tool images"
             exit 1
         fi
@@ -113,7 +121,7 @@ if podman images | grep -q "rag-tool-office" && \
 else
     print_step "Building images for the first time..."
     print_warning "This can take 10-15 minutes..."
-    if ! python3 -m src.utils.tools.systemd_manager build --tools extractor document-processor websearch; then
+    if ! "$PYTHON_CMD" -m src.utils.tools.systemd_manager build --tools extractor document-processor websearch; then
         print_error "Failed to build tool images"
         exit 1
     fi
@@ -137,19 +145,19 @@ else
     # Use Python module for systemd management
     print_step "Installing and enabling systemd sockets..."
 
-    if ! python3 -m src.utils.tools.systemd_manager install; then
+    if ! "$PYTHON_CMD" -m src.utils.tools.systemd_manager install; then
         print_error "Failed to install systemd units"
         exit 1
     fi
 
-    if ! python3 -m src.utils.tools.systemd_manager enable; then
+    if ! "$PYTHON_CMD" -m src.utils.tools.systemd_manager enable; then
         print_error "Failed to enable sockets"
         exit 1
     fi
 
     # Apply timeout configuration from .env/settings.json to systemd services
     print_step "Applying tool timeout configuration..."
-    if ! python3 -m src.utils.tools.timeout_manager apply -q; then
+    if ! "$PYTHON_CMD" -m src.utils.tools.timeout_manager apply -q; then
         print_warning "Could not apply timeout settings (continuing with defaults)"
     else
         print_success "Timeout configuration applied"
@@ -167,7 +175,7 @@ fi
 print_header "STEP 4: Checking and Preparing Volumes"
 
 print_step "Verifying external volumes and setting up fallbacks if needed..."
-if ! python3 -m pytest tests/infrastructure/test_volumes.py::TestVolumeIntegration::test_libros_volume_with_fallback_setup --setup-fallback -v -s; then
+if ! "$PYTHON_CMD" -m pytest tests/infrastructure/test_volumes.py::TestVolumeIntegration::test_libros_volume_with_fallback_setup --setup-fallback -v -s; then
     print_error "Volume check failed"
     exit 1
 fi
@@ -243,13 +251,21 @@ check_service() {
     local name=$1
     local port=$2
     local wait_enabled=${3:-yes}
+    local protocol=${4:-http}
     local deadline=$((SECONDS + SERVICE_WAIT_SECONDS))
 
     while true; do
-        if curl -s -f -m 2 "http://localhost:${port}" >/dev/null 2>&1 || \
-           curl -s -f -m 2 "http://localhost:${port}/v1/.well-known/ready" >/dev/null 2>&1; then
-            print_success "$name responding on port $port"
-            return 0
+        if [ "$protocol" = "tcp" ]; then
+            if timeout 2 bash -c "cat < /dev/tcp/localhost:${port}" >/dev/null 2>&1; then
+                print_success "$name responding on TCP port $port"
+                return 0
+            fi
+        else
+            if curl -s -f -m 2 "http://localhost:${port}" >/dev/null 2>&1 || \
+               curl -s -f -m 2 "http://localhost:${port}/v1/.well-known/ready" >/dev/null 2>&1; then
+                print_success "$name responding on port $port"
+                return 0
+            fi
         fi
 
         if [ "$wait_enabled" = "no" ]; then
@@ -269,7 +285,7 @@ check_service() {
 print_info "Waiting up to ${SERVICE_WAIT_SECONDS}s for services..."
 check_service "Weaviate  " "8080"
 check_service "Neo4j     " "7474"
-check_service "Redis     " "6379" "no" || print_info "Redis has no HTTP endpoint (normal)"
+check_service "Redis     " "6379" "no" "tcp" || print_info "Redis has no HTTP endpoint (normal)"
 check_service "RAG API   " "8000"
 
 if curl -s -f -m 2 "http://localhost:5555/health" >/dev/null 2>&1; then
@@ -312,8 +328,8 @@ test_tool_endpoint "tool-docproc" "9106"
 # Run comprehensive pre-flight checks now that containers are running
 print_step "Running comprehensive pre-flight checks..."
 
-if python3 -c "import pytest" 2>/dev/null; then
-    if ! python3 -m pytest tests/infrastructure/test_preflight.py -v --tb=short; then
+if "$PYTHON_CMD" -c "import pytest" 2>/dev/null; then
+    if ! "$PYTHON_CMD" -m pytest tests/infrastructure/test_preflight.py -v --tb=short; then
         print_warning "Some pre-flight checks failed. Review the output above."
         print_info "System is running but may have configuration issues."
     else
