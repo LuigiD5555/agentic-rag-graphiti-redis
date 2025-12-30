@@ -151,8 +151,28 @@ else
     fi
 
     if ! "$PYTHON_CMD" -m src.utils.tools.systemd_manager enable; then
-        print_error "Failed to enable sockets"
-        exit 1
+        print_warning "Failed to enable sockets, attempting recovery"
+        systemctl --user daemon-reload || true
+        systemctl --user restart tool-extractor.socket || true
+        systemctl --user restart tool-document-processor.socket || true
+        systemctl --user restart tool-websearch.socket || true
+    fi
+
+    print_step "Checking tool sockets..."
+    if systemctl --user list-sockets | grep -q "tool-"; then
+        systemctl --user list-sockets | grep "tool-" | while read line; do
+            print_success "$line"
+        done
+    else
+        print_warning "No tool sockets reported by systemd"
+    fi
+
+    if ! systemctl --user is-enabled tool-extractor.socket >/dev/null 2>&1; then
+        print_warning "tool-extractor.socket is not enabled. Diagnostics:"
+        systemctl --user status tool-extractor.socket --no-pager || true
+        journalctl --user -u tool-extractor.socket --no-pager -n 50 || true
+        print_warning "Attempting to start tool-extractor.socket anyway..."
+        systemctl --user start tool-extractor.socket || true
     fi
 
     # Apply timeout configuration from .env/settings.json to systemd services
@@ -210,32 +230,55 @@ if podman ps | grep -q "weaviate\|neo4j\|redis\|app\|open-webui\|monitoring"; th
 
         print_step "Building custom images..."
 
-        if ! podman-compose build app; then
-            print_error "Failed to build app image"
+        if ! podman-compose build app monitoring; then
+            print_error "Failed to build app/monitoring images"
             exit 1
         fi
 
-        print_step "Starting all services..."
-        podman-compose up -d
+print_step "Starting all services..."
+podman-compose up -d
 
-        print_step "Waiting for services to initialize..."
-        sleep 10
+print_step "Waiting for services to initialize..."
+sleep 10
     else
         print_info "Using existing services"
     fi
 else
     print_step "Building custom images..."
 
-    if ! podman-compose build app; then
-        print_error "Failed to build app image"
+    if ! podman-compose build app monitoring; then
+        print_error "Failed to build app/monitoring images"
         exit 1
     fi
 
-    print_step "Starting all services (Weaviate, Neo4j, Redis, App, Open WebUI, Monitoring)..."
-    podman-compose up -d
+print_step "Starting all services (Weaviate, Neo4j, Redis, App, Open WebUI, Monitoring)..."
+podman-compose up -d
 
-    print_step "Waiting for services to initialize..."
-    sleep 10
+print_step "Waiting for services to initialize..."
+sleep 10
+fi
+
+# ============================================================================
+# STEP 5.5: OPTIONAL DEBUG CONTAINER
+# ============================================================================
+
+print_header "STEP 5.5: Optional Debug Container"
+
+DEBUG_COMPOSE_FILE="tools/debug/podman-compose.debug.yml"
+if [ -f "$DEBUG_COMPOSE_FILE" ]; then
+    read -p "Start debug container (on-demand tools)? (y/N): " start_debug
+    if [[ "$start_debug" =~ ^[yY]$ ]]; then
+        print_step "Starting debug container..."
+        if ! podman-compose -f "$DEBUG_COMPOSE_FILE" up -d; then
+            print_warning "Failed to start debug container (continuing)"
+        else
+            print_success "Debug container started"
+        fi
+    else
+        print_info "Skipping debug container (on-demand)"
+    fi
+else
+    print_warning "Debug compose file not found: $DEBUG_COMPOSE_FILE"
 fi
 
 # ============================================================================
