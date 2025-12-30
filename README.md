@@ -261,14 +261,6 @@ an external gateway/provider would integrate.
 - Only `ollama` is treated as a built-in provider (core `rag`).
 - Providers like `lmstudio`, `anythingllm`, and `huggingface` are enabled via `INSTALLED_APPS`.
 
-### Local GPU Embeddings
-
-Set `EMBEDDING_BACKEND=local_gpu` to run sentence-transformers embeddings locally while LM Studio continues to handle chat completions.
-Install deps with `pip install -r requirements.txt`.
-If `EMBEDDING_BACKEND=local_gpu` is set but `torch`/`sentence-transformers` are missing, the app falls back to the configured provider embeddings.
-Tune `LOCAL_GPU_DEVICE` (`cuda`, `cuda:0`, `auto`, `cpu`), `LOCAL_GPU_EMBED_MODEL` (sentence-transformers model name), and `LOCAL_GPU_BATCH_SIZE` (default 32) via `.env`.
-The helper lives in `src/utils/local_gpu`: it wraps the CUDA-aware encoder with an optional Redis cache, so embeddings stay on the GPU while LM Studio is only used for chat. Ensure `torch` and `sentence-transformers` are installed and a CUDA driver is available.
-
 ### Weaviate embedding dimension changes
 
 Weaviate collections require a consistent vector length. If you change embedding models (e.g., 384 → 768 dimensions), you must either:

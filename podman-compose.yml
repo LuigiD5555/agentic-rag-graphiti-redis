@@ -115,141 +115,49 @@ services:
           cpus: "${REDIS_CPUS:-1.0}"
           memory: "${REDIS_MEMORY:-1g}"
 
-  rag-api:
-    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_rag-api_1"
-    build:
-      context: .
-      dockerfile: Dockerfile.api
-      target: runtime
+  open-webui:
+    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_open-webui_1"
+    image: "ghcr.io/open-webui/open-webui:${OPEN_WEBUI_IMAGE_TAG:-main-slim}"
     restart: unless-stopped
     logging:
       driver: journald
     depends_on:
       app:
         condition: service_healthy
-    env_file: .env
-
-    # Share the host network namespace so 127.0.0.1 == host loopback
-    network_mode: "host"
-
-    environment:
-      # Proxy to core service (app container on port 8001)
-      CORE_SERVICE_URL: "http://127.0.0.1:${HOST_CORE_SERVICE_PORT:-8001}"
-      CORE_TIMEOUT: "${CORE_TIMEOUT:-120}"
-
-      # API mode (openai or ollama)
-      API_MODE: "${API_MODE:-ollama}"
-
-      # RAG API port (public-facing proxy)
-      API_PORT: "${HOST_RAG_API_PORT:-8000}"
-
-    # API binds to 0.0.0.0:8000 inside container, accessible at 127.0.0.1:8000 on host via host network
-    healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://127.0.0.1:${HOST_RAG_API_PORT:-8000}/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-    stop_grace_period: 20s
-    ulimits:
-      nofile: { soft: 65536, hard: 65536 }
-    deploy:
-      resources:
-        limits:
-          cpus: "${API_CPUS:-0.5}"
-          memory: "${API_MEMORY:-256m}"
-
-  librechat:
-    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_librechat_1"
-    image: "ghcr.io/danny-avila/librechat:${LIBRECHAT_IMAGE_TAG:-latest}"
-    restart: unless-stopped
-    logging:
-      driver: journald
-    depends_on:
-      rag-api:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-    # Use host network to access rag-api and redis on 127.0.0.1
-    network_mode: "host"
-
-    environment:
-      # Host and port (LibreChat binds to this when using host network)
-      HOST: "0.0.0.0"
-      PORT: "${HOST_LIBRECHAT_PORT:-3080}"
-
-      # MongoDB (LibreChat's internal DB) - use host network
-      MONGO_URI: "mongodb://127.0.0.1:27017/LibreChat"
-
-      # Custom OpenAI endpoint pointing to RAG API
-      ENDPOINTS: "custom"
-
-      # Custom endpoint configuration
-      CUSTOM_OPENAI_BASE_URL: "http://127.0.0.1:${HOST_RAG_API_PORT:-8000}"
-      CUSTOM_OPENAI_API_KEY: "not-needed"
-      CUSTOM_OPENAI_MODELS: "default"
-
-      # Session secret
-      CREDS_KEY: "${LIBRECHAT_CREDS_KEY:-change-this-secret-in-production}"
-      CREDS_IV: "${LIBRECHAT_CREDS_IV:-change-this-iv-in-production}"
-      JWT_SECRET: "${LIBRECHAT_JWT_SECRET:-change-this-jwt-secret}"
-      JWT_REFRESH_SECRET: "${LIBRECHAT_JWT_REFRESH_SECRET:-change-this-refresh-secret}"
-
-      # File uploads (for temporal RAG)
-      ENABLE_FILE_UPLOADS: "true"
-      FILE_UPLOAD_SIZE_LIMIT: "${TEMPORAL_FILE_MAX_SIZE_MB:-50}"
-      FILES_ENDPOINT: "http://127.0.0.1:${HOST_RAG_API_PORT:-8000}/v1/files"
-
-      # Disable telemetry
-      ALLOW_SOCIAL_LOGIN: "false"
-      ALLOW_EMAIL_LOGIN: "true"
-      ALLOW_REGISTRATION: "true"
-
-    volumes:
-      - ${HOST_LIBRECHAT_DATA:-librechat_data}:/app/client/public/images:Z
-      - ${HOST_LIBRECHAT_CONFIG:-./config/librechat.yaml}:/app/librechat.yaml:ro,Z
-
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:${HOST_LIBRECHAT_PORT:-3080}/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    stop_grace_period: 20s
-    ulimits:
-      nofile: { soft: 65536, hard: 65536 }
-    deploy:
-      resources:
-        limits:
-          cpus: "${LIBRECHAT_CPUS:-1.0}"
-          memory: "${LIBRECHAT_MEMORY:-1g}"
-
-  mongodb:
-    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_mongodb_1"
-    image: "docker.io/library/mongo:${MONGODB_IMAGE_TAG:-7}"
-    restart: unless-stopped
-    logging:
-      driver: journald
     ports:
-      - "127.0.0.1:27017:27017"
+      - "127.0.0.1:${HOST_OPEN_WEBUI_PORT:-5555}:8080"
     environment:
-      MONGO_INITDB_DATABASE: "LibreChat"
+      # Point to RAG API (unified app container on port 8000)
+      OPENAI_API_BASE_URL: "http://127.0.0.1:${HOST_RAG_API_PORT:-8000}/v1"
+      OPENAI_API_KEY: "not-needed"
+
+      # Disable internal Ollama since we use external RAG API
+      ENABLE_OLLAMA_API: "false"
+
+      # WebUI configuration
+      WEBUI_SECRET_KEY: "${WEBUI_SECRET_KEY:-change-this-secret-in-production}"
+
+      # Optional: Disable features we don't need
+      ENABLE_RAG_WEB_SEARCH: "false"
+      ENABLE_IMAGE_GENERATION: "false"
+
     volumes:
-      - ${HOST_MONGODB_DATA:-mongodb_data}:/data/db:Z
+      - ${HOST_OPEN_WEBUI_DATA:-open-webui_data}:/app/backend/data:Z
+
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    stop_grace_period: 30s
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 20s
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
     deploy:
       resources:
         limits:
-          cpus: "${MONGODB_CPUS:-1.0}"
-          memory: "${MONGODB_MEMORY:-512m}"
+          cpus: "${OPEN_WEBUI_CPUS:-1.0}"
+          memory: "${OPEN_WEBUI_MEMORY:-1g}"
 
   app:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_app_1"
@@ -307,24 +215,47 @@ services:
       CHUNK_SIZE: "${CHUNK_SIZE:-500}"
       CHUNK_OVERLAP: "${CHUNK_OVERLAP:-50}"
 
-      # Core service port (internal HTTP API)
-      API_PORT: "${HOST_CORE_SERVICE_PORT:-8001}"
+      # Unified RAG API port (consolidated from separate API proxy)
+      API_PORT: "${HOST_RAG_API_PORT:-8000}"
       API_MODE: "${API_MODE:-ollama}"
 
     volumes:
       - ${HOST_DOCS_DIR:?HOST_DOCS_DIR is required}:/mnt/Documents/Documents:Z
-      # Libros directory - ACTIVE_LIBROS_DIR is set by check-volumes.sh
-      - ${ACTIVE_LIBROS_DIR:?ACTIVE_LIBROS_DIR must be set by check-volumes.sh}:/mnt/resources/Libros:z
+
+      # ============================================================================
+      # External Volumes (Auto-detected from EXTERNAL_VOLUMES in .env)
+      # ============================================================================
+      # These volumes are configured in .env using EXTERNAL_VOLUMES JSON array.
+      # The system auto-detects if volumes are available using .volume-available markers.
+      # If a volume is unavailable, it falls back to ./data/<name>-fallback
+      #
+      # To add a new external volume:
+      # 1. Add to EXTERNAL_VOLUMES in .env (see .env for format)
+      # 2. Add corresponding mount entry here: - ${HOST_<NAME>_DIR:-./data/<name>-fallback}:/mnt/resources/<Name>:Z
+      # 3. Create .volume-available marker: touch /path/to/volume/.volume-available
+      # 4. Run: python -m src.utils.volume_compose_generator list (to verify)
+      #
+      # Example for a "Research" volume:
+      #   - ${HOST_RESEARCH_DIR:-./data/research-fallback}:/mnt/resources/Research:Z
+      # ============================================================================
+
+      # External volume: Libros (auto-detected from EXTERNAL_VOLUMES)
+      - ${HOST_LIBROS_DIR:-./data/libros-fallback}:/mnt/resources/Libros:Z
+
+      # Add more external volumes here as needed (see instructions above)
+
+      # ============================================================================
+
       - ${HOST_DATA_DIR:-./data}:/app/data:Z
       - ./.ingestignore:/app/.ingestignore:ro,Z
       # Mount source for hot-reload during development
       - ./src:/app/src:ro,Z
       - ./tests:/app/tests:ro,Z
 
-    # Run as HTTP server (core RAG service)
-    # App binds to 0.0.0.0:8001 inside container, accessible at 127.0.0.1:8001 on host via host network
+    # Run as HTTP server (unified RAG API - consolidated from separate API proxy)
+    # App binds to 127.0.0.1:8000 inside container via host network mode
     healthcheck:
-      test: ["CMD", "python", "-c", "import os, requests; requests.get(f'http://127.0.0.1:{os.getenv(\"API_PORT\", \"8001\")}/health')"]
+      test: ["CMD", "python", "-c", "import os, requests; requests.get(f'http://127.0.0.1:{os.getenv(\"API_PORT\", \"8000\")}/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -413,8 +344,7 @@ volumes:
   neo4j_logs: {}
   weaviate_data: {}
   redis_data: {}
-  librechat_data: {}
-  mongodb_data: {}
+  open-webui_data: {}
   monitoring_logs: {}
   monitoring_reports: {}
   monitoring_data: {}

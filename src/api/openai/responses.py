@@ -10,6 +10,7 @@ from src.api.models import (
     Source,
 )
 from src.rag.pipeline.rag_orchestrator import RAGOrchestrator
+from src.api.middleware.thread_manager import get_thread_id
 
 router = APIRouter(prefix="/v1", tags=["responses"])
 
@@ -24,6 +25,7 @@ def _extract_text_from_input(input_data) -> str:
     if isinstance(input_data, str):
         return input_data
 
+    # List of ResponseInput objects
     texts = []
     for item in input_data:
         if isinstance(item, dict) and "text" in item:
@@ -57,8 +59,10 @@ async def create_response(
     Returns:
         Response object with answer, sources, and metadata.
     """
+    # Extract text from input
     question = _extract_text_from_input(request.input)
 
+    # Execute RAG query
     try:
         result = rag.query(
             question=question,
@@ -72,9 +76,11 @@ async def create_response(
 
     answer = result["answer"]
 
+    # Estimate token usage
     prompt_tokens = _estimate_tokens(question)
     completion_tokens = _estimate_tokens(answer)
 
+    # Build metadata with sources
     sources = [
         Source(path=src["path"], relevance_score=src["relevance_score"])
         for src in result.get("sources", [])
@@ -88,6 +94,7 @@ async def create_response(
         max_tokens=request.max_tokens or 1024,
     )
 
+    # Build response
     response = ResponseObject(
         id=f"resp-{uuid.uuid4().hex[:24]}",
         model=request.model,

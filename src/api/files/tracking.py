@@ -73,21 +73,17 @@ class FileTracker:
         """
         current_time = time.time()
 
-        # 1. Increment global upload counter for this file
         upload_count_key = f"file_uploads:{file_hash}"
         upload_count = self.redis.hincrby(upload_count_key, "upload_count", 1)
 
-        # 2. Track threads that uploaded this file
         self.redis.sadd(f"{upload_count_key}:threads", thread_id)
 
-        # 3. Set timestamps
         if upload_count == 1:
             self.redis.hset(upload_count_key, "first_uploaded", current_time)
             self.redis.hset(upload_count_key, "filename", filename)
 
         self.redis.hset(upload_count_key, "last_uploaded", current_time)
 
-        # 4. Store temporal file metadata
         temp_file_key = f"temp_file:{thread_id}:{file_id}"
         self.redis.hset(temp_file_key, "file_hash", file_hash)
         self.redis.hset(temp_file_key, "filename", filename)
@@ -96,24 +92,19 @@ class FileTracker:
         self.redis.hset(temp_file_key, "pareto_promoted", 0)
         self.redis.hset(temp_file_key, "full_promoted", 0)
 
-        # Store chunk IDs as JSON
         import json
         self.redis.hset(temp_file_key, "chunk_ids", json.dumps(chunk_ids))
 
-        # Set TTL (24 hours)
         self.redis.expire(temp_file_key, 86400)
 
-        # 5. Track tenant creation time
         tenant_name = f"temp_{thread_id}"
         tenant_key = f"tenant_created:{tenant_name}"
         if not self.redis.exists(tenant_key):
             self.redis.setex(tenant_key, 86400, current_time)
 
-        # 6. Add to thread's file list
         self.redis.sadd(f"temp_files:{thread_id}", file_id)
         self.redis.expire(f"temp_files:{thread_id}", 86400)
 
-        # 7. Check if should auto-promote
         should_promote = upload_count >= self.promotion_threshold
         is_already_promoted = bool(int(self.redis.hget(upload_count_key, "promoted") or 0))
 
@@ -151,16 +142,13 @@ class FileTracker:
         """
         temp_file_key = f"temp_file:{thread_id}:{file_id}"
 
-        # Increment query count
         self.redis.hincrby(temp_file_key, "query_count", 1)
 
-        # Update chunk relevance score (cumulative)
         chunk_scores_key = f"{temp_file_key}:chunk_scores"
         current_score = float(self.redis.hget(chunk_scores_key, chunk_id) or 0.0)
         new_score = current_score + relevance_score
         self.redis.hset(chunk_scores_key, chunk_id, new_score)
 
-        # Set TTL
         self.redis.expire(chunk_scores_key, 86400)
 
         logger.debug(
@@ -184,10 +172,8 @@ class FileTracker:
 
         info = self.redis.hgetall(key)
 
-        # Decode bytes to strings
         info = {k.decode(): v.decode() for k, v in info.items()}
 
-        # Get threads
         threads = self.redis.smembers(f"{key}:threads")
         info["threads"] = [t.decode() for t in threads]
 
@@ -213,7 +199,6 @@ class FileTracker:
         info = self.redis.hgetall(temp_file_key)
         info = {k.decode(): v.decode() for k, v in info.items()}
 
-        # Get chunk scores
         chunk_scores_key = f"{temp_file_key}:chunk_scores"
         chunk_scores = self.redis.hgetall(chunk_scores_key)
         if chunk_scores:
@@ -223,7 +208,6 @@ class FileTracker:
         else:
             info["chunk_scores"] = {}
 
-        # Parse chunk IDs
         import json
         if "chunk_ids" in info:
             info["chunk_ids"] = json.loads(info["chunk_ids"])
@@ -254,14 +238,11 @@ class FileTracker:
         """
         temp_file_key = f"temp_file:{thread_id}:{file_id}"
 
-        # Get query count
         query_count = int(self.redis.hget(temp_file_key, "query_count") or 0)
 
-        # Check if already promoted
         pareto_promoted = bool(int(self.redis.hget(temp_file_key, "pareto_promoted") or 0))
         full_promoted = bool(int(self.redis.hget(temp_file_key, "full_promoted") or 0))
 
-        # Run if enough queries and not already promoted
         return (
             query_count >= self.pareto_min_queries
             and not pareto_promoted
@@ -296,15 +277,12 @@ class FileTracker:
         Returns:
             Dictionary with statistics
         """
-        # Count unique files
         file_keys = self.redis.keys("file_uploads:*")
         unique_files = len([k for k in file_keys if b":threads" not in k])
 
-        # Count temporal files
         temp_file_keys = self.redis.keys("temp_file:*")
         temp_files = len([k for k in temp_file_keys if b":chunk_scores" not in k])
 
-        # Count promoted files
         promoted_count = 0
         for key in file_keys:
             if b":threads" not in key:

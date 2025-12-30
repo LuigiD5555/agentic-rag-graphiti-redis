@@ -2,14 +2,14 @@ version: '3.8'
 
 services:
   # RAG API Service (Personal/Local use)
-  rag-api:
+  app:
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile
       target: development
-    container_name: rag-api
+    container_name: app
     ports:
-      - "5555:5555"
+      - "8000:8000"
     volumes:
       # Mount source for hot-reload during development
       - ./src:/app/src:ro
@@ -36,6 +36,7 @@ services:
       - LMSTUDIO_HOST=host.docker.internal
       - LMSTUDIO_PORT=1234
       - PROVIDER=lmstudio
+      - API_PORT=8000
 
     depends_on:
       - weaviate

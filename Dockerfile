@@ -64,14 +64,16 @@ COPY tests/ tests/
 RUN mkdir -p data
 
 # Expose API port (configurable via API_PORT env var)
+# Default port is now 8000 (consolidated from separate API proxy)
 EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import os, requests; requests.get(f'http://localhost:{os.getenv(\"API_PORT\", \"8001\")}/health')" || exit 0
+    CMD python -c "import os, requests; requests.get(f'http://localhost:{os.getenv(\"API_PORT\", \"8000\")}/health')" || exit 0
 
-# Default command: HTTP server mode (core RAG service)
-CMD sh -c "uvicorn src.api.app:app --host 0.0.0.0 --port ${API_PORT:-8001}"
+# Default command: HTTP server mode (unified RAG API)
+# SECURITY: Bind to localhost only when using host network mode
+CMD sh -c "uvicorn src.api.app:app --host 127.0.0.1 --port ${API_PORT:-8000}"
 
 ########################
 # Development stage (with hot-reload for API)
@@ -82,4 +84,5 @@ FROM runtime AS development
 RUN pip install --no-cache-dir pytest pytest-asyncio httpx ipdb
 
 # Default: HTTP server with auto-reload
-CMD sh -c "uvicorn src.api.app:app --host 0.0.0.0 --port ${API_PORT:-8001} --reload"
+# SECURITY: Bind to localhost only when using host network mode
+CMD sh -c "uvicorn src.api.app:app --host 127.0.0.1 --port ${API_PORT:-8000} --reload"

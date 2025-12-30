@@ -398,6 +398,16 @@ from src.api.files.router import router as files_router
 app.include_router(files_router)
 logger.info("Files router (/v1/files) included")
 
+# Include volumes router for external volume management
+from src.api.routers.volumes import router as volumes_router
+app.include_router(volumes_router)
+logger.info("Volumes router (/volumes) included")
+
+# Include stats router for monitoring and dashboards
+from src.api.routers.stats import router as stats_router
+app.include_router(stats_router)
+logger.info("Stats router (/api/stats) included")
+
 
 # Exception handlers
 @app.exception_handler(Exception)
@@ -469,7 +479,7 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "src.api.app:app",
-        host="0.0.0.0",
+        host="127.0.0.1",  # SECURITY: Localhost only
         port=8000,
         reload=True,
         log_level="info",

@@ -246,10 +246,10 @@ pip install -r requirements.txt
 docker-compose -f docker-compose.api.yml up -d
 
 # View logs
-docker-compose -f docker-compose.api.yml logs -f rag-api
+docker-compose -f docker-compose.api.yml logs -f app
 
 # Restart
-docker-compose -f docker-compose.api.yml restart rag-api
+docker-compose -f docker-compose.api.yml restart app
 
 # Stop
 docker-compose -f docker-compose.api.yml down
@@ -259,15 +259,15 @@ docker-compose -f docker-compose.api.yml down
 
 ```bash
 # Build development stage
-docker build -f Dockerfile.api --target development -t rag-api:dev .
+docker build -f Dockerfile --target development -t rag-app:dev .
 
 # Run
 docker run -d \
   -p 8000:8000 \
   --env-file .env \
-  --name rag-api \
+  --name rag-app \
   -v $(pwd)/src:/app/src:ro \
-  rag-api:dev
+  rag-app:dev
 ```
 
 **Note**: Changes in `src/` will be reflected automatically when using volume mounts.

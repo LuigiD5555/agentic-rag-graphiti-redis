@@ -252,7 +252,7 @@ app.add_middleware(
 
 ## Docker Setup
 
-`Dockerfile.api` uses a multi-stage build for local development:
+`Dockerfile` uses a multi-stage build for local development:
 
 - **Stage `base`**: Core dependencies (Python 3.12, system packages, requirements.txt)
 - **Stage `development`**: Auto-reload, pytest, code mounted as a volume, healthcheck
