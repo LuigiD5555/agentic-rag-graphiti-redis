@@ -12,9 +12,7 @@ services:
     logging:
       driver: journald
     # Bind ONLY to localhost so it's not exposed to LAN
-    ports:
-      - "127.0.0.1:${HOST_WEAVIATE_HTTP_PORT:-8080}:8080"
-      - "127.0.0.1:${HOST_WEAVIATE_GRPC_PORT:-50051}:50051"
+    network_mode: "host"
     environment:
       - QUERY_DEFAULTS_LIMIT=${WEAVIATE_QUERY_DEFAULTS_LIMIT:-25}
       - AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true
@@ -49,9 +47,7 @@ services:
     logging:
       driver: journald
     # Bind ONLY to localhost so it's not exposed to LAN
-    ports:
-      - "127.0.0.1:${HOST_NEO4J_HTTP_PORT:-7474}:7474"
-      - "127.0.0.1:${HOST_NEO4J_BOLT_PORT:-7687}:7687"
+    network_mode: "host"
     environment:
       NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD:-neo4j123}"
       NEO4J_server_default__listen__address: "0.0.0.0"
