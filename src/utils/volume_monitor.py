@@ -5,6 +5,7 @@ This module monitors external volumes and can trigger re-scanning when they beco
 
 import os
 import time
+import json
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -217,6 +218,54 @@ def get_available_sources() -> List[str]:
 _monitor: Optional[VolumeMonitor] = None
 
 
+def load_external_volumes_config() -> List[Dict[str, str]]:
+    """
+    Load external volumes configuration with priority:
+    1. settings.json (user-editable, persistent)
+    2. EXTERNAL_VOLUMES env var
+    3. Legacy HOST_LIBROS_DIR
+
+    Returns:
+        List of volume configurations, each with 'name', 'primary', 'fallback', 'mount'
+    """
+    # Priority 1: Check settings.json
+    try:
+        import src.settings as settings
+
+        if hasattr(settings, 'EXTERNAL_VOLUMES') and settings.EXTERNAL_VOLUMES:
+            volumes = settings.EXTERNAL_VOLUMES
+            if isinstance(volumes, list):
+                logger.info(f"Loaded {len(volumes)} external volume(s) from settings.json")
+                return volumes
+            else:
+                logger.warning(f"EXTERNAL_VOLUMES in settings.json is not a list: {type(volumes)}")
+    except Exception as e:
+        logger.debug(f"Could not load EXTERNAL_VOLUMES from settings: {e}")
+
+    # Priority 2: Check EXTERNAL_VOLUMES environment variable
+    config_str = os.environ.get("EXTERNAL_VOLUMES", "")
+    if config_str:
+        try:
+            volumes = json.loads(config_str)
+            if not isinstance(volumes, list):
+                logger.error(f"EXTERNAL_VOLUMES env var must be a JSON array, got: {type(volumes)}")
+            else:
+                logger.info(f"Loaded {len(volumes)} external volume(s) from EXTERNAL_VOLUMES env var")
+                return volumes
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse EXTERNAL_VOLUMES JSON from env: {e}")
+
+    libros_primary = os.environ.get("HOST_LIBROS_DIR", "/mnt/resources/Libros")
+    libros_fallback = os.environ.get("FALLBACK_LIBROS_DIR", "./data/libros-fallback")
+    logger.info("Using Libros configuration from env vars")
+    return [{
+        "name": "Libros",
+        "primary": libros_primary,
+        "fallback": libros_fallback,
+        "mount": "/mnt/resources/Libros"
+    }]
+
+
 def get_monitor() -> VolumeMonitor:
     """Get or create the global volume monitor instance."""
     global _monitor
@@ -224,16 +273,26 @@ def get_monitor() -> VolumeMonitor:
     if _monitor is None:
         _monitor = VolumeMonitor()
 
-        # Add default volumes from environment
-        libros_primary = os.environ.get("HOST_LIBROS_DIR", "/mnt/resources/Libros")
-        libros_fallback = os.environ.get("FALLBACK_LIBROS_DIR", "./data/libros-fallback")
+        # Load external volumes from configuration
+        volumes_config = load_external_volumes_config()
 
-        # Only monitor if we're inside a container
-        if os.path.exists("/mnt/resources/Libros"):
-            _monitor.add_volume(
-                primary_path="/mnt/resources/Libros",
-                fallback_path=libros_fallback,
-                name="Libros"
-            )
+        for vol_config in volumes_config:
+            name = vol_config.get("name")
+            primary = vol_config.get("primary")
+            fallback = vol_config.get("fallback")
+            mount_point = vol_config.get("mount")
+
+            if not all([name, primary, fallback, mount_point]):
+                logger.warning(f"Skipping incomplete volume config: {vol_config}")
+                continue
+
+            # Only monitor if we're inside a container (check if mount point exists)
+            if os.path.exists(mount_point):
+                logger.info(f"Adding volume monitor for '{name}': {primary} -> {mount_point}")
+                _monitor.add_volume(
+                    primary_path=mount_point,  # Inside container, we see the mount point
+                    fallback_path=fallback,
+                    name=name
+                )
 
     return _monitor

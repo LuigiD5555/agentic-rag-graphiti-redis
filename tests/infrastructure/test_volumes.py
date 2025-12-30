@@ -17,10 +17,11 @@ Usage:
 """
 
 import os
+import json
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, List, Dict
 
 import pytest
 from dotenv import load_dotenv, set_key
@@ -50,20 +51,51 @@ class VolumeConfig:
         if env_path.exists():
             load_dotenv(env_path)
 
-        # Primary volume paths
-        self.host_libros_dir = os.getenv(
-            'HOST_LIBROS_DIR',
-            '/mnt/resources/Libros'
-        )
-
-        # Fallback paths (relative to project root)
-        project_root = Path(__file__).parents[2]
-        self.fallback_libros_dir = project_root / os.getenv(
-            'FALLBACK_LIBROS_DIR',
-            'data/libros-fallback'
-        )
-
         self.env_path = env_path
+        self.project_root = Path(__file__).parents[2]
+
+        # Load external volumes from EXTERNAL_VOLUMES env var
+        self.volumes = self._load_external_volumes()
+
+        if self.volumes and self.volumes[0]['name'] == 'Libros':
+            self.host_libros_dir = self.volumes[0]['primary']
+            self.fallback_libros_dir = Path(self.volumes[0]['fallback'])
+
+    def _load_external_volumes(self) -> List[Dict[str, str]]:
+        """
+        Load external volumes configuration from EXTERNAL_VOLUMES env var.
+
+        Returns:
+            List of volume configurations with 'name', 'primary', 'fallback', 'mount'
+        """
+        config_str = os.getenv("EXTERNAL_VOLUMES", "")
+
+        if not config_str:
+            libros_primary = os.getenv("HOST_LIBROS_DIR", "/mnt/resources/Libros")
+            libros_fallback = os.getenv("FALLBACK_LIBROS_DIR", "data/libros-fallback")
+            return [{
+                "name": "Libros",
+                "primary": libros_primary,
+                "fallback": str(self.project_root / libros_fallback),
+                "mount": "/mnt/resources/Libros"
+            }]
+
+        try:
+            volumes = json.loads(config_str)
+            if not isinstance(volumes, list):
+                print(f"ERROR: EXTERNAL_VOLUMES must be a JSON array, got: {type(volumes)}")
+                return []
+
+            # Resolve relative fallback paths
+            for vol in volumes:
+                fallback = vol.get('fallback', '')
+                if not os.path.isabs(fallback):
+                    vol['fallback'] = str(self.project_root / fallback)
+
+            return volumes
+        except json.JSONDecodeError as e:
+            print(f"ERROR: Failed to parse EXTERNAL_VOLUMES JSON: {e}")
+            return []
 
 
 # ============================================================================

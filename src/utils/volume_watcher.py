@@ -9,7 +9,6 @@ trigger callbacks to handle the reconnection (e.g., re-scan directories).
 import os
 import time
 import threading
-from pathlib import Path
 from typing import Callable, Dict, Optional
 from dataclasses import dataclass
 import logging
@@ -250,30 +249,54 @@ def get_watcher(check_interval: int = 300) -> VolumeWatcher:
 
 def setup_default_watchers(on_reconnect: Optional[Callable[[str], None]] = None):
     """
-    Set up watchers for default volumes from environment.
+    Set up watchers for all external volumes from environment configuration.
 
     Args:
         on_reconnect: Optional callback when a volume reconnects
     """
     watcher = get_watcher()
 
-    # Only set up if we're in a container
-    if not os.path.exists("/mnt/resources/Libros"):
-        logger.debug("Not in container environment, skipping volume watcher setup")
-        return
+    # Import here to avoid circular dependency
+    from .volume_monitor import load_external_volumes_config
 
-    # Add Libros volume
-    primary = os.environ.get("HOST_LIBROS_DIR", "/mnt/resources/Libros")
-    fallback = os.environ.get("FALLBACK_LIBROS_DIR", "./data/libros-fallback")
+    # Load external volumes configuration
+    volumes_config = load_external_volumes_config()
 
-    watcher.add_volume(
-        primary_path=primary,
-        fallback_path="/mnt/resources/Libros",  # This is what container sees
-        name="Libros",
-        on_reconnect=on_reconnect
-    )
+    volumes_added = 0
+    for vol_config in volumes_config:
+        name = vol_config.get("name")
+        primary = vol_config.get("primary")
+        mount_point = vol_config.get("mount")
+
+        if not all([name, primary, mount_point]):
+            logger.warning(f"Skipping incomplete volume config: {vol_config}")
+            continue
+
+        # Type guard - ensure all values are strings
+        if not isinstance(name, str) or not isinstance(primary, str) or not isinstance(mount_point, str):
+            logger.warning(f"Volume config has non-string values: {vol_config}")
+            continue
+
+        # Only set up if we're in a container (mount point exists)
+        if not os.path.exists(mount_point):
+            logger.debug(f"Mount point {mount_point} not found, skipping '{name}' volume watcher")
+            continue
+
+        logger.info(f"Setting up volume watcher for '{name}': {mount_point}")
+        watcher.add_volume(
+            primary_path=primary,
+            fallback_path=mount_point,  # This is what container sees
+            name=name,
+            on_reconnect=on_reconnect
+        )
+        volumes_added += 1
+
+    if volumes_added == 0:
+        logger.debug("No external volumes found to watch, skipping volume watcher")
+        return None
 
     # Start the watcher
     watcher.start()
+    logger.info(f"Volume watcher started for {volumes_added} volume(s)")
 
     return watcher
