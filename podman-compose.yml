@@ -296,6 +296,8 @@ services:
     env_file: .env
     environment:
       - AUTO_SCAN_ENABLED=true
+      - REDIS_HOST=127.0.0.1
+      - REDIS_PORT=${HOST_REDIS_TCP_PORT:-6379}
     network_mode: "host"
     volumes:
       - ${HOST_DOCS_DIR:?HOST_DOCS_DIR is required}:/mnt/Documents/Documents:Z
