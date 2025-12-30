@@ -24,7 +24,6 @@ log_analysis:
     - office
     - archive
     - ocr
-    - gpu
 
   # Error patterns to detect
   error_patterns:
@@ -53,7 +52,7 @@ log_analysis:
   reports:
     retention_days: 30
     format: json
-    compression: false
+    extractor: false
 
 # Health checks
 health_checks:

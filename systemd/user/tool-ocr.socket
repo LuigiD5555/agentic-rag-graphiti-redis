@@ -3,7 +3,7 @@ Description=RAG Tool OCR (socket)
 Documentation=https://github.com/LuigiD5555/agentic-rag-graphiti-redis
 
 [Socket]
-ListenStream=127.0.0.1:9103
+ListenStream=0.0.0.0:9103
 NoDelay=true
 
 [Install]

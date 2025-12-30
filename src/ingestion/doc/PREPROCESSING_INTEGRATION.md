@@ -14,7 +14,7 @@ FileDiscoveryService encuentra archivos
 FilePreprocessor revisa cada archivo:
          ↓
     ¿Es DOCX/XLSX/PPTX? → tool-office convierte a TXT
-    ¿Es ZIP/7z/tar?     → tool-archive extrae contenido
+    ¿Es ZIP/7z/tar?     → tool-extractor extrae contenido
     ¿Es PNG/JPG? (OCR)  → tool-ocr extrae texto
          ↓
 Archivo procesado → Pipeline de ingesta normal
@@ -29,15 +29,13 @@ Ya está configurado en tu `.env` al final del archivo:
 ```bash
 # Habilitar/deshabilitar herramientas
 ENABLE_OFFICE_CONVERSION=true   # ✅ Habilitado
-ENABLE_ARCHIVE_EXTRACTION=true  # ✅ Habilitado
+ENABLE_EXTRACTOR_EXTRACTION=true  # ✅ Habilitado
 ENABLE_OCR=false                # ❌ Deshabilitado (más lento)
-ENABLE_GPU_ACCELERATION=false    # ❌ Deshabilitado (requiere GPU)
 
 # URLs de las herramientas (socket-activated)
 TOOL_OFFICE_URL=http://127.0.0.1:9102
-TOOL_ARCHIVE_URL=http://127.0.0.1:9101
+TOOL_FILEEXTRACTOR_URL=http://127.0.0.1:9101
 TOOL_OCR_URL=http://127.0.0.1:9103
-TOOL_GPU_URL=http://127.0.0.1:9104
 
 # Límites de seguridad
 ARCHIVE_MAX_SIZE_MB=500
@@ -76,8 +74,8 @@ def process_candidate_file(
             return 0, 0
 
         if processed_path.is_dir():
-            # Archive extraction → procesar cada archivo extraído
-            logger.info(f"Archive extracted to {processed_path}, processing contents...")
+            # File extraction → procesar cada archivo extraído
+            logger.info(f"Extractor extracted to {processed_path}, processing contents...")
             total_chunks = 0
             total_embeddings = 0
             for extracted_file in processed_path.rglob("*"):
@@ -145,7 +143,7 @@ class IngestionOrchestrator:
                     continue
 
                 if processed.is_dir():
-                    # Archive extraído → agregar todos los archivos
+                    # Extractor extraído → agregar todos los archivos
                     for extracted in processed.rglob("*"):
                         if extracted.is_file():
                             preprocessed.append(str(extracted))
@@ -180,18 +178,18 @@ Chunks → Embeddings → Weaviate
 
 **Habilitado:** ✅ Por defecto (`ENABLE_OFFICE_CONVERSION=true`)
 
-### Archives (.zip, .7z, .tar, .tar.gz)
+### Extractors (.zip, .7z, .tar, .tar.gz)
 
 **Qué hace:**
 - Extrae el archivo completo
-- Usa tool-archive (socket 9101)
+- Usa tool-extractor (socket 9101)
 - Guarda en `/tmp/rag-preprocessing/<archive_name>/`
 - Procesa **cada archivo extraído** recursivamente
 
 **Ejemplo:**
 ```
 Input:  /mnt/docs/project.zip
-        ↓ (tool-archive)
+        ↓ (tool-extractor)
 Output: /tmp/rag-preprocessing/project/
         ├── file1.txt
         ├── file2.pdf
@@ -201,7 +199,7 @@ Output: /tmp/rag-preprocessing/project/
 3 archivos → Pipeline → Embeddings
 ```
 
-**Habilitado:** ✅ Por defecto (`ENABLE_ARCHIVE_EXTRACTION=true`)
+**Habilitado:** ✅ Por defecto (`ENABLE_EXTRACTOR_EXTRACTION=true`)
 
 **Límites de seguridad:**
 - Tamaño máximo: 500 MB (configurable con `ARCHIVE_MAX_SIZE_MB`)
@@ -242,7 +240,7 @@ Configurar con: `OCR_DEFAULT_LANGUAGE=spa` en `.env`
 ```bash
 # Habilitar sockets (solo una vez)
 systemctl --user enable --now tool-office.socket
-systemctl --user enable --now tool-archive.socket
+systemctl --user enable --now tool-extractor.socket
 
 # Opcional (si quieres OCR)
 systemctl --user enable --now tool-ocr.socket
@@ -253,7 +251,7 @@ systemctl --user list-sockets | grep tool-
 
 **Resultado esperado:**
 ```
-127.0.0.1:9101  tool-archive.socket  tool-archive.service
+127.0.0.1:9101  tool-extractor.socket  tool-extractor.service
 127.0.0.1:9102  tool-office.socket   tool-office.service
 127.0.0.1:9103  tool-ocr.socket      tool-ocr.service
 ```
@@ -306,14 +304,12 @@ print(status)
   "enabled": {
     "office": true,
     "archive": true,
-    "ocr": false,
-    "gpu": false
+    "ocr": false
   },
   "tools_available": {
     "office": true,    // ✅ Socket activo y respondiendo
     "archive": true,   // ✅ Socket activo y respondiendo
-    "ocr": true,       // ✅ Socket activo (aunque no habilitado)
-    "gpu": false       // ❌ Socket no activo
+    "ocr": true        // ✅ Socket activo (aunque no habilitado)
   }
 }
 ```
@@ -331,8 +327,8 @@ grep -i "preprocessing\|converting\|extracting" <tu_log_file>
 # Ver logs de tool-office
 journalctl --user -u tool-office.service -f
 
-# Ver logs de tool-archive
-journalctl --user -u tool-archive.service -f
+# Ver logs de tool-extractor
+journalctl --user -u tool-extractor.service -f
 ```
 
 ## Manejo de Errores
@@ -380,7 +376,7 @@ if docx_file.exists():
     result = preprocessor.preprocess(docx_file)
     print(f"Result: {result}")
 
-# Test Archive extraction
+# Test File extraction
 zip_file = Path("/mnt/documents/test.zip")
 if zip_file.exists():
     result = preprocessor.preprocess(zip_file)
@@ -393,7 +389,7 @@ if zip_file.exists():
 # Office
 curl http://127.0.0.1:9102/healthz
 
-# Archive
+# Extractor
 curl http://127.0.0.1:9101/healthz
 
 # OCR
@@ -405,7 +401,7 @@ curl http://127.0.0.1:9103/healthz
 ### ✅ Configurado Automáticamente
 
 - URLs de herramientas en `.env`
-- Office y Archive habilitados por defecto
+- Office y Extractor habilitados por defecto
 - Límites de seguridad configurados
 - Timeouts razonables
 

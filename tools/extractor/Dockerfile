@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-# Install archive utilities
+# Install file extraction utilities
 RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     p7zip-full \

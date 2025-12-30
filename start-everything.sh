@@ -7,7 +7,7 @@
 # 2. Build tool images (if missing)
 # 3. Install and enable systemd sockets
 # 4. Check and prepare volumes
-# 5. Build and start all services (Weaviate, Neo4j, Redis, RAG API, Open WebUI)
+# 5. Build and start all services (Weaviate, Neo4j, Redis, App, Open WebUI, Monitoring)
 # 6. Verify everything is running and run pre-flight checks
 # 7. Display summary and next steps
 # ============================================================================
@@ -98,14 +98,14 @@ print_header "STEP 2: Building Tool Images"
 
 # Check if images already exist
 if podman images | grep -q "rag-tool-office" && \
-   podman images | grep -q "rag-tool-archive"; then
+   podman images | grep -q "rag-tool-extractor"; then
     print_success "Tool images are already built"
     read -p "Rebuild images? (y/N): " rebuild
     if [[ ! "$rebuild" =~ ^[yY]$ ]]; then
         print_info "Using existing images"
     else
         print_step "Rebuilding all images..."
-        if ! python3 -m src.utils.tools.systemd_manager build; then
+        if ! python3 -m src.utils.tools.systemd_manager build --tools extractor document-processor websearch; then
             print_error "Failed to build tool images"
             exit 1
         fi
@@ -113,7 +113,7 @@ if podman images | grep -q "rag-tool-office" && \
 else
     print_step "Building images for the first time..."
     print_warning "This can take 10-15 minutes..."
-    if ! python3 -m src.utils.tools.systemd_manager build; then
+    if ! python3 -m src.utils.tools.systemd_manager build --tools extractor document-processor websearch; then
         print_error "Failed to build tool images"
         exit 1
     fi
@@ -180,6 +180,11 @@ else
     exit 1
 fi
 
+# Also verify volume compose generator configuration
+if [ -f "src/utils/volume_compose_generator.py" ]; then
+    print_step "Volume compose generator found, configuration available"
+fi
+
 # ============================================================================
 # STEP 5: BUILD AND START ALL SERVICES
 # ============================================================================
@@ -188,15 +193,19 @@ print_header "STEP 5: Building and Starting All Services"
 
 print_step "Checking if services are already running..."
 
-if podman ps | grep -q "weaviate\|neo4j\|redis\|rag-api\|open-webui"; then
+if podman ps | grep -q "weaviate\|neo4j\|redis\|app\|open-webui\|monitoring"; then
     print_success "Services are already running"
     read -p "Rebuild and restart all services? (y/N): " restart
     if [[ "$restart" =~ ^[yY]$ ]]; then
         print_step "Stopping all services..."
         podman-compose down
 
-        print_step "Building custom images (rag-api)..."
-        podman-compose build rag-api
+        print_step "Building custom images..."
+
+        if ! podman-compose build app; then
+            print_error "Failed to build app image"
+            exit 1
+        fi
 
         print_step "Starting all services..."
         podman-compose up -d
@@ -207,13 +216,14 @@ if podman ps | grep -q "weaviate\|neo4j\|redis\|rag-api\|open-webui"; then
         print_info "Using existing services"
     fi
 else
-    print_step "Building custom images (rag-api)..."
-    if ! podman-compose build rag-api; then
-        print_error "Failed to build rag-api image"
+    print_step "Building custom images..."
+
+    if ! podman-compose build app; then
+        print_error "Failed to build app image"
         exit 1
     fi
 
-    print_step "Starting all services (Weaviate, Neo4j, Redis, RAG API, Open WebUI)..."
+    print_step "Starting all services (Weaviate, Neo4j, Redis, App, Open WebUI, Monitoring)..."
     podman-compose up -d
 
     print_step "Waiting for services to initialize..."
@@ -261,7 +271,12 @@ check_service "Weaviate  " "8080"
 check_service "Neo4j     " "7474"
 check_service "Redis     " "6379" "no" || print_info "Redis has no HTTP endpoint (normal)"
 check_service "RAG API   " "8000"
-check_service "Open WebUI" "5555"
+
+if curl -s -f -m 2 "http://localhost:5555/health" >/dev/null 2>&1; then
+    print_success "Open WebUI responding on port 5555"
+else
+    print_warning "Open WebUI not responding on port 5555 (may still be starting...)"
+fi
 
 # Verify sockets
 print_step "Verifying preprocessing sockets..."
@@ -291,16 +306,8 @@ test_tool_endpoint() {
     fi
 }
 
-test_tool_endpoint "tool-office " "9102"
-test_tool_endpoint "tool-archive" "9101"
-
-if grep -q "ENABLE_OCR=true" .env 2>/dev/null; then
-    test_tool_endpoint "tool-ocr    " "9103"
-fi
-
-if grep -q "ENABLE_GPU_ACCELERATION=true" .env 2>/dev/null; then
-    test_tool_endpoint "tool-gpu    " "9104"
-fi
+test_tool_endpoint "tool-extractor (extractor)" "9101"
+test_tool_endpoint "tool-docproc" "9106"
 
 # Run comprehensive pre-flight checks now that containers are running
 print_step "Running comprehensive pre-flight checks..."
@@ -315,7 +322,7 @@ if python3 -c "import pytest" 2>/dev/null; then
 else
     print_warning "pytest not installed on host, skipping pre-flight checks"
     print_info "To run checks later: pip install pytest && pytest tests/infrastructure/test_preflight.py -v"
-    print_info "Or run inside container: podman exec -it rag-api pytest tests/infrastructure/test_preflight.py -v"
+    print_info "Or run inside container: podman exec -it app pytest tests/infrastructure/test_preflight.py -v"
 fi
 
 # ============================================================================
@@ -329,13 +336,12 @@ echo ""
 echo "==================================================================="
 echo ""
 echo -e "${BOLD}🌐 Web Interfaces:${NC}"
-echo -e "  ${GREEN}${BOLD}➜ Open WebUI:${NC}  http://localhost:5555"
-echo "    └─ ChatGPT-like interface for your RAG system"
-echo ""
-echo -e "  ${CYAN}➜ RAG API:${NC}     http://localhost:8000"
+echo -e "  ${CYAN}${BOLD}➜ RAG API:${NC}     http://localhost:8000"
 echo "    ├─ Docs:      http://localhost:8000/docs"
 echo "    ├─ Health:    http://localhost:8000/health"
 echo "    └─ Ollama-compatible endpoints at /api/*"
+echo ""
+echo -e "  ${CYAN}➜ Open WebUI:${NC}  http://localhost:5555"
 echo ""
 echo -e "${BOLD}Database Services:${NC}"
 echo "  - Weaviate:    http://localhost:8080 (Vector DB)"
@@ -343,24 +349,12 @@ echo "  - Neo4j:       http://localhost:7474 (Graph DB, user: neo4j)"
 echo "  - Redis:       localhost:6379 (Cache)"
 echo ""
 echo -e "${BOLD}Preprocessing Tools (Socket-Activated):${NC}"
-echo "  - tool-office:  http://127.0.0.1:9102 (DOCX/XLSX/PPTX → TXT)"
-echo "  - tool-archive: http://127.0.0.1:9101 (ZIP/7z/tar extraction)"
-if grep -q "ENABLE_OCR=true" .env 2>/dev/null; then
-echo "  - tool-ocr:     http://127.0.0.1:9103 (OCR with Tesseract)"
-fi
-if grep -q "ENABLE_GPU_ACCELERATION=true" .env 2>/dev/null; then
-echo "  - tool-gpu:     http://127.0.0.1:9104 (GPU accelerated)"
-fi
+echo "  - tool-extractor (extractor): http://127.0.0.1:9101 (ZIP/7z/tar extraction)"
+echo "  - tool-docproc: http://127.0.0.1:9106 (OCR + Office unified)"
 echo ""
 echo "==================================================================="
 echo ""
 echo -e "${BOLD}Quick Start:${NC}"
-echo ""
-echo -e "${CYAN}➜ Use the Web Interface (Recommended):${NC}"
-echo -e "   Open: ${GREEN}${BOLD}http://localhost:5555${NC}"
-echo "   - Create an account (local only, no data leaves your machine)"
-echo "   - Start chatting with your RAG system"
-echo "   - Upload documents, ask questions, view sources"
 echo ""
 echo -e "${CYAN}➜ Use the API directly:${NC}"
 echo "   curl -X POST http://localhost:8000/api/chat \\"
@@ -380,13 +374,15 @@ echo -e "${BOLD}Monitoring & Management:${NC}"
 echo ""
 echo -e "${CYAN}View service status:${NC}"
 echo "   podman ps                                    # All running containers"
-echo "   podman-compose logs -f rag-api               # RAG API logs"
-echo "   podman-compose logs -f open-webui            # Web interface logs"
+echo "   podman-compose logs -f app                   # RAG API logs"
+echo "   podman-compose logs -f open-webui            # Web UI logs"
+echo ""
+echo "   podman-compose logs -f monitoring            # Monitoring logs"
 echo "   systemctl --user list-sockets | grep tool-   # Tool sockets"
 echo ""
 echo -e "${CYAN}View tool logs:${NC}"
 echo "   journalctl --user -u tool-office.service -f"
-echo "   journalctl --user -u tool-archive.service -f"
+echo "   journalctl --user -u tool-extractor.service -f"
 echo ""
 echo -e "${CYAN}Stop everything:${NC}"
 echo "   podman-compose down                          # All services"
@@ -395,7 +391,4 @@ echo ""
 echo "==================================================================="
 echo ""
 echo -e "${GREEN}${BOLD}✓ System is ready to use!${NC}"
-echo ""
-echo -e "Start using your RAG system now:"
-echo -e "  ${GREEN}${BOLD}→ Open http://localhost:5555 in your browser${NC}"
 echo ""

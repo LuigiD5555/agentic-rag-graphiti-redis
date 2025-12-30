@@ -31,7 +31,7 @@ tests/
 ## Key Testing Tools
 
 ### Tool Management
-- `tests/tools/client_example.py` - HTTP client for testing tool endpoints (office, archive, ocr, gpu)
+- `tests/tools/client_example.py` - HTTP client for testing tool endpoints (office, archive, ocr)
 - `tests/tools/gui_verifier_demo.py` - Examples of programmatic setup verification
 
 ### Setup Verification

@@ -38,7 +38,7 @@ class Colors:
 class LogAnalyzer:
     """Analyzes systemd journal logs for error patterns."""
 
-    TOOLS = ['office', 'archive', 'ocr', 'gpu']
+    TOOLS = ['extractor', 'document-processor', 'websearch']
 
     # Error patterns to detect
     ERROR_PATTERNS = [
@@ -325,7 +325,7 @@ Examples:
     parser.add_argument(
         '--tool',
         type=str,
-        choices=['office', 'archive', 'ocr', 'gpu'],
+        choices=['extractor', 'document-processor', 'websearch'],
         help='Specific tool to analyze'
     )
 

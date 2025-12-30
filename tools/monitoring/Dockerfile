@@ -1,17 +1,17 @@
 # Monitoring Container for RAG Agentic Graphiti
 # Handles log analysis, diagnostics, and volume monitoring
 
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 LABEL maintainer="RAG Project Monitoring"
 LABEL description="Monitoring, diagnostics, and log analysis container"
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    systemd \
-    curl \
-    wget \
-    procps \
+# Install only required system dependencies
+# - libsystemd0: systemd journal library (1.2 MB)
+# - python3-systemd: Python bindings for journald (634 KB)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsystemd0 \
+    python3-systemd \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory

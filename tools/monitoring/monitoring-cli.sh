@@ -60,7 +60,7 @@ ${YELLOW}Commands:${NC}
   ${GREEN}Log Analysis:${NC}
     analyze [OPTIONS]      Analyze logs
       --since TIME         Time range (e.g., "1 week ago", "24 hours ago")
-      --tool TOOL          Specific tool (office, archive, ocr, gpu)
+      --tool TOOL          Specific tool (office, extractor, ocr, document-processor, websearch)
       --format FORMAT      Output format (text, json)
       --all                Analyze all tools
 

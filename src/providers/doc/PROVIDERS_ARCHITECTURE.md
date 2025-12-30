@@ -67,15 +67,6 @@ The embedding functionality is abstracted through `EmbeddingInterface` defined i
 - Configured via `LITELLM_BASE_URL`
 - Adapter: [src/providers/litellm_gateway/adapter.py](../litellm_gateway/adapter.py)
 
-### 6. Local GPU
-
-**Location**: [src/providers/local_gpu/](../local_gpu/)
-
-- Direct GPU acceleration using sentence-transformers
-- Optimal for on-premise deployments
-- Configured via `RAG_EMBED_MODEL` (default: all-MiniLM-L6-v2)
-- See: [LOCAL_GPU_EMBEDDINGS.md](LOCAL_GPU_EMBEDDINGS.md)
-
 ## Provider Selection
 
 The provider is selected based on configuration in [src/rag/conf.py](../../rag/conf.py):

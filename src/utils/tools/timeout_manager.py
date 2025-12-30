@@ -34,7 +34,7 @@ class Colors:
 class TimeoutManager:
     """Manages timeout configuration for RAG tools."""
 
-    TOOLS = ['office', 'archive', 'ocr', 'gpu']
+    TOOLS = ['extractor', 'document-processor', 'websearch']
     DEFAULT_TIMEOUT = 600  # 10 minutes
 
     def __init__(self):
@@ -91,7 +91,7 @@ class TimeoutManager:
         Set timeout for a specific tool or all tools.
 
         Args:
-            tool: Tool name ('office', 'archive', 'ocr', 'gpu', or 'all')
+            tool: Tool name ('extractor', 'document-processor', 'websearch', or 'all')
             timeout: Timeout value in seconds (0 to disable)
             verbose: Print status messages
 
@@ -340,9 +340,6 @@ Examples:
   # Set all tools to 20 minutes
   python -m src.utils.tools.timeout_manager set all 1200
 
-  # Disable auto-shutdown for GPU tool
-  python -m src.utils.tools.timeout_manager set gpu 0
-
   # Apply changes to systemd services
   python -m src.utils.tools.timeout_manager apply
 
@@ -361,7 +358,7 @@ Examples:
     parser.add_argument(
         'tool',
         nargs='?',
-        help='Tool name for set command (office, archive, ocr, gpu, or all)'
+        help='Tool name for set command (extractor, document-processor, websearch, or all)'
     )
 
     parser.add_argument(

@@ -3,7 +3,7 @@ Description=RAG Tool Office (socket)
 Documentation=https://github.com/LuigiD5555/agentic-rag-graphiti-redis
 
 [Socket]
-ListenStream=127.0.0.1:9102
+ListenStream=0.0.0.0:9102
 NoDelay=true
 
 [Install]

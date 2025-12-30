@@ -77,12 +77,11 @@ class CategoryResult:
 class SetupVerifier:
     """Verify RAG tools setup and configuration."""
 
-    TOOLS = ['office', 'archive', 'ocr', 'gpu']
+    TOOLS = ['extractor', 'document-processor', 'websearch']
     PORT_MAP = {
-        'archive': (9101, 19101),
-        'office': (9102, 19102),
-        'ocr': (9103, 19103),
-        'gpu': (9104, 19104)
+        'extractor': (9101, 19101),
+        'document-processor': (9106, 19104),
+        'websearch': (9105, 19105),
     }
 
     def __init__(self):
@@ -299,7 +298,6 @@ class SetupVerifier:
         required_docs = [
             (self.tools_dir / 'README.md', "Tools README"),
             (self.project_root / 'tests' / 'tools' / 'client_example.py', "Client example"),
-            (self.tools_dir / 'example.env', "Environment template"),
         ]
 
         for file_path, description in required_docs:
@@ -348,7 +346,7 @@ class SetupVerifier:
             category.add_check(CheckResult(
                 passed=True,
                 level='ok',
-                description="Socket ports (9101-9104)",
+                description="Socket ports (9101, 9105, 9106)",
                 details=f"Found: {', '.join(map(str, actual_socket_ports))}"
             ))
         else:
@@ -381,7 +379,7 @@ class SetupVerifier:
             category.add_check(CheckResult(
                 passed=True,
                 level='ok',
-                description="Internal ports (19101-19104)",
+                description="Internal ports (19101, 19104, 19105)",
                 details=f"Found: {', '.join(map(str, actual_internal))}"
             ))
         else:

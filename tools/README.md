@@ -15,9 +15,8 @@ Each tool is:
 | Tool | Port | Purpose | Technologies |
 |------|------|---------|--------------|
 | **tool-office** | 9102 | Office document conversion | LibreOffice, pdftotext |
-| **tool-archive** | 9101 | Archive extraction | unzip, 7z, tar |
+| **tool-extractor** | 9101 | File extraction | unzip, 7z, tar |
 | **tool-ocr** | 9103 | Optical Character Recognition | Tesseract, poppler |
-| **tool-gpu** | 9104 | GPU-accelerated processing | CUDA, PyTorch |
 
 ## How Socket Activation Works
 
@@ -50,11 +49,10 @@ cd tools
 ./build-all.sh
 ```
 
-This builds all four tool images:
+This builds the tool images:
 - `rag-tool-office:latest`
-- `rag-tool-archive:latest`
+- `rag-tool-extractor:latest`
 - `rag-tool-ocr:latest`
-- `rag-tool-gpu:latest`
 
 ### 2. Install systemd Units
 
@@ -71,9 +69,8 @@ This:
 
 ```bash
 systemctl --user enable --now tool-office.socket
-systemctl --user enable --now tool-archive.socket
+systemctl --user enable --now tool-extractor.socket
 systemctl --user enable --now tool-ocr.socket
-systemctl --user enable --now tool-gpu.socket
 ```
 
 ### 4. Test
@@ -88,8 +85,6 @@ curl http://127.0.0.1:9101/healthz
 # Test OCR tool
 curl http://127.0.0.1:9103/healthz
 
-# Test GPU tool
-curl http://127.0.0.1:9104/healthz
 ```
 
 The first request to each port will:
@@ -119,7 +114,7 @@ curl -X POST http://127.0.0.1:9102/convert \
   }'
 ```
 
-### tool-archive
+### tool-extractor
 
 **Extract archives safely**
 
@@ -154,20 +149,6 @@ curl -X POST http://127.0.0.1:9103/ocr \
     "language": "eng",
     "output_format": "txt"
   }'
-```
-
-### tool-gpu
-
-**GPU-accelerated processing**
-
-Endpoints:
-- `GET /gpu-info` - Check GPU availability
-- `POST /gpu-ocr` - GPU-accelerated OCR (placeholder)
-- `POST /benchmark` - GPU benchmark
-
-Example:
-```bash
-curl http://127.0.0.1:9104/gpu-info
 ```
 
 ## Management Commands
@@ -216,9 +197,8 @@ In your RAG API configuration (`.env` or settings):
 
 ```bash
 TOOL_OFFICE_URL=http://127.0.0.1:9102
-TOOL_ARCHIVE_URL=http://127.0.0.1:9101
+TOOL_EXTRACTOR_URL=http://127.0.0.1:9101
 TOOL_OCR_URL=http://127.0.0.1:9103
-TOOL_GPU_URL=http://127.0.0.1:9104
 ```
 
 Your ingestion pipeline can now call these endpoints as needed:
@@ -284,18 +264,6 @@ systemctl --user restart tool-office.socket
 Ensure cache directories exist and are writable:
 ```bash
 ls -la ~/.cache/rag-tools/
-```
-
-### GPU tool issues
-
-For `tool-gpu`, ensure:
-1. NVIDIA drivers installed
-2. `nvidia-container-toolkit` installed
-3. CDI configured for Podman
-
-Check GPU access:
-```bash
-podman run --rm --device=nvidia.com/gpu=all nvidia/cuda:12.2.0-base-ubuntu22.04 nvidia-smi
 ```
 
 ## Development
@@ -370,7 +338,6 @@ RuntimeMaxSec=300
 | 9101 | 19101 | archive | HTTP |
 | 9102 | 19102 | office | HTTP |
 | 9103 | 19103 | ocr | HTTP |
-| 9104 | 19104 | gpu | HTTP |
 
 ## License
 

@@ -3,7 +3,7 @@
 Systemd Socket Activation Manager for RAG Tools
 
 This module manages the lifecycle of preprocessing tool containers using systemd
-socket activation. Tools (office, archive, ocr, gpu) start on-demand when needed
+socket activation. Tools (extractor, document-processor, websearch) start on-demand when needed
 and stop when idle, saving resources.
 
 Usage:
@@ -17,7 +17,7 @@ Timeout Management:
     Tools automatically shut down after inactivity (default: 10 minutes)
     Use timeout_manager.py to configure per-tool timeouts:
         python -m src.utils.tools.timeout_manager show        # Show current timeouts
-        python -m src.utils.tools.timeout_manager set office 900  # 15 minutes
+        python -m src.utils.tools.timeout_manager set document-processor 900  # 15 minutes
         python -m src.utils.tools.timeout_manager apply       # Apply changes
 
 Design:
@@ -57,7 +57,7 @@ class SystemdManager:
         tools: List of tool names to manage
     """
 
-    TOOLS = ['office', 'archive', 'ocr', 'gpu', 'websearch']
+    TOOLS = ['extractor', 'document-processor', 'websearch']
 
     def __init__(self):
         """Initialize manager with project paths."""
@@ -124,18 +124,13 @@ class SystemdManager:
         Check if a tool should be enabled based on .env configuration.
 
         Args:
-            tool: Tool name (office, archive, ocr, gpu, websearch)
+            tool: Tool name (extractor, document-processor, websearch)
 
         Returns:
             True if tool should be enabled
         """
-        if tool in ['office', 'archive', 'websearch']:
-            return True  # Always enable
-        elif tool == 'ocr':
-            return self._read_env_var('ENABLE_OCR')
-        elif tool == 'gpu':
-            return self._read_env_var('ENABLE_GPU_ACCELERATION')
-        return False
+        # Tools managed here are always enabled
+        return tool in ['extractor', 'document-processor', 'websearch']
 
     def install(self, verbose: bool = True) -> bool:
         """
@@ -218,7 +213,7 @@ class SystemdManager:
             return False
 
         # Install if not already installed
-        if not (self.user_systemd_dir / 'tool-office.socket').exists():
+        if not (self.user_systemd_dir / 'tool-extractor.socket').exists():
             if verbose:
                 print("Units not installed, installing first...")
             self.install(verbose=verbose)
@@ -344,7 +339,7 @@ class SystemdManager:
         if verbose:
             print(f"{Colors.CYAN}[4/6] Checking installed systemd units...{Colors.NC}")
 
-        for tool in ['office', 'archive']:  # Always check these two
+        for tool in ['document-processor', 'extractor']:  # Always check these two
             socket_installed = (self.user_systemd_dir / f'tool-{tool}.socket').exists()
             service_installed = (self.user_systemd_dir / f'tool-{tool}.service').exists()
 
@@ -371,7 +366,7 @@ class SystemdManager:
         if verbose:
             print(f"{Colors.CYAN}[5/6] Checking runtime status...{Colors.NC}")
 
-        for tool in ['office', 'archive']:
+        for tool in ['document-processor', 'extractor']:
             # Check socket status
             _, socket_status, _ = self._run_command(
                 ['systemctl', '--user', 'is-active', f'tool-{tool}.socket'],
@@ -448,7 +443,7 @@ class SystemdManager:
             code, stdout, _ = self._run_command(['podman', 'images', '--format', '{{.Repository}}'], check=False)
             if code == 0:
                 images = stdout.strip().split('\n')
-                for tool in ['office', 'archive']:
+                for tool in ['document-processor', 'extractor']:
                     if f'localhost/rag-tool-{tool}' in images:
                         if verbose:
                             print(f"  {Colors.GREEN}✓ PASS:{Colors.NC} rag-tool-{tool} image exists")
@@ -677,7 +672,7 @@ class SystemdManager:
         Restart a specific tool (socket + service).
 
         Args:
-            tool: Tool name to restart (office, archive, ocr, gpu)
+            tool: Tool name to restart (extractor, document-processor, websearch)
             verbose: Print restart progress
 
         Returns:
@@ -695,7 +690,7 @@ class SystemdManager:
             return False
 
         # Get port for this tool
-        port_map = {'office': 9102, 'archive': 9101, 'ocr': 9103, 'gpu': 9104, 'websearch': 9105}
+        port_map = {'extractor': 9101, 'document-processor': 9106, 'websearch': 9105}
         port = port_map.get(tool)
 
         if verbose:
@@ -860,7 +855,7 @@ class SystemdManager:
         View logs from systemd journal for tools.
 
         Args:
-            tool: Tool name to view logs (office, archive, ocr, gpu)
+            tool: Tool name to view logs (extractor, document-processor, websearch)
             follow: Follow log output in real-time
             lines: Number of lines to show (default: all)
             since: Show logs since this time (e.g., "1 hour ago", "today")
@@ -966,18 +961,18 @@ Examples:
   python -m src.utils.tools.systemd_manager status
 
   # Restart a specific tool
-  python -m src.utils.tools.systemd_manager restart office
+  python -m src.utils.tools.systemd_manager restart document-processor
 
   # View logs
-  python -m src.utils.tools.systemd_manager logs office           # Last 50 lines
-  python -m src.utils.tools.systemd_manager logs office -f        # Follow in real-time
-  python -m src.utils.tools.systemd_manager logs office -n 100    # Last 100 lines
-  python -m src.utils.tools.systemd_manager logs office --since "1 hour ago"
-  python -m src.utils.tools.systemd_manager logs office -p err    # Only errors
+  python -m src.utils.tools.systemd_manager logs document-processor           # Last 50 lines
+  python -m src.utils.tools.systemd_manager logs document-processor -f        # Follow in real-time
+  python -m src.utils.tools.systemd_manager logs document-processor -n 100    # Last 100 lines
+  python -m src.utils.tools.systemd_manager logs document-processor --since "1 hour ago"
+  python -m src.utils.tools.systemd_manager logs document-processor -p err    # Only errors
   python -m src.utils.tools.systemd_manager logs --all -f         # All tools
 
 How it works:
-  - Sockets listen on ports (9101-9104) without overhead
+  - Sockets listen on ports 9101, 9105, and 9106 without overhead
   - Services are inactive until first request
   - On connection, systemd auto-starts the container
   - Tools start in 1-2 seconds when needed
@@ -993,7 +988,7 @@ Timeout Configuration:
   python -m src.utils.tools.timeout_manager show
 
   # Change timeout for specific tool
-  python -m src.utils.tools.timeout_manager set office 900  # 15 minutes
+  python -m src.utils.tools.timeout_manager set document-processor 900  # 15 minutes
 
   # Change timeout for all tools
   python -m src.utils.tools.timeout_manager set all 1200    # 20 minutes
@@ -1001,7 +996,7 @@ Timeout Configuration:
   # Apply changes to systemd
   python -m src.utils.tools.timeout_manager apply
   systemctl --user daemon-reload
-  python -m src.utils.tools.systemd_manager restart office
+  python -m src.utils.tools.systemd_manager restart document-processor
         """
     )
 
@@ -1014,7 +1009,7 @@ Timeout Configuration:
     parser.add_argument(
         'tool',
         nargs='?',
-        help='Tool name for restart/logs command (office, archive, ocr, gpu)'
+        help='Tool name for restart/logs command (extractor, document-processor, websearch)'
     )
 
     parser.add_argument(

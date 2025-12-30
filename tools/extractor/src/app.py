@@ -1,4 +1,4 @@
-"""Archive extraction tool API (ZIP, 7z, tar, etc.)."""
+"""File extraction tool API (ZIP, 7z, tar, etc.)."""
 import asyncio
 import os
 import shutil
@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 app = FastAPI(
-    title="RAG Tool: Archive Extractor",
+    title="RAG Tool: File Extractor",
     description="Extract archives (ZIP, 7z, tar.gz, tar.xz, etc.) in a secure environment",
     version="1.0.0",
 )
@@ -59,7 +59,7 @@ class ListResponse(BaseModel):
 @app.get("/healthz")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "ok", "service": "tool-archive"}
+    return {"status": "ok", "service": "tool-extractor"}
 
 
 @app.post("/list", response_model=ListResponse)

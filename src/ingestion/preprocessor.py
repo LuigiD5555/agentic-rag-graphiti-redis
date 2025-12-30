@@ -23,11 +23,9 @@ class FilePreprocessor:
         office_url: Optional[str] = None,
         archive_url: Optional[str] = None,
         ocr_url: Optional[str] = None,
-        gpu_url: Optional[str] = None,
         enable_office: bool = True,
         enable_archive: bool = True,
         enable_ocr: bool = False,  # Disabled by default (slower)
-        enable_gpu: bool = False,   # Disabled by default (requires GPU)
         timeout: int = 120,
         work_dir: Optional[str] = None,
     ):
@@ -37,24 +35,24 @@ class FilePreprocessor:
             office_url: URL for office conversion tool
             archive_url: URL for archive extraction tool
             ocr_url: URL for OCR tool
-            gpu_url: URL for GPU acceleration tool
             enable_office: Enable Office document conversion
             enable_archive: Enable archive extraction
             enable_ocr: Enable OCR for images/scanned PDFs
-            enable_gpu: Enable GPU acceleration
             timeout: Request timeout in seconds
             work_dir: Working directory for processed files
         """
         self.office_url = office_url or os.getenv("TOOL_OFFICE_URL", "http://127.0.0.1:9102")
-        self.archive_url = archive_url or os.getenv("TOOL_ARCHIVE_URL", "http://127.0.0.1:9101")
+        self.archive_url = archive_url or os.getenv(
+            "TOOL_FILEEXTRACTOR_URL",
+            os.getenv("TOOL_EXTRACTOR_URL", "http://127.0.0.1:9101")
+        )
         self.ocr_url = ocr_url or os.getenv("TOOL_OCR_URL", "http://127.0.0.1:9103")
-        self.gpu_url = gpu_url or os.getenv("TOOL_GPU_URL", "http://127.0.0.1:9104")
-
         self.enable_office = enable_office and os.getenv("ENABLE_OFFICE_CONVERSION", "true").lower() == "true"
-        self.enable_archive = enable_archive and os.getenv("ENABLE_ARCHIVE_EXTRACTION", "true").lower() == "true"
+        self.enable_archive = enable_archive and os.getenv(
+            "ENABLE_EXTRACTOR_EXTRACTION",
+            "true"
+        ).lower() == "true"
         self.enable_ocr = enable_ocr or os.getenv("ENABLE_OCR", "false").lower() == "true"
-        self.enable_gpu = enable_gpu or os.getenv("ENABLE_GPU_ACCELERATION", "false").lower() == "true"
-
         self.timeout = timeout
         self.work_dir = Path(work_dir or os.getenv("PREPROCESSING_WORK_DIR", "/tmp/rag-preprocessing"))
         self.work_dir.mkdir(parents=True, exist_ok=True)
@@ -65,8 +63,8 @@ class FilePreprocessor:
         self.ocr_extensions = {'.png', '.jpg', '.jpeg', '.tiff', '.bmp'}
 
         log.info(
-            "FilePreprocessor initialized: office=%s, archive=%s, ocr=%s, gpu=%s",
-            self.enable_office, self.enable_archive, self.enable_ocr, self.enable_gpu
+            "FilePreprocessor initialized: office=%s, archive=%s, ocr=%s",
+            self.enable_office, self.enable_archive, self.enable_ocr
         )
 
     def _post_with_retries(self, url: str, payload: Dict[str, Any]) -> requests.Response:
@@ -225,7 +223,7 @@ class FilePreprocessor:
         except requests.exceptions.ConnectionError:
             log.warning(
                 "Archive tool not available at %s. "
-                "Make sure socket is enabled: systemctl --user status tool-archive.socket",
+                "Make sure socket is enabled: systemctl --user status tool-extractor.socket",
                 self.archive_url
             )
             return None
@@ -295,7 +293,6 @@ class FilePreprocessor:
                 "office": self.enable_office,
                 "archive": self.enable_archive,
                 "ocr": self.enable_ocr,
-                "gpu": self.enable_gpu,
             },
             "tools_available": {},
         }
@@ -305,7 +302,6 @@ class FilePreprocessor:
             ("office", self.office_url),
             ("archive", self.archive_url),
             ("ocr", self.ocr_url),
-            ("gpu", self.gpu_url),
         ]:
             try:
                 response = requests.get(f"{url}/healthz", timeout=2)

@@ -17,7 +17,6 @@ class ToolClient:
         office_url: str = "http://127.0.0.1:9102",
         archive_url: str = "http://127.0.0.1:9101",
         ocr_url: str = "http://127.0.0.1:9103",
-        gpu_url: str = "http://127.0.0.1:9104",
         timeout: int = 120,
     ):
         """Initialize tool client.
@@ -26,13 +25,11 @@ class ToolClient:
             office_url: Office conversion tool URL
             archive_url: Archive extraction tool URL
             ocr_url: OCR tool URL
-            gpu_url: GPU acceleration tool URL
             timeout: Default request timeout (seconds)
         """
         self.office_url = office_url
         self.archive_url = archive_url
         self.ocr_url = ocr_url
-        self.gpu_url = gpu_url
         self.timeout = timeout
 
     def convert_office_document(
@@ -173,32 +170,6 @@ class ToolClient:
         response.raise_for_status()
         return response.json()
 
-    def get_gpu_info(self) -> dict:
-        """Get GPU availability and information.
-
-        Returns:
-            Dict with available, device_count, devices fields
-        """
-        response = requests.get(
-            f"{self.gpu_url}/gpu-info",
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
-        return response.json()
-
-    def gpu_benchmark(self) -> dict:
-        """Run GPU benchmark.
-
-        Returns:
-            Dict with cuda_available, device info, and benchmark results
-        """
-        response = requests.post(
-            f"{self.gpu_url}/benchmark",
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
-        return response.json()
-
 
 # Example usage in ingestion pipeline
 def process_document(file_path: Path, tool_client: ToolClient) -> Optional[str]:
@@ -273,10 +244,6 @@ def process_document(file_path: Path, tool_client: ToolClient) -> Optional[str]:
 if __name__ == "__main__":
     # Example: process a document
     client = ToolClient()
-
-    # Check GPU availability
-    gpu_info = client.get_gpu_info()
-    print(f"GPU available: {gpu_info['available']}")
 
     # Example: convert a Word document
     result = client.convert_office_document(

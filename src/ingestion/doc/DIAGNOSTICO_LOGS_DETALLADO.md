@@ -108,11 +108,6 @@ Completed loading shard ragdocument_kD6hFN0LVpuk in 37.437576ms
 Weaviate también funcionó bien. El problema NO está aquí.
 
 ### 3.3 LM Studio Log - Potencial Cuello de Botella
-```
-GPU 0: Quadro T1000 (Used: 607.39 MB, Total: 4.29 GB, Free: 3.69 GB)
-```
-**GPU limitada (4GB)** - Esto puede causar que embeddings sean lentos.
-
 Pero el log de LM Studio NO muestra requests de embeddings después de la inicialización, lo que sugiere que **el proceso se atascó ANTES de llegar a generar embeddings masivos**.
 
 ### 3.4 RAG App Log - Punto Exacto del Atasco

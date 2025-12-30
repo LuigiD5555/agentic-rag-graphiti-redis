@@ -4,7 +4,7 @@ This directory contains documentation specific to provider integrations.
 
 ## Contents
 
-- [LOCAL_GPU_EMBEDDINGS.md](LOCAL_GPU_EMBEDDINGS.md) - Local GPU embeddings configuration
+- [PROVIDERS_ARCHITECTURE.md](PROVIDERS_ARCHITECTURE.md) - Provider system architecture and workflows
 
 ## Related Documentation
 

@@ -1,5 +1,5 @@
 [Unit]
-Description=RAG Tool Archive (container + proxy)
+Description=RAG Tool File Extractor (container + proxy)
 Documentation=https://github.com/LuigiD5555/agentic-rag-graphiti-redis
 After=network-online.target
 Wants=network-online.target
@@ -9,19 +9,19 @@ OnFailure=tool-alert@%n.service
 Type=simple
 
 # 1) Clean up any previous container
-ExecStartPre=/usr/bin/podman rm -f rag-tool-archive
+ExecStartPre=/usr/bin/podman rm -f rag-tool-extractor
 
 # 2) Start the container (API on port 8000 inside, mapped to 19101 on host)
-ExecStartPre=/usr/bin/podman run -d --name rag-tool-archive \
+ExecStartPre=/usr/bin/podman run -d --name rag-tool-extractor \
   --pull=never \
   -p 127.0.0.1:19101:8000 \
   --security-opt=no-new-privileges \
   --cap-drop=all \
   --read-only \
   --tmpfs /tmp \
-  -v %h/.cache/rag-tools/archive:/work:rw \
+  -v %h/.cache/rag-tools/extractor:/work:rw \
   -v /mnt:/mnt:ro \
-  localhost/rag-tool-archive:latest
+  localhost/rag-tool-extractor:latest
 
 # 3) Wait for container to be ready (healthcheck)
 ExecStartPre=/usr/bin/bash -c 'for i in {1..60}; do curl -fsS http://127.0.0.1:19101/healthz && exit 0; sleep 0.2; done; exit 1'
@@ -30,8 +30,8 @@ ExecStartPre=/usr/bin/bash -c 'for i in {1..60}; do curl -fsS http://127.0.0.1:1
 ExecStart=/usr/lib/systemd/systemd-socket-proxyd 127.0.0.1:19101
 
 # Stop the container when service stops
-ExecStop=/usr/bin/podman stop -t 10 rag-tool-archive
-ExecStopPost=/usr/bin/podman rm -f rag-tool-archive
+ExecStop=/usr/bin/podman stop -t 10 rag-tool-extractor
+ExecStopPost=/usr/bin/podman rm -f rag-tool-extractor
 
 Restart=on-failure
 RestartSec=1
