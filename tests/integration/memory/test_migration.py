@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Test startup migration from Redis to ChatMemory.
 
-Simula conversaciones antiguas en Redis y verifica que se migren
-automáticamente a Weaviate en el arranque.
+Simulates older conversations in Redis and verifies they are migrated
+automatically to Weaviate at startup.
 """
 import os
 import sys

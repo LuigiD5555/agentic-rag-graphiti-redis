@@ -5,9 +5,9 @@ English Section
 ---------------
 Artificial Intelligence (AI) is transforming the world. Machine learning algorithms can now perform complex tasks that were once thought to be exclusively human.
 
-Spanish Section / Sección en Español
--------------------------------------
-La inteligencia artificial (IA) está transformando el mundo. Los algoritmos de aprendizaje automático ahora pueden realizar tareas complejas que antes se pensaba que eran exclusivamente humanas.
+Spanish Section (Translated)
+-----------------------------
+Artificial Intelligence (AI) is transforming the world. Machine learning algorithms can now perform complex tasks that were once thought to be exclusively human.
 
 Chinese Section / 中文部分
 --------------------------

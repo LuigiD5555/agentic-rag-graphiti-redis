@@ -1,32 +1,32 @@
-# 📝 Configuración de Exclusiones - Guía Rápida
+# Exclusion Configuration - Quick Guide
 
-## ✅ Solución Implementada
+## Implemented Solution
 
-He configurado `DOCS_EXCLUDE_GLOBS` en `settings.py` para excluir carpetas con código fuente y mantener solo libros/conocimiento.
+`DOCS_EXCLUDE_GLOBS` has been configured in `settings.py` to exclude source code folders and keep only books/knowledge.
 
-## 🎯 Qué se Excluyó
+## What Was Excluded
 
-### ❌ Excluido (Código fuente, no conocimiento)
+### Excluded (Source code, not knowledge)
 
 ```
 /mnt/Documents/Documents/Programacion/
-├─ Aprendiendo_Programacion/  ← Código de proyectos de aprendizaje
-├─ Proyectos_Programacion/    ← Código de proyectos activos
-├─ Deprecated*/                ← Proyectos viejos/fallidos
-├─ Certificates/               ← Miles de PDFs de certificados
-├─ Odoo/                       ← Sistema Odoo completo
-└─ fact_checker*/              ← Proyecto con archivos estáticos
+├─ Aprendiendo_Programacion/  <- Learning project code
+├─ Proyectos_Programacion/    <- Active project code
+├─ Deprecated*/                <- Old/failed projects
+├─ Certificates/               <- Thousands of certificate PDFs
+├─ Odoo/                       <- Full Odoo system
+└─ fact_checker*/              <- Project with static files
 ```
 
-### ✅ Incluido (Conocimiento útil para RAG)
+### Included (Useful knowledge for RAG)
 
 ```
-/mnt/resources/Libros/Aprendizaje/  ← Libros de programación (PDFs educativos)
+/mnt/resources/Libros/Aprendizaje/  <- Programming books (educational PDFs)
 ```
 
-## 🔧 Configuración Actual
+## Current Configuration
 
-En [`src/settings.py:140-153`](../src/settings.py#L140-L153):
+In [`src/settings.py:140-153`](../src/settings.py#L140-L153):
 
 ```python
 DOCS_EXCLUDE_GLOBS = (
@@ -42,66 +42,66 @@ DOCS_EXCLUDE_GLOBS = (
 )
 ```
 
-## 🚀 Probar la Configuración
+## Test the Configuration
 
-Ejecuta la ingesta nuevamente:
+Run ingestion again:
 
 ```bash
-# Dentro del contenedor
+# Inside the container
 python -m src.rag.ingestion
 ```
 
-**Deberías ver:**
+**You should see:**
 ```
 INFO: Excluded path patterns: ['*/Programacion/Aprendiendo_Programacion/*', ...]
-INFO: Candidate files found: ~500-2000 (NO 10,000+)
+INFO: Candidate files found: ~500-2000 (NOT 10,000+)
 ```
 
-## 📊 Resultado Esperado
+## Expected Result
 
-| Métrica | Antes | Después |
-|---------|-------|---------|
-| Directorios visitados | 5,000+ | ~100-300 |
-| Archivos candidatos | 10,000+ | ~500-2,000 |
-| Tiempo de escaneo | 5+ minutos | <30 segundos |
+| Metric | Before | After |
+|--------|--------|-------|
+| Directories visited | 5,000+ | ~100-300 |
+| Candidate files | 10,000+ | ~500-2,000 |
+| Scan time | 5+ minutes | <30 seconds |
 
-## 🔄 Alternativa: Cambiar DOCS_PATHS
+## Alternative: Change DOCS_PATHS
 
-Si quieres una solución AÚN MÁS SIMPLE, cambia directamente las rutas base:
+If you want an even simpler solution, change the base paths directly:
 
 ```python
-# En settings.py, línea 129
+# In settings.py, line 129
 DOCS_PATHS = [
-    # "/mnt/Documents/Documents",  ← Comentar/eliminar esto
-    "/mnt/resources/Libros/Aprendizaje",  ← Solo libros
+    # "/mnt/Documents/Documents",  <- Comment/remove this
+    "/mnt/resources/Libros/Aprendizaje",  <- Books only
 ]
 ```
 
-Esto es más directo: solo escanea libros, nada de código fuente.
+This is more direct: only scan books, no source code.
 
-## 💡 Añadir Más Exclusiones
+## Add More Exclusions
 
-Si ves que sigue escaneando cosas que no quieres, añade más patrones:
+If it still scans content you do not want, add more patterns:
 
 ```python
 DOCS_EXCLUDE_GLOBS = (
-    "*/Programacion/*",              # Excluir TODA la carpeta Programacion
-    "*/node_modules/*",              # Por si algún proyecto los tiene
-    "*/env/*",                       # Ambientes virtuales
-    "*.test.py",                     # Archivos de test
-    "*/tests/*",                     # Carpetas de tests
+    "*/Programacion/*",              # Exclude the entire Programacion folder
+    "*/node_modules/*",              # In case a project has them
+    "*/env/*",                       # Virtual environments
+    "*.test.py",                     # Test files
+    "*/tests/*",                     # Test folders
 )
 ```
 
-## ✅ Verificar Configuración
+## Verify Configuration
 
-Después de cambiar `settings.py`, verifica que los patrones estén cargados:
+After changing `settings.py`, verify the patterns are loaded:
 
 ```bash
-# Dentro del contenedor
+# Inside the container
 python -c "from src.rag.conf import Config; c = Config(); print('Globs:', c.DOCS_EXCLUDE_GLOBS)"
 ```
 
 ---
 
-**Resumen:** Ahora el sistema excluirá carpetas de código fuente y solo procesará libros en `/mnt/resources/Libros/Aprendizaje`.
+**Summary:** The system now excludes source code folders and only processes books under `/mnt/resources/Libros/Aprendizaje`.

@@ -24,7 +24,7 @@ print(f'Text length: {len(result.text)} characters')
 print(f'First 200 chars: {result.text[:200]}...')
 
 # Check if all languages are present
-languages = ['English', 'Español', '中文', '日本語', '한국어', 'Русский', 'العربي', 'française', 'Deutscher', 'Português']
+languages = ['English', 'Spanish', '中文', '日本語', '한국어', 'Русский', 'العربي', 'française', 'Deutscher', 'Português']
 for lang in languages:
     if lang in result.text:
         print(f'✓ Found: {lang}')
@@ -47,7 +47,7 @@ for doc in docs:
     print(f'  - Content length: {len(doc.page_content)} chars')
 
     # Verify multilingual content
-    languages = ['Artificial Intelligence', 'inteligencia artificial', '人工智能', '人工知能', '인공 지능', 'Искусственный интеллект', 'الذكاء الاصطناعي', 'intelligence artificielle', 'Künstliche Intelligenz', 'inteligência artificial']
+    languages = ['Artificial Intelligence', 'artificial intelligence', '人工智能', '人工知能', '인공 지능', 'Искусственный интеллект', 'الذكاء الاصطناعي', 'intelligence artificielle', 'Künstliche Intelligenz', 'inteligência artificial']
     found = sum(1 for lang in languages if lang in doc.page_content)
     print(f'  - Languages detected: {found}/{len(languages)}')
 "

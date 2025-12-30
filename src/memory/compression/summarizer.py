@@ -15,24 +15,24 @@ class LLMSummarizer:
     conversations while preserving key information.
     """
 
-    COMPRESSION_PROMPT = """Resume la siguiente conversación manteniendo SOLO:
-- Decisiones tomadas
-- Intenciones del usuario
-- Estado actual de la tarea
-- Referencias a documentos/herramientas usados
+    COMPRESSION_PROMPT = """Summarize the following conversation keeping ONLY:
+- Decisions made
+- User intent
+- Current task state
+- References to documents/tools used
 
-Descarta:
-- Saludos y despedidas
-- Confirmaciones simples ("ok", "sí", "entiendo")
-- Texto decorativo o redundante
-- Información ya ejecutada sin relevancia futura
+Discard:
+- Greetings and farewells
+- Simple confirmations ("ok", "yes", "got it")
+- Decorative or redundant text
+- Information already executed with no future relevance
 
-Responde con un resumen conciso de máximo 3-4 oraciones.
+Reply with a concise summary of at most 3-4 sentences.
 
-Conversación:
+Conversation:
 {conversation}
 
-Resumen:"""
+Summary:"""
 
     def __init__(
         self,

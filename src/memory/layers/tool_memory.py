@@ -181,7 +181,7 @@ class ToolMemoryManager:
         # Get recent executions
         recent = executions[-n:] if len(executions) > n else executions
 
-        lines = ["Tools usados en esta conversación:"]
+        lines = ["Tools used in this conversation:"]
         for exec in recent:
             lines.append(
                 f"- {exec['doc_id']}: {exec['summary']} "

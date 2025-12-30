@@ -1,19 +1,19 @@
 # Memory System
 
-Sistema de memoria jerárquico para RAG con LangChain/LangGraph.
+Hierarchical memory system for RAG with LangChain/LangGraph.
 
-## 📦 Estado de Implementación
+## Implementation Status
 
-### ✅ Fase 1: Fundamentos (COMPLETADA)
+### Phase 1: Foundations (COMPLETED)
 
-**Componentes implementados**:
+**Implemented components**:
 
-- ✅ **identifiers.py**: Generación criptográfica de user_id y thread_id
-- ✅ **state.py**: Definición del estado de conversación (ConversationState)
-- ✅ **checkpointer.py**: Redis checkpointer con TTL inteligente (48h + touch)
-- ✅ **Tests**: Suites completas en `tests/memory/`
+- identifiers.py: Cryptographic generation of user_id and thread_id
+- state.py: Conversation state definition (ConversationState)
+- checkpointer.py: Redis checkpointer with smart TTL (48h + touch)
+- Tests: Full suites in `tests/memory/`
 
-**Archivos creados**:
+**Created files**:
 
 ```
 src/memory/
@@ -21,40 +21,40 @@ src/memory/
 │   ├── identifiers.py      ✅ User/Thread ID generation
 │   ├── state.py            ✅ ConversationState definition
 │   └── checkpointer.py     ✅ TTL Redis checkpointer
-├── layers/                 (Fase 2)
-├── compression/            (Fase 2)
-├── artifacts/              (Fase 2)
-└── context/                (Fase 3)
+├── layers/                 (Phase 2)
+├── compression/            (Phase 2)
+├── artifacts/              (Phase 2)
+└── context/                (Phase 3)
 ```
 
-## 🚀 Instalación
+## Installation
 
-### 1. Instalar dependencias
+### 1. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Dependencias añadidas:
+Added dependencies:
 
 ```
 langgraph
 langgraph-checkpoint-redis
 ```
 
-### 2. Verificar instalación
+### 2. Verify installation
 
 ```bash
-# Verificación rápida (sin Redis)
+# Quick verification (no Redis)
 python3 verify_memory_phase1.py
 
-# Tests completos (requiere pytest y Redis)
+# Full tests (requires pytest and Redis)
 pytest tests/memory/ -v
 ```
 
-## 📖 Uso de Fase 1
+## Phase 1 Usage
 
-### Generación de Identidades
+### Identity Generation
 
 ```python
 from src.memory.core.identifiers import (
@@ -64,23 +64,23 @@ from src.memory.core.identifiers import (
     validate_thread_id,
 )
 
-# Generar user_id (SHA-256 estable)
+# Generate user_id (stable SHA-256)
 user_id = generate_user_id(
     client_info={"ip": "127.0.0.1", "ua": "Mozilla/5.0"}
 )
 
-# Generar thread_id (HMAC-SHA256 único)
+# Generate thread_id (unique HMAC-SHA256)
 thread_id = generate_thread_id(
     user_id=user_id,
-    server_secret="your-secret-from-env"  # De THREAD_SECRET en .env
+    server_secret="your-secret-from-env"  # From THREAD_SECRET in .env
 )
 
-# Validar IDs
+# Validate IDs
 assert validate_user_id(user_id)
 assert validate_thread_id(thread_id)
 ```
 
-### Gestión de Estado
+### State Management
 
 ```python
 from src.memory.core.state import (
@@ -92,13 +92,13 @@ from src.memory.core.state import (
 )
 import time
 
-# Crear estado inicial
+# Create initial state
 state = create_initial_state(
     user_id=user_id,
     thread_id=thread_id
 )
 
-# Añadir ejecución de herramienta
+# Add tool execution
 execution: ToolExecution = {
     "tool": "office",
     "doc_id": "doc#1",
@@ -112,88 +112,88 @@ execution: ToolExecution = {
 
 state = add_tool_execution(state, execution)
 
-# Recuperar ejecuciones recientes
+# Get recent executions
 recent = get_recent_tool_executions(state, n=5)
 for exec in recent:
     print(f"{exec['doc_id']}: {exec['summary']}")
 
-# Buscar por ID
+# Find by ID
 doc = find_tool_execution_by_id(state, "doc#1")
 ```
 
-### Persistencia con Redis (TTL inteligente)
+### Redis Persistence (Smart TTL)
 
 ```python
 from src.memory.core.checkpointer import create_checkpointer
 
-# Crear checkpointer (requiere Redis corriendo)
+# Create checkpointer (requires Redis running)
 checkpointer = create_checkpointer(
     redis_host="127.0.0.1",
     redis_port=6379,
-    ttl_seconds=172800  # 48 horas
+    ttl_seconds=172800  # 48 hours
 )
 
-# Usar con LangGraph
+# Use with LangGraph
 from langgraph.graph import StateGraph
 
 graph = StateGraph(ConversationState)
-# ... definir nodos ...
+# ... define nodes ...
 compiled = graph.compile(checkpointer=checkpointer)
 
-# Guardar estado - TTL comienza
+# Save state - TTL starts
 config = {"configurable": {"thread_id": thread_id}}
 compiled.invoke(state, config=config)
 
-# Recuperar estado - TTL se extiende a 48h (touch on access)
+# Restore state - TTL extends to 48h (touch on access)
 state = compiled.get_state(config)
 ```
 
-## 🔑 Características Clave
+## Key Features
 
-### 1. Identidades Criptográficas
+### 1. Cryptographic Identities
 
-- **user_id**: SHA-256 estable (64 chars hex)
-  - Generado a partir de client_info
-  - Persistente entre sesiones
-  - Validación estricta
+- user_id: stable SHA-256 (64 hex chars)
+  - Generated from client_info
+  - Persistent across sessions
+  - Strict validation
 
-- **thread_id**: HMAC-SHA256 único (64 chars hex)
-  - Derivado de user_id + conversation_seed + server_secret
-  - No predecible (seguro)
-  - Único por conversación
+- thread_id: unique HMAC-SHA256 (64 hex chars)
+  - Derived from user_id + conversation_seed + server_secret
+  - Not predictable (secure)
+  - Unique per conversation
 
-### 2. Estado de Conversación
+### 2. Conversation State
 
-`ConversationState` contiene:
+`ConversationState` contains:
 
-- **Identificadores**: user_id, thread_id
-- **Mensajes**: Lista de mensajes (hereda de MessagesState)
-- **Ventana reciente**: Últimos N mensajes completos
-- **Resumen Pareto**: Historia comprimida (20%)
-- **Tool memory**: Lista de herramientas usadas
-- **Contexto actual**: Estado de la conversación
-- **Metadata**: Timestamps, contadores
+- Identifiers: user_id, thread_id
+- Messages: list of messages (inherits from MessagesState)
+- Recent window: last N full messages
+- Pareto summary: compressed history (20%)
+- Tool memory: list of tools used
+- Current context: conversation state
+- Metadata: timestamps, counters
 
-### 3. TTL Inteligente (Touch on Access)
+### 3. Smart TTL (Touch on Access)
 
-El checkpointer Redis:
+The Redis checkpointer:
 
-- **put()**: Guarda estado y aplica TTL de 48h
-- **get()**: Recupera estado y EXTIENDE TTL a 48h
-- **Resultado**: Conversaciones activas viven indefinidamente
+- put(): store state and apply 48h TTL
+- get(): restore state and EXTEND TTL to 48h
+- Result: active conversations live indefinitely
 
-**Ejemplo de flujo**:
+**Example flow**:
 
 ```
-Day 0: Create conversation → TTL = 48h
-Day 1: Access conversation → TTL reset to 48h
-Day 3: Access conversation → TTL reset to 48h
-Day 5: No access for 48h  → Auto-delete
+Day 0: Create conversation -> TTL = 48h
+Day 1: Access conversation -> TTL reset to 48h
+Day 3: Access conversation -> TTL reset to 48h
+Day 5: No access for 48h  -> Auto-delete
 ```
 
-## 🧪 Tests
+## Tests
 
-### Tests Unitarios
+### Unit Tests
 
 ```bash
 # Identifiers
@@ -203,69 +203,69 @@ pytest tests/memory/test_identifiers.py -v
 pytest tests/memory/test_state.py -v
 ```
 
-### Cobertura de Tests
+### Test Coverage
 
 **test_identifiers.py**:
 
-- ✅ Generación de user_id (SHA-256)
-- ✅ Generación de thread_id (HMAC-SHA256)
-- ✅ Validación de formato
-- ✅ Determinismo con seeds
-- ✅ Unicidad sin seeds
+- Generate user_id (SHA-256)
+- Generate thread_id (HMAC-SHA256)
+- Format validation
+- Determinism with seeds
+- Uniqueness without seeds
 
 **test_state.py**:
 
-- ✅ Creación de estado inicial
-- ✅ Añadir tool executions
-- ✅ Recuperar executions recientes
-- ✅ Buscar por doc_id
-- ✅ Actualización de metadata
+- Initial state creation
+- Add tool executions
+- Retrieve recent executions
+- Find by doc_id
+- Metadata updates
 
-## 🔧 Configuración
+## Configuration
 
-Añadir a `.env`:
+Add to `.env`:
 
 ```bash
 # Memory System
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
-MEMORY_TTL=172800  # 48 horas
-THREAD_SECRET=your-secret-key-here  # Generar con: openssl rand -hex 32
+MEMORY_TTL=172800  # 48 hours
+THREAD_SECRET=your-secret-key-here  # Generate with: openssl rand -hex 32
 ```
 
-## 📋 Estado de Implementación Completo
+## Full Implementation Status
 
-### ✅ Fase 1: Fundamentos (COMPLETADA)
-- ✅ `core/identifiers.py` - Generación criptográfica de IDs
-- ✅ `core/state.py` - Definición de ConversationState
-- ✅ `core/checkpointer.py` - Redis checkpointer con TTL
+### Phase 1: Foundations (COMPLETED)
+- `core/identifiers.py` - Cryptographic ID generation
+- `core/state.py` - ConversationState definition
+- `core/checkpointer.py` - Redis checkpointer with TTL
 
-### ✅ Fase 2: Compresión + Tool Memory (COMPLETADA)
-- ✅ `compression/pareto.py` - Compresión 80/20
-- ✅ `compression/summarizer.py` - LLM summarizer (LFM2-1.2B)
-- ✅ `layers/tool_memory.py` - Gestión de tool memory
+### Phase 2: Compression + Tool Memory (COMPLETED)
+- `compression/pareto.py` - 80/20 compression
+- `compression/summarizer.py` - LLM summarizer (LFM2-1.2B)
+- `layers/tool_memory.py` - Tool memory management
 
-### ✅ Fase 3: Context Assembly (COMPLETADA)
-- ✅ `context/builder.py` - Constructor de contexto jerárquico
+### Phase 3: Context Assembly (COMPLETED)
+- `context/builder.py` - Hierarchical context builder
 
-### ✅ Fase 4-5: ChatMemory (COMPLETADA)
-- ✅ `snapshot.py` - Creación de snapshots comprimidos
-- ✅ `storage/chat_memory_schema.py` - Esquema Weaviate para ChatMemory
-- ✅ `storage/chat_memory_persistence.py` - Persistencia de snapshots
-- ✅ `retrieval/cross_chat.py` - Cross-chat retrieval
+### Phase 4-5: ChatMemory (COMPLETED)
+- `snapshot.py` - Compressed snapshot creation
+- `storage/chat_memory_schema.py` - Weaviate schema for ChatMemory
+- `storage/chat_memory_persistence.py` - Snapshot persistence
+- `retrieval/cross_chat.py` - Cross-chat retrieval
 
-### ✅ Fase 6: RRF + MMR (COMPLETADA)
-- ✅ `retrieval/rrf_fusion.py` - Reciprocal Rank Fusion
-- ✅ `retrieval/mmr.py` - Maximal Marginal Relevance (anti-eco)
-- ✅ `integration.py` - ChatMemoryManager integrado
+### Phase 6: RRF + MMR (COMPLETED)
+- `retrieval/rrf_fusion.py` - Reciprocal Rank Fusion
+- `retrieval/mmr.py` - Maximal Marginal Relevance (anti-echo)
+- `integration.py` - ChatMemoryManager integration
 
-### 🔄 Pendiente: Integración con API
-- [ ] Modificar `src/api/ollama/router.py` para usar ChatMemory
-- [ ] Integrar snapshot creation en flujo de conversación
-- [ ] Añadir cross-chat retrieval a RAG pipeline
-- [ ] Configurar cleanup automático de snapshots expirados
+### Pending: API Integration
+- [ ] Modify `src/api/ollama/router.py` to use ChatMemory
+- [ ] Integrate snapshot creation into the conversation flow
+- [ ] Add cross-chat retrieval to the RAG pipeline
+- [ ] Configure automatic cleanup of expired snapshots
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### ModuleNotFoundError: No module named 'langgraph'
 
@@ -276,37 +276,37 @@ pip install langgraph langgraph-checkpoint-redis
 ### Redis connection refused
 
 ```bash
-# Verificar que Redis esté corriendo
+# Verify Redis is running
 systemctl --user status redis
-# O con podman-compose
+# Or with podman-compose
 podman-compose up -d redis
 ```
 
-### Tests fallan con Redis
+### Tests fail with Redis
 
 ```bash
-# Verificar conexión
+# Verify connection
 redis-cli -h 127.0.0.1 -p 6379 ping
-# Debería responder: PONG
+# Should respond: PONG
 ```
 
-## 📚 Referencias
+## References
 
-- [Plan completo](../../docs/MEMORY_SYSTEM_IMPLEMENTATION_PLAN.md)
+- [Full plan](../../docs/MEMORY_SYSTEM_IMPLEMENTATION_PLAN.md)
 - [LangGraph Docs](https://langchain-ai.github.io/langgraph/)
 - [Redis Checkpointer](https://langchain-ai.github.io/langgraph/how-tos/persistence/)
 
-## ✅ Checklist de Fase 1
+## Phase 1 Checklist
 
-- [x] Dependencias añadidas a requirements.txt
-- [x] Estructura de directorios creada
-- [x] identifiers.py implementado y testeado
-- [x] state.py implementado y testeado
-- [x] checkpointer.py implementado
-- [x] Tests unitarios creados
-- [x] Script de verificación creado
-- [x] Documentación completada
+- [x] Dependencies added to requirements.txt
+- [x] Directory structure created
+- [x] identifiers.py implemented and tested
+- [x] state.py implemented and tested
+- [x] checkpointer.py implemented
+- [x] Unit tests created
+- [x] Verification script created
+- [x] Documentation completed
 
-**Estado**: ✅ **FASE 1 COMPLETADA**
+**Status**: PHASE 1 COMPLETED
 
-**Siguiente paso**: Instalar dependencias y comenzar Fase 2.
+**Next step**: Install dependencies and start Phase 2.

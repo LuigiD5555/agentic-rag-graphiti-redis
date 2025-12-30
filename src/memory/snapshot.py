@@ -152,8 +152,8 @@ def extract_key_quotes(
         elif role == "assistant":
             # Look for sentences with keywords
             if any(kw in content.lower() for kw in [
-                "significa", "es decir", "en resumen", "por ejemplo",
-                "importante", "clave", "crítico", "significa que"
+                "means", "in other words", "in summary", "for example",
+                "important", "key", "critical", "this means"
             ]):
                 # Take first significant sentence
                 sentences = re.split(r'[.!?]', content)

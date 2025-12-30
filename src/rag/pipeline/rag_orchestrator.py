@@ -187,7 +187,7 @@ Guidelines:
 
         # Step 2.5: Prepend memory context if available
         if memory_context:
-            context = f"{memory_context}\n\n## Documentos relevantes:\n{context}"
+            context = f"{memory_context}\n\n## Relevant documents:\n{context}"
 
         # Step 3: Generate answer using LLM
         answer = self._generate_answer(

@@ -21,20 +21,20 @@ class ContextBuilder:
     6. Current question
     """
 
-    DEFAULT_SYSTEM_PROMPT = """Eres un asistente de RAG (Retrieval-Augmented Generation) especializado en analizar documentos y proporcionar respuestas precisas basadas en información recuperada.
+    DEFAULT_SYSTEM_PROMPT = """You are a RAG (Retrieval-Augmented Generation) assistant specialized in analyzing documents and providing accurate answers based on retrieved information.
 
-Capacidades:
-- Analizar documentos PDF, Word, Excel, PowerPoint
-- Extraer texto de imágenes (OCR)
-- Extraer y analizar archivos comprimidos
-- Buscar información en bases de conocimiento
-- Recordar conversaciones previas y herramientas usadas
+Capabilities:
+- Analyze PDF, Word, Excel, PowerPoint documents
+- Extract text from images (OCR)
+- Extract and analyze compressed archives
+- Search information in knowledge bases
+- Remember prior conversations and tools used
 
-Reglas:
-- Siempre cita las fuentes cuando proporciones información
-- Si no tienes información suficiente, indícalo claramente
-- Mantén respuestas concisas y relevantes
-- Recuerda el contexto de la conversación"""
+Rules:
+- Always cite sources when providing information
+- If you do not have enough information, say so clearly
+- Keep responses concise and relevant
+- Remember the conversation context"""
 
     def __init__(
         self,
@@ -80,12 +80,12 @@ Reglas:
         # 2. Pareto summary (compressed history)
         pareto_summary = state.get("pareto_summary")
         if pareto_summary:
-            sections.append(f"# Resumen de conversación anterior\n{pareto_summary}")
+            sections.append(f"# Previous conversation summary\n{pareto_summary}")
 
         # 3. Recent messages (sliding window)
         recent = self.short_term.format_recent_messages(state)
         if recent:
-            sections.append(f"# Mensajes recientes\n{recent}")
+            sections.append(f"# Recent messages\n{recent}")
 
         # 4. Tool memory (documents/tools used)
         tool_context = self.tool_memory.format_tool_memory(state, n=5)
@@ -95,16 +95,16 @@ Reglas:
         # 5. Current context (if set)
         current_context = state.get("current_context")
         if current_context:
-            sections.append(f"# Estado actual\n{current_context}")
+            sections.append(f"# Current state\n{current_context}")
 
         # 6. RAG context (retrieved documents)
         if rag_results:
             rag_context = self._format_rag_results(rag_results)
             if rag_context:
-                sections.append(f"# Documentos relevantes\n{rag_context}")
+                sections.append(f"# Relevant documents\n{rag_context}")
 
         # 7. Current question
-        sections.append(f"# Pregunta actual\n{current_question}")
+        sections.append(f"# Current question\n{current_question}")
 
         # Assemble
         full_context = "\n\n".join(sections)
@@ -139,12 +139,12 @@ Reglas:
             score = result.get("relevance_score", result.get("score", 0))
 
             # Format
-            source_info = f"[Fuente: {source}"
+            source_info = f"[Source: {source}"
             if page:
-                source_info += f", página {page}"
-            source_info += f", relevancia: {score:.3f}]"
+                source_info += f", page {page}"
+            source_info += f", relevance: {score:.3f}]"
 
-            lines.append(f"## Fragmento {i}\n{source_info}\n{content}")
+            lines.append(f"## Excerpt {i}\n{source_info}\n{content}")
 
         return "\n\n".join(lines)
 
@@ -195,7 +195,7 @@ Reglas:
         used_chars += len(system_section)
 
         # Current question (always include)
-        question_section = f"# Pregunta actual\n{current_question}"
+        question_section = f"# Current question\n{current_question}"
         sections.append(question_section)
         used_chars += len(question_section)
 
@@ -215,7 +215,7 @@ Reglas:
         if recent:
             if len(recent) > recent_budget:
                 recent = recent[-recent_budget:]
-            sections.insert(1, f"# Mensajes recientes\n{recent}")
+            sections.insert(1, f"# Recent messages\n{recent}")
             used_chars += len(recent)
             remaining = max_chars - used_chars
 
@@ -226,7 +226,7 @@ Reglas:
             if rag_context:
                 if len(rag_context) > rag_budget:
                     rag_context = rag_context[:rag_budget] + "..."
-                sections.insert(-1, f"# Documentos relevantes\n{rag_context}")
+                sections.insert(-1, f"# Relevant documents\n{rag_context}")
                 used_chars += len(rag_context)
                 remaining = max_chars - used_chars
 
@@ -236,7 +236,7 @@ Reglas:
             if pareto:
                 if len(pareto) > remaining:
                     pareto = pareto[:remaining] + "..."
-                sections.insert(1, f"# Resumen anterior\n{pareto}")
+                sections.insert(1, f"# Previous summary\n{pareto}")
 
         full_context = "\n\n".join(sections)
 

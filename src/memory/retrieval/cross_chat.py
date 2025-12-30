@@ -105,7 +105,7 @@ class CrossChatRetriever:
             # Format snapshot header
             timestamp = snapshot.get("timestamp", "")[:10]  # YYYY-MM-DD
             msg_count = snapshot.get("message_count", 0)
-            header = f"\n### Conversación {i} ({timestamp}, {msg_count} mensajes):"
+            header = f"\n### Conversation {i} ({timestamp}, {msg_count} messages):"
 
             # Add summary
             summary = snapshot.get("summary", "")

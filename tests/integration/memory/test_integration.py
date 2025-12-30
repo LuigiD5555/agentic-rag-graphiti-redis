@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Test ChatMemory integration with RAG API.
 
-Verifica que:
-1. ChatMemory se inicialice correctamente
-2. La colección ChatMemory exista en Weaviate
-3. RAGOrchestrator tenga ChatMemory configurado
-4. SnapshotScheduler funcione correctamente (24h intervals)
-5. CleanupScheduler limpie snapshots expirados
+Verifies that:
+1. ChatMemory initializes correctly
+2. The ChatMemory collection exists in Weaviate
+3. RAGOrchestrator has ChatMemory configured
+4. SnapshotScheduler works correctly (24h intervals)
+5. CleanupScheduler cleans expired snapshots
 """
 import sys
 import time

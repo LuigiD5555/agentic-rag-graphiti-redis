@@ -6,7 +6,7 @@ from src.rag.multilingual import LanguageDetector
 # Test queries in different languages
 test_queries = {
     'English': "What is the main topic of these documents?",
-    'Spanish': "¿Cuál es el tema principal de estos documentos?",
+    'English (Translated)': "What is the main topic of these documents?",
     'Chinese (Simplified)': "这些文档的主要主题是什么？",
     'Japanese': "これらの文書の主なトピックは何ですか？",
     'Korean': "이 문서의 주요 주제는 무엇입니까?",

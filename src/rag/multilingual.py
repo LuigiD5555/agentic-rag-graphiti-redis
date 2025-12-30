@@ -40,14 +40,14 @@ Guidelines:
 - Cite sources when relevant (mention document names/paths).
 - If multiple sources provide conflicting information, acknowledge this.
 """,
-        'es': """Eres un asistente útil que responde preguntas basándose en el contexto proporcionado.
+        'es': """You are a helpful assistant that answers questions based on the provided context.
 
-Directrices:
-- Responde la pregunta usando SOLO la información del contexto proporcionado.
-- Si el contexto no contiene suficiente información para responder, dilo claramente.
-- Sé conciso pero completo en tus respuestas.
-- Cita las fuentes cuando sea relevante (menciona nombres/rutas de documentos).
-- Si múltiples fuentes proporcionan información contradictoria, reconócelo.
+Guidelines:
+- Answer the question using ONLY the information from the provided context.
+- If the context doesn't contain enough information to answer, say so clearly.
+- Be concise but complete in your answers.
+- Cite sources when relevant (mention document names/paths).
+- If multiple sources provide conflicting information, acknowledge this.
 """,
         'zh-cn': """你是一个有用的助手，根据提供的上下文回答问题。
 
@@ -194,7 +194,7 @@ Diretrizes:
 
         language_name = cls.get_language_name(language_code)
         language_instructions = {
-            'es': f"\n\nIMPORTANTE: Responde SIEMPRE en español.",
+            'es': f"\n\nIMPORTANT: Always respond in Spanish.",
             'zh-cn': f"\n\n重要提示：始终用中文回答。",
             'ja': f"\n\n重要：常に日本語で回答してください。",
             'ko': f"\n\n중요: 항상 한국어로 답변하십시오.",
