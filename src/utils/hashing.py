@@ -5,10 +5,15 @@ for cache management, content deduplication, and file identification.
 """
 
 import hashlib
+import logging
 from pathlib import Path
 from typing import Optional
 
-from src.rag.audit import get_logger
+try:
+    from src.rag.audit import get_logger
+except Exception:  # pragma: no cover - fallback for minimal containers
+    def get_logger(name: str | None = None) -> logging.Logger:
+        return logging.getLogger(name or "rag")
 
 log = get_logger(__name__)
 

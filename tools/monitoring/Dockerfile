@@ -12,6 +12,7 @@ LABEL description="Monitoring, diagnostics, and log analysis container"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libsystemd0 \
     python3-systemd \
+    systemd \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -24,11 +25,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY tools/monitoring/src/ ./src/
 COPY tools/monitoring/config/ ./config/
 
-# Copy shared utilities from main project (if needed)
-COPY src/utils/__init__.py ./src/utils/
-COPY src/utils/volume_monitor.py ./src/utils/
-COPY src/utils/volume_watcher.py ./src/utils/
-COPY src/utils/tools/ ./src/utils/tools/
+# Copy shared utilities from main project
+COPY src/utils/ ./src/utils/
+COPY src/rag/__init__.py ./src/rag/__init__.py
+COPY src/rag/audit/ ./src/rag/audit/
+COPY src/rag/interfaces/ ./src/rag/interfaces/
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/data /app/reports
