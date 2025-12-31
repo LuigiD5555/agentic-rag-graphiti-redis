@@ -124,7 +124,10 @@ services:
 
   open-webui:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_open-webui_1"
-    image: "ghcr.io/open-webui/open-webui:${OPEN_WEBUI_IMAGE_TAG:-main-slim}"
+    build:
+      context: ./open-webui
+      dockerfile: Dockerfile
+    image: "open-webui-local:${OPEN_WEBUI_IMAGE_TAG:-main-slim}"
     restart: unless-stopped
     logging:
       driver: journald
@@ -137,6 +140,7 @@ services:
       # Point to RAG API (unified app container on port 8000)
       OPENAI_API_BASE_URL: "http://127.0.0.1:${HOST_RAG_API_PORT:-8000}/v1"
       OPENAI_API_KEY: "not-needed"
+      RAG_AGENTIC_API_BASE_URL: "http://127.0.0.1:${HOST_RAG_API_PORT:-8000}"
 
       # Disable internal Ollama since we use external RAG API
       ENABLE_OLLAMA_API: "false"
@@ -229,8 +233,6 @@ services:
       API_MODE: "${API_MODE:-ollama}"
 
     volumes:
-      - ${HOST_DOCS_DIR:?HOST_DOCS_DIR is required}:/mnt/Documents/Documents:Z
-
       # ============================================================================
       # External Volumes (Auto-detected from EXTERNAL_VOLUMES in .env)
       # ============================================================================
@@ -248,6 +250,8 @@ services:
       #   - ${HOST_RESEARCH_DIR:-./data/research-fallback}:/mnt/resources/Research:Z
       # ============================================================================
 
+      # External volume: Documents (auto-detected from EXTERNAL_VOLUMES)
+      - ${HOST_DOCUMENTS_DIR:-./data/documents-fallback}:/mnt/Documents/Documents:Z
       # External volume: Libros (auto-detected from EXTERNAL_VOLUMES)
       - ${HOST_LIBROS_DIR:-./data/libros-fallback}:/mnt/resources/Libros:Z
 
@@ -256,7 +260,7 @@ services:
       # ============================================================================
 
       - ${HOST_DATA_DIR:-./data}:/app/data:Z
-      - ./.ingestignore:/app/.ingestignore:ro,Z
+      - ./.ingestignore:/app/.ingestignore:Z
       # Mount source for hot-reload during development
       - ./src:/app/src:ro,Z
       - ./tests:/app/tests:ro,Z
@@ -313,10 +317,10 @@ services:
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-neo4j123}
     network_mode: "host"
     volumes:
-      - ${HOST_DOCS_DIR:?HOST_DOCS_DIR is required}:/mnt/Documents/Documents:Z
+      - ${HOST_DOCUMENTS_DIR:-./data/documents-fallback}:/mnt/Documents/Documents:Z
       - ${HOST_LIBROS_DIR:-./data/libros-fallback}:/mnt/resources/Libros:Z
       - ${HOST_DATA_DIR:-./data}:/app/data:Z
-      - ./.ingestignore:/app/.ingestignore:ro,Z
+      - ./.ingestignore:/app/.ingestignore:Z
       - ./src:/app/src:ro,Z
       - ./tests:/app/tests:ro,Z
     command: ["python", "-m", "src.ingestion.auto_scan.scheduler"]

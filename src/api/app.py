@@ -403,8 +403,11 @@ logger.info("Files router (/v1/files) included")
 
 # Include volumes router for external volume management
 from src.api.routers.volumes import router as volumes_router
+from src.api.routers.exclusions import router as exclusions_router
 app.include_router(volumes_router)
 logger.info("Volumes router (/volumes) included")
+app.include_router(exclusions_router)
+logger.info("Exclusions router (/exclusions) included")
 
 # Include stats router for monitoring and dashboards
 from src.api.routers.stats import router as stats_router

@@ -230,8 +230,8 @@ if podman ps | grep -q "weaviate\|neo4j\|redis\|app\|open-webui\|monitoring"; th
 
         print_step "Building custom images..."
 
-        if ! podman-compose build app monitoring; then
-            print_error "Failed to build app/monitoring images"
+        if ! podman-compose build app monitoring open-webui; then
+            print_error "Failed to build app/monitoring/open-webui images"
             exit 1
         fi
 
@@ -246,8 +246,8 @@ sleep 10
 else
     print_step "Building custom images..."
 
-    if ! podman-compose build app monitoring; then
-        print_error "Failed to build app/monitoring images"
+    if ! podman-compose build app monitoring open-webui; then
+        print_error "Failed to build app/monitoring/open-webui images"
         exit 1
     fi
 

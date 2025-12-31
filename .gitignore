@@ -9,6 +9,8 @@
 *.so
 .Python
 .pytest_cache/
+.venv/
+open-webui/
 .coverage
 coverage.xml
 htmlcov/
