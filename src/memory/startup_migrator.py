@@ -95,6 +95,16 @@ class StartupMigrator:
                         thread_id = parts[2]
 
                         # Get checkpoint data
+                        key_type = redis_client.type(key)
+                        if key_type not in (b"string", "string"):
+                            log.debug(
+                                "Skipping key %s with type %s (expected string)",
+                                key_str,
+                                key_type.decode("utf-8") if isinstance(key_type, bytes) else key_type,
+                            )
+                            stats["skipped"] += 1
+                            continue
+
                         checkpoint_data = redis_client.get(key)
                         if not checkpoint_data:
                             stats["skipped"] += 1
