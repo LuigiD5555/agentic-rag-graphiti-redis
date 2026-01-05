@@ -46,6 +46,12 @@ def get_checkpointer():
     return _checkpointer
 
 
+def _build_checkpoint_config(thread_id: str) -> dict:
+    """Build LangGraph checkpoint config with a stable namespace."""
+    checkpoint_ns = os.getenv("CHECKPOINT_NS", "memory")
+    return {"configurable": {"thread_id": thread_id, "checkpoint_ns": checkpoint_ns}}
+
+
 def load_or_create_state(
     user_id: str,
     thread_id: str
@@ -60,7 +66,7 @@ def load_or_create_state(
         Conversation state (existing or new)
     """
     checkpointer = get_checkpointer()
-    config = {"configurable": {"thread_id": thread_id}}
+    config = _build_checkpoint_config(thread_id)
 
     try:
         # Try to load existing state
@@ -89,7 +95,7 @@ def save_state(
         thread_id: Thread identifier
     """
     checkpointer = get_checkpointer()
-    config = {"configurable": {"thread_id": thread_id}}
+    config = _build_checkpoint_config(thread_id)
 
     # Update metadata
     state = update_state_metadata(state)
