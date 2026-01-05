@@ -4,7 +4,9 @@ from src.rag.retrieval import WeaviateRetriever
 from src.rag.chat import LMStudioChatService
 from src.rag.multilingual import LanguageDetector
 from src.rag.audit import get_logger
-from src.rag.temporal.retriever import MultiTenantRetriever, apply_rrf_fusion
+from src.rag.temporal.retriever import MultiTenantRetriever
+from src.rag.web_search import SearXNGClient
+from src.rag.intent import IntentClassifier
 
 log = get_logger(__name__)
 
@@ -12,17 +14,18 @@ log = get_logger(__name__)
 class RAGOrchestrator:
     """Orchestrates the full RAG pipeline: retrieve -> generate."""
 
-    DEFAULT_SYSTEM_PROMPT = """You are a helpful assistant that answers questions based on the provided context and conversation history.
-
-Guidelines:
-- Answer questions using the information from the provided context.
-- Remember and reference previous messages in the conversation when relevant.
-- If asked to repeat or translate previous responses, use the conversation history.
-- If the context doesn't contain enough information to answer, say so clearly.
-- Be concise but complete in your answers.
-- Cite sources when relevant (mention document names/paths).
-- If multiple sources provide conflicting information, acknowledge this.
-"""
+    DEFAULT_SYSTEM_PROMPT = (
+        "You are a helpful assistant that answers questions based on the "
+        "provided context and conversation history.\n\n"
+        "Guidelines:\n"
+        "- Answer questions using the information from the provided context.\n"
+        "- Remember and reference previous messages when relevant.\n"
+        "- If asked to repeat or translate previous responses, use the history.\n"
+        "- If the context doesn't contain enough information, say so clearly.\n"
+        "- Be concise but complete in your answers.\n"
+        "- Cite sources when relevant (mention document names/paths).\n"
+        "- If multiple sources provide conflicting information, acknowledge this.\n"
+    )
 
     def __init__(
         self,
@@ -34,6 +37,10 @@ Guidelines:
         chat_memory_manager: Optional[Any] = None,
         multi_tenant_retriever: Optional[MultiTenantRetriever] = None,
         file_tracker: Optional[Any] = None,
+        web_search_client: Optional[SearXNGClient] = None,
+        enable_web_fallback: bool = True,
+        min_relevance_score: float = 0.5,
+        enable_rag_gating: bool = True,
     ):
         """Initialize RAG orchestrator.
 
@@ -46,6 +53,10 @@ Guidelines:
             chat_memory_manager: Optional ChatMemory manager for cross-chat recall.
             multi_tenant_retriever: Optional multi-tenant retriever for temporal files.
             file_tracker: Optional FileTracker for tracking chunk usage.
+            web_search_client: Optional SearXNG client for web search fallback.
+            enable_web_fallback: Enable web search when local retrieval fails or has low relevance.
+            min_relevance_score: Minimum score threshold for triggering web search fallback.
+            enable_rag_gating: Enable intent-based RAG gating (skip RAG for trivial queries).
         """
         self.retriever = retriever
         self.chat_service = chat_service
@@ -56,15 +67,23 @@ Guidelines:
         self.chat_memory_manager = chat_memory_manager
         self.multi_tenant_retriever = multi_tenant_retriever
         self.file_tracker = file_tracker
+        self.web_search_client = web_search_client
+        self.enable_web_fallback = enable_web_fallback
+        self.min_relevance_score = min_relevance_score
+        self.enable_rag_gating = enable_rag_gating
+        self.intent_classifier = IntentClassifier() if enable_rag_gating else None
 
         log.info(
             "Initialized RAGOrchestrator with system_prompt=%s chars, multilingual=%s, "
-            "chat_memory=%s, multi_tenant=%s, file_tracker=%s",
+            "chat_memory=%s, multi_tenant=%s, file_tracker=%s, web_search=%s, web_fallback=%s, rag_gating=%s",
             len(self.system_prompt),
             enable_multilingual,
             chat_memory_manager is not None,
             multi_tenant_retriever is not None,
             file_tracker is not None,
+            web_search_client is not None,
+            enable_web_fallback,
+            enable_rag_gating,
         )
 
     def query(
@@ -100,9 +119,49 @@ Guidelines:
         log.info("Processing RAG query with model=%s, thread_id=%s: %s",
                  model or "default", thread_id or "none", question[:100])
 
+        # Step 0: Intent classification for RAG gating
+        intent = None
+        skip_rag = False
+        if self.enable_rag_gating and self.intent_classifier:
+            intent = self.intent_classifier.classify(question)
+            skip_rag = not self.intent_classifier.should_use_rag(intent)
+
+            if skip_rag:
+                log.info(
+                    "RAG gating: skipping retrieval for intent=%s "
+                    "(SMALL_TALK/PERSONAL_CHAT/CONTROL/GENERAL_KNOWLEDGE)",
+                    intent
+                )
+                # Skip RAG, go directly to LLM
+                answer = self._generate_answer(
+                    question=question,
+                    context="",  # No RAG context
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    system_prompt=system_prompt,
+                    model=model,
+                    conversation_history=conversation_history,
+                )
+
+                return {
+                    "answer": answer,
+                    "sources": [],
+                    "metadata": {
+                        "retrieved_count": 0,
+                        "query": question,
+                        "model": model,
+                        "intent": intent,
+                        "rag_gating": True,
+                        "skip_rag": True,
+                        "reason": f"Intent {intent} does not require RAG",
+                    },
+                }
+
         # Step 1: Retrieve relevant documents (KB + temporal if thread_id provided)
         temporal_results = []
         kb_results = []
+        retrieval_metadata = {}
+        retrieval_error = None
 
         if self.multi_tenant_retriever and thread_id:
             # Use multi-tenant retriever (KB + temporal)
@@ -110,7 +169,7 @@ Guidelines:
             retrieval_result = self.multi_tenant_retriever.retrieve_with_temporal(
                 query=question,
                 thread_id=thread_id,
-                top_k_total=top_k or 10,
+                top_k_total=top_k or 6,  # Reduced from 10 to 6 for memory optimization
             )
 
             retrieved_docs = retrieval_result["combined_results"]
@@ -132,9 +191,24 @@ Guidelines:
                     query=question,
                 )
         else:
-            # Standard single-tenant retrieval
-            retrieved_docs = self.retriever.retrieve(query=question, top_k=top_k, filters=filters)
-            kb_results = retrieved_docs
+            # Standard single-tenant retrieval with new signature
+            retrieved_docs, retrieval_metadata = self.retriever.retrieve(
+                query=question, top_k=top_k, filters=filters
+            )
+
+            # Check if retrieval failed
+            if retrieved_docs is None:
+                retrieval_error = retrieval_metadata.get("error_type", "unknown")
+                log.error(
+                    "Retrieval failed: error_type=%s, error=%s, retries=%d, time=%.2fms",
+                    retrieval_error,
+                    retrieval_metadata.get("error"),
+                    retrieval_metadata.get("retries", 0),
+                    retrieval_metadata.get("total_time_ms", 0)
+                )
+                retrieved_docs = []  # Set to empty list for downstream processing
+            else:
+                kb_results = retrieved_docs
 
         # Step 1.5: If ChatMemory enabled and user_id provided, retrieve + fuse with memory
         memory_context = ""
@@ -145,7 +219,7 @@ Guidelines:
                     query=question,
                     user_id=user_id,
                     kb_results=retrieved_docs,
-                    top_k=top_k or 10,
+                    top_k=top_k or 6,  # Reduced from 10 to 6 for memory optimization
                 )
 
                 # Use fused results if available
@@ -168,19 +242,115 @@ Guidelines:
             except Exception as e:
                 log.warning("ChatMemory retrieval failed, continuing without it: %s", e)
 
+        # Step 2: Determine if web search fallback is needed
+        web_results = []
+        used_web_search = False
+        trigger_web_search = False
+
         if not retrieved_docs:
-            log.warning("No documents retrieved for query")
+            log.warning("No documents retrieved from local sources")
+            trigger_web_search = True
+        elif retrieval_error:
+            log.warning("Retrieval error occurred: %s", retrieval_error)
+            trigger_web_search = True
+        elif retrieval_metadata.get("low_relevance"):
+            avg_score = retrieval_metadata.get("avg_score", 0.0)
+            log.warning(
+                "Low relevance score detected: %.3f (threshold: %.2f)",
+                avg_score, self.min_relevance_score
+            )
+            trigger_web_search = True
+
+        # Step 2.5: Execute web search if triggered and enabled
+        if trigger_web_search and self.enable_web_fallback and self.web_search_client:
+            log.info("Triggering web search fallback for query: %s", question[:50])
+            try:
+                # Import asyncio for running async web search in sync context
+                import asyncio
+
+                # Run async web search - handle both sync and async contexts
+                try:
+                    # Try to get running event loop
+                    asyncio.get_running_loop()
+                    # We're in async context - this shouldn't happen in current design
+                    # but handle gracefully by running in thread pool
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(
+                            asyncio.run,
+                            self.web_search_client.search_and_format(
+                                query=question,
+                                categories=["general"]
+                            )
+                        )
+                        web_results = future.result(timeout=30.0)
+                except RuntimeError:
+                    # No running event loop (normal case), create one
+                    web_results = asyncio.run(
+                        self.web_search_client.search_and_format(
+                            query=question,
+                            categories=["general"]
+                        )
+                    )
+
+                used_web_search = True
+
+                if web_results:
+                    log.info("Web search returned %d results", len(web_results))
+
+                    # Fusión: Combinar resultados locales + web
+                    if retrieved_docs:
+                        # Fusionar: priorizar docs locales, agregar web como suplemento
+                        retrieved_docs = retrieved_docs + web_results
+                        log.info(
+                            "Fused local (%d) + web (%d) = %d total results",
+                            len(kb_results), len(web_results), len(retrieved_docs)
+                        )
+                    else:
+                        # Reemplazar: solo usar web si no hay docs locales
+                        retrieved_docs = web_results
+                        log.info("Using only web results (%d)", len(web_results))
+                else:
+                    log.warning("Web search returned no results")
+            except Exception as e:
+                log.error("Web search failed: %s", e, exc_info=True)
+
+        # Step 2.7: Final fallback - LLM without context if everything failed
+        if not retrieved_docs:
+            log.warning("No documents retrieved from any source (local or web)")
+
+            # Fail soft: Use LLM without context instead of returning generic message
+            log.info("Falling back to LLM without RAG context")
+            answer = self._generate_answer(
+                question=question,
+                context="",  # No context available
+                temperature=temperature,
+                max_tokens=max_tokens,
+                system_prompt=system_prompt,
+                model=model,
+                conversation_history=conversation_history,
+            )
+
             return {
-                "answer": "I couldn't find any relevant information to answer your question.",
+                "answer": answer,
                 "sources": [],
                 "metadata": {
                     "retrieved_count": 0,
                     "query": question,
                     "model": model,
+                    "retrieval_error": retrieval_error,
+                    "used_web_search": used_web_search,
+                    "fallback_mode": "llm_only",
+                    "retrieval_metadata": retrieval_metadata,
+                    "intent": intent,
+                    "rag_gating": self.enable_rag_gating,
                 },
             }
 
-        log.info("Retrieved %d documents", len(retrieved_docs))
+        log.info(
+            "Retrieved %d documents (%d local, %d web)",
+            len(retrieved_docs), len(kb_results), len(web_results)
+        )
 
         # Step 2: Build context from retrieved documents
         context = self._build_context(retrieved_docs)
@@ -210,12 +380,18 @@ Guidelines:
                 "retrieved_count": len(retrieved_docs),
                 "kb_count": len(kb_results),
                 "temporal_count": len(temporal_results),
+                "web_count": len(web_results),
                 "query": question,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
                 "used_chat_memory": used_chat_memory,
                 "used_temporal_rag": len(temporal_results) > 0,
+                "used_web_search": used_web_search,
+                "retrieval_error": retrieval_error,
                 "thread_id": thread_id,
+                "retrieval_metadata": retrieval_metadata,
+                "intent": intent,
+                "rag_gating": self.enable_rag_gating,
             },
         }
 

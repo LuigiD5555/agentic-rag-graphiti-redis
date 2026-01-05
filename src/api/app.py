@@ -21,6 +21,7 @@ from src.rag.pipeline.rag_orchestrator import RAGOrchestrator
 from src.rag.embeddings_factory import get_embedding_service as create_embedding_service
 from src.rag.conf import Config
 from src.ingestion.orchestrator import IngestionOrchestrator
+from src.rag.web_search import SearXNGClient
 
 
 # Configure logging
@@ -49,9 +50,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     Handles initialization and cleanup of RAG components.
     """
-    global _rag_orchestrator, _embedding_service, _weaviate_client, _ingestion_orchestrator, _chat_memory_manager, _snapshot_scheduler, _cleanup_scheduler, _temporal_cleanup_scheduler, _redis_client
+    global _rag_orchestrator, _embedding_service, _weaviate_client, _ingestion_orchestrator, _chat_memory_manager, _snapshot_scheduler, _cleanup_scheduler, _temporal_cleanup_scheduler, _redis_client, _web_search_client
 
     logger.info("Initializing RAG API...")
+
+    _web_search_client = None
 
     try:
         # Load configuration
@@ -218,7 +221,38 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         _temporal_cleanup_scheduler.start()
         logger.info("Temporal cleanup scheduler started")
 
-        # Create RAG orchestrator with ChatMemory + Temporal RAG
+        # Create web search client for fallback
+        searxng_url = os.getenv("SEARXNG_URL", "http://localhost:8080")
+        enable_web_fallback = os.getenv("ENABLE_WEB_FALLBACK", "true").lower() == "true"
+
+        if enable_web_fallback:
+            try:
+                _web_search_client = SearXNGClient(
+                    base_url=searxng_url,
+                    timeout=float(os.getenv("SEARXNG_TIMEOUT", "10.0")),
+                    max_results=int(os.getenv("SEARXNG_MAX_RESULTS", "5")),
+                    language=os.getenv("SEARXNG_LANGUAGE", "es"),
+                )
+
+                if await _web_search_client.is_available():
+                    logger.info("SearXNG client initialized and available at %s", searxng_url)
+                else:
+                    logger.warning("SearXNG not available at %s, web fallback will be disabled", searxng_url)
+                    try:
+                        await _web_search_client.close()
+                    except Exception as close_err:
+                        logger.error("Error closing web search client: %s", close_err)
+                    _web_search_client = None
+            except Exception as e:
+                logger.error("Failed to initialize SearXNG client: %s", e)
+                _web_search_client = None
+        else:
+            logger.info("Web search fallback disabled by configuration")
+
+        # RAG gating: intent-based routing to skip RAG for trivial queries
+        enable_rag_gating = os.getenv("ENABLE_RAG_GATING", "false").lower() == "true"
+
+        # Create RAG orchestrator with ChatMemory + Temporal RAG + Web Search + RAG Gating
         _rag_orchestrator = RAGOrchestrator(
             retriever=retriever,
             chat_service=chat_service,
@@ -226,6 +260,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             chat_memory_manager=_chat_memory_manager,
             multi_tenant_retriever=multi_tenant_retriever,
             file_tracker=file_tracker,
+            web_search_client=_web_search_client,
+            enable_web_fallback=enable_web_fallback and _web_search_client is not None,
+            min_relevance_score=float(os.getenv("MIN_RELEVANCE_SCORE", "0.5")),
+            enable_rag_gating=enable_rag_gating,
         )
 
         # Initialize files router
@@ -266,6 +304,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 logger.info("Temporal cleanup scheduler stopped")
             except Exception as e:
                 logger.error("Error stopping temporal cleanup scheduler: %s", e)
+
+        # Close web search client
+        if _web_search_client:
+            try:
+                await _web_search_client.close()
+                logger.info("Web search client closed")
+            except Exception as e:
+                logger.error("Error closing web search client: %s", e)
 
         if _weaviate_client:
             try:

@@ -1,10 +1,26 @@
 """Weaviate-based document retriever for RAG queries."""
-from typing import List, Dict, Any, Optional
+import time
+from typing import List, Dict, Any, Optional, Tuple
 import weaviate
 from weaviate.classes.query import MetadataQuery
 from src.rag.audit import get_logger
 
 log = get_logger(__name__)
+
+
+class RetrievalError(Exception):
+    """Base exception for retrieval errors."""
+    pass
+
+
+class RetrievalTimeoutError(RetrievalError):
+    """Raised when retrieval times out."""
+    pass
+
+
+class RetrievalConnectionError(RetrievalError):
+    """Raised when connection to Weaviate fails."""
+    pass
 
 
 class WeaviateRetriever:
@@ -15,9 +31,12 @@ class WeaviateRetriever:
         client: weaviate.WeaviateClient,
         collection_name: str,
         tenant: Optional[str] = None,
-        top_k: int = 5,
+        top_k: int = 3,  # Reduced from 5 to 3 for memory optimization
         alpha: float = 0.7,
         embedding_service: Optional[Any] = None,
+        max_retries: int = 3,
+        retry_backoff: float = 1.0,
+        min_relevance_score: float = 0.5,
     ):
         """Initialize Weaviate retriever.
 
@@ -25,9 +44,12 @@ class WeaviateRetriever:
             client: Weaviate client instance.
             collection_name: Name of the Weaviate collection/class.
             tenant: Optional tenant ID for multi-tenancy.
-            top_k: Number of top results to return (default: 5).
+            top_k: Number of top results to return (default: 3).
             alpha: Hybrid search weight (1.0=vector only, 0.0=keyword only, 0.7=balanced).
             embedding_service: Optional embedding service for query vectorization.
+            max_retries: Maximum number of retry attempts for failed requests.
+            retry_backoff: Base delay between retries in seconds (exponential backoff).
+            min_relevance_score: Minimum score threshold for considering results relevant.
         """
         self.client = client
         self.collection_name = collection_name
@@ -35,6 +57,9 @@ class WeaviateRetriever:
         self.top_k = top_k
         self.alpha = alpha
         self.embedding_service = embedding_service
+        self.max_retries = max_retries
+        self.retry_backoff = retry_backoff
+        self.min_relevance_score = min_relevance_score
 
         # Get collection reference
         if tenant:
@@ -43,8 +68,10 @@ class WeaviateRetriever:
             self.collection = client.collections.get(collection_name)
 
         log.info(
-            "Initialized WeaviateRetriever: collection=%s, tenant=%s, top_k=%d, has_embedder=%s",
-            collection_name, tenant, top_k, embedding_service is not None
+            "Initialized WeaviateRetriever: collection=%s, tenant=%s, top_k=%d, "
+            "has_embedder=%s, max_retries=%d, min_score=%.2f",
+            collection_name, tenant, top_k, embedding_service is not None,
+            max_retries, min_relevance_score
         )
 
     def retrieve(
@@ -52,8 +79,8 @@ class WeaviateRetriever:
         query: str,
         top_k: Optional[int] = None,
         filters: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
-        """Retrieve relevant document chunks for a query.
+    ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[Dict[str, Any]]]:
+        """Retrieve relevant document chunks for a query with observability and retry logic.
 
         Args:
             query: User's query string.
@@ -61,58 +88,156 @@ class WeaviateRetriever:
             filters: Optional metadata filters (e.g., {"source": "specific_doc.pdf"}).
 
         Returns:
-            List of retrieved documents with metadata and scores.
+            Tuple of (results, metadata):
+            - results: List of retrieved documents, or None if error occurred
+            - metadata: Dict with timing info, error details, and relevance stats
         """
         k = top_k or self.top_k
+        total_start = time.time()
 
-        try:
-            active_filters = self._build_filters(filters)
+        metadata = {
+            "query": query[:100],
+            "top_k": k,
+            "embedding_time_ms": None,
+            "search_time_ms": None,
+            "total_time_ms": None,
+            "retries": 0,
+            "error": None,
+            "error_type": None,
+            "low_relevance": False,
+            "avg_score": None,
+        }
 
-            # If we have an embedding service, vectorize the query and use near_vector search
-            if self.embedding_service:
-                log.debug("Generating query embedding for: %s", query[:50])
-                query_vector = self.embedding_service.generate(query)
-                log.debug("Executing near_vector search with embedding (dim=%d), top_k=%d", len(query_vector), k)
+        # Retry loop
+        for attempt in range(self.max_retries):
+            try:
+                if attempt > 0:
+                    delay = self.retry_backoff * (2 ** (attempt - 1))
+                    log.info("Retry attempt %d/%d after %.1fs delay",
+                            attempt + 1, self.max_retries, delay)
+                    time.sleep(delay)
+                    metadata["retries"] = attempt
 
-                # Use near_vector search with the generated embedding
-                response = self.collection.query.near_vector(
-                    near_vector=query_vector,
-                    limit=k,
-                    filters=active_filters,
-                    return_metadata=MetadataQuery(score=True, distance=True),
+                active_filters = self._build_filters(filters)
+
+                # Step 1: Generate embedding if needed
+                if self.embedding_service:
+                    embed_start = time.time()
+                    log.debug("Generating query embedding for: %s", query[:50])
+
+                    query_vector = self.embedding_service.generate(query)
+
+                    embed_time = (time.time() - embed_start) * 1000
+                    metadata["embedding_time_ms"] = round(embed_time, 2)
+                    log.info("Embedding generated in %.2fms (dim=%d)",
+                            embed_time, len(query_vector))
+
+                    # Step 2: Vector search
+                    search_start = time.time()
+                    log.debug("Executing near_vector search: top_k=%d", k)
+
+                    response = self.collection.query.near_vector(
+                        near_vector=query_vector,
+                        limit=k,
+                        filters=active_filters,
+                        return_metadata=MetadataQuery(score=True, distance=True),
+                    )
+
+                    search_time = (time.time() - search_start) * 1000
+                    metadata["search_time_ms"] = round(search_time, 2)
+                    log.info("Vector search completed in %.2fms", search_time)
+                else:
+                    # Fallback to hybrid search
+                    log.warning("No embedding service, using hybrid search (may fail)")
+                    search_start = time.time()
+
+                    response = self.collection.query.hybrid(
+                        query=query,
+                        limit=k,
+                        alpha=self.alpha,
+                        filters=active_filters,
+                        return_metadata=MetadataQuery(score=True, distance=True),
+                    )
+
+                    search_time = (time.time() - search_start) * 1000
+                    metadata["search_time_ms"] = round(search_time, 2)
+                    log.info("Hybrid search completed in %.2fms", search_time)
+
+                # Step 3: Process results
+                results = []
+                scores = []
+
+                for obj in response.objects:
+                    score = obj.metadata.score if obj.metadata else 0.0
+                    scores.append(score)
+
+                    doc = {
+                        "uuid": str(obj.uuid),
+                        "text": obj.properties.get("text", ""),
+                        "source": obj.properties.get("source", ""),
+                        "chunk_index": obj.properties.get("chunk_index", 0),
+                        "score": score,
+                        "distance": obj.metadata.distance if obj.metadata else None,
+                    }
+                    results.append(doc)
+
+                # Calculate metrics
+                total_time = (time.time() - total_start) * 1000
+                metadata["total_time_ms"] = round(total_time, 2)
+
+                if scores:
+                    avg_score = sum(scores) / len(scores)
+                    metadata["avg_score"] = round(avg_score, 3)
+                    metadata["low_relevance"] = avg_score < self.min_relevance_score
+
+                    log.info(
+                        "Retrieved %d documents in %.2fms (avg_score=%.3f, low_relevance=%s): %s",
+                        len(results), total_time, avg_score,
+                        metadata["low_relevance"], query[:50]
+                    )
+                else:
+                    log.warning("No documents retrieved for query: %s", query[:50])
+
+                return results, metadata
+
+            except TimeoutError as e:
+                metadata["error_type"] = "timeout"
+                metadata["error"] = str(e)
+                log.error(
+                    "Timeout on attempt %d/%d (after %.2fms): %s",
+                    attempt + 1, self.max_retries,
+                    (time.time() - total_start) * 1000, e
                 )
-            else:
-                # Fallback to hybrid search if no embedding service
-                # Note: This will fail if Weaviate doesn't have a vectorizer configured
-                log.warning("No embedding service configured, falling back to hybrid search (may fail)")
-                log.debug("Executing hybrid search: query=%s, top_k=%d", query[:50], k)
+                if attempt == self.max_retries - 1:
+                    # Final attempt failed
+                    metadata["total_time_ms"] = round((time.time() - total_start) * 1000, 2)
+                    return None, metadata
 
-                response = self.collection.query.hybrid(
-                    query=query,
-                    limit=k,
-                    alpha=self.alpha,
-                    filters=active_filters,
-                    return_metadata=MetadataQuery(score=True, distance=True),
+            except (ConnectionError, weaviate.exceptions.WeaviateConnectionError) as e:
+                metadata["error_type"] = "connection"
+                metadata["error"] = str(e)
+                log.error(
+                    "Connection error on attempt %d/%d: %s",
+                    attempt + 1, self.max_retries, e
                 )
+                if attempt == self.max_retries - 1:
+                    metadata["total_time_ms"] = round((time.time() - total_start) * 1000, 2)
+                    return None, metadata
 
-            results = []
-            for obj in response.objects:
-                doc = {
-                    "uuid": str(obj.uuid),
-                    "text": obj.properties.get("text", ""),
-                    "source": obj.properties.get("source", ""),
-                    "chunk_index": obj.properties.get("chunk_index", 0),
-                    "score": obj.metadata.score if obj.metadata else 0.0,
-                    "distance": obj.metadata.distance if obj.metadata else None,
-                }
-                results.append(doc)
+            except Exception as e:
+                metadata["error_type"] = "unknown"
+                metadata["error"] = str(e)
+                log.error(
+                    "Unexpected error on attempt %d/%d: %s",
+                    attempt + 1, self.max_retries, e, exc_info=True
+                )
+                if attempt == self.max_retries - 1:
+                    metadata["total_time_ms"] = round((time.time() - total_start) * 1000, 2)
+                    return None, metadata
 
-            log.info("Retrieved %d documents for query: %s", len(results), query[:50])
-            return results
-
-        except Exception as e:
-            log.error("Retrieval failed for query '%s': %s", query[:50], e)
-            return []
+        # Should not reach here, but just in case
+        metadata["total_time_ms"] = round((time.time() - total_start) * 1000, 2)
+        return None, metadata
 
     def retrieve_by_source(
         self,

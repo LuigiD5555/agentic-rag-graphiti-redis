@@ -128,12 +128,22 @@ class HybridRetriever:
                 if user_id and hasattr(retriever, 'retrieve'):
                     # Try with user_id parameter
                     try:
-                        results = retriever.retrieve(query, user_id=user_id)
+                        result = retriever.retrieve(query, user_id=user_id)
                     except TypeError:
                         # Fallback if retriever doesn't accept user_id
-                        results = retriever.retrieve(query)
+                        result = retriever.retrieve(query)
                 else:
-                    results = retriever.retrieve(query)
+                    result = retriever.retrieve(query)
+
+                # Handle both signatures: list or (results, metadata) tuple
+                if isinstance(result, tuple):
+                    results, metadata = result
+                else:
+                    results = result
+
+                # Normalize None to empty list
+                if results is None:
+                    results = []
 
                 rankings.append(results)
                 logger.debug(f"Retriever '{name}' returned {len(results)} results")

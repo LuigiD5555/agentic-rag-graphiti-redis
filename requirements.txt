@@ -28,7 +28,9 @@ openai
 # Utils
 python-dotenv
 requests
+httpx
 pytest
+pytest-asyncio
 pydantic
 pydantic-settings
 langdetect

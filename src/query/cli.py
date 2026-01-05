@@ -21,17 +21,39 @@ class EmbeddingWeaviateRetriever:
         self.embedding_service = embedding_service
 
     def retrieve(self, query: str, top_k: int = None, filters: dict = None):
-        """Retrieve documents by generating embedding for the query."""
+        """Retrieve documents by generating embedding for the query.
+
+        Returns:
+            Tuple of (results, metadata) to match RAGOrchestrator contract.
+        """
+        import time
+        from typing import Dict, Any
+
         # Generate embedding for query
+        start_time = time.time()
         query_vector = self.embedding_service.generate(query)
+        embedding_time_ms = (time.time() - start_time) * 1000
 
         # Use near_vector search instead of hybrid
         from weaviate.classes.query import MetadataQuery
         k = top_k or self.weaviate_retriever.top_k
 
+        metadata: Dict[str, Any] = {
+            "query": query[:100],
+            "top_k": k,
+            "embedding_time_ms": round(embedding_time_ms, 2),
+            "search_time_ms": None,
+            "total_time_ms": None,
+            "error": None,
+            "error_type": None,
+            "low_relevance": False,
+            "avg_score": None,
+        }
+
         try:
             log.debug("Executing vector search: query=%s, top_k=%d", query[:50], k)
 
+            search_start = time.time()
             active_filters = self.weaviate_retriever._build_filters(filters)
             response = self.weaviate_retriever.collection.query.near_vector(
                 near_vector=query_vector,
@@ -39,25 +61,46 @@ class EmbeddingWeaviateRetriever:
                 filters=active_filters,
                 return_metadata=MetadataQuery(score=True, distance=True),
             )
+            search_time_ms = (time.time() - search_start) * 1000
+            metadata["search_time_ms"] = round(search_time_ms, 2)
 
             results = []
+            scores = []
             for obj in response.objects:
+                score = obj.metadata.score if obj.metadata else 0.0
+                scores.append(score)
+
                 doc = {
                     "uuid": str(obj.uuid),
                     "text": obj.properties.get("text", ""),
                     "source": obj.properties.get("source", ""),
                     "chunk_index": obj.properties.get("chunk_index", 0),
-                    "score": obj.metadata.score if obj.metadata else 0.0,
+                    "score": score,
                     "distance": obj.metadata.distance if obj.metadata else None,
                 }
                 results.append(doc)
 
-            log.info("Retrieved %d documents for query: %s", len(results), query[:50])
-            return results
+            # Calculate metrics
+            total_time_ms = (time.time() - start_time) * 1000
+            metadata["total_time_ms"] = round(total_time_ms, 2)
+
+            if scores:
+                avg_score = sum(scores) / len(scores)
+                metadata["avg_score"] = round(avg_score, 3)
+                metadata["low_relevance"] = avg_score < 0.5
+
+            log.info(
+                "Retrieved %d documents for query: %s (avg_score=%.3f)",
+                len(results), query[:50], metadata.get("avg_score", 0.0)
+            )
+            return results, metadata
 
         except Exception as e:
             log.error("Retrieval failed for query '%s': %s", query[:50], e)
-            return []
+            metadata["error"] = str(e)
+            metadata["error_type"] = "unknown"
+            metadata["total_time_ms"] = round((time.time() - start_time) * 1000, 2)
+            return None, metadata
 
 
 def create_rag_system(config: AppConfig) -> RAGOrchestrator:
@@ -109,10 +152,13 @@ def create_rag_system(config: AppConfig) -> RAGOrchestrator:
     )
 
     # Create RAG orchestrator
+    # Note: Disable RAG gating in CLI mode to ensure RAG always runs
+    # In CLI, users explicitly query the knowledge base and expect retrieval
     rag = RAGOrchestrator(
         retriever=retriever,
         chat_service=chat_service,
         include_sources=True,
+        enable_rag_gating=False,  # Always use RAG in CLI mode
     )
 
     log.info("RAG system initialized successfully")
