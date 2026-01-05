@@ -134,13 +134,14 @@ services:
     depends_on:
       app:
         condition: service_healthy
-    ports:
-      - "127.0.0.1:${HOST_OPEN_WEBUI_PORT:-5555}:8080"
+    # Share the host network namespace for localhost-only operation
+    network_mode: "host"
     environment:
-      # Point to RAG API (unified app container on port 8000)
+      # Point to RAG API on localhost (both containers use host network)
       OPENAI_API_BASE_URL: "http://127.0.0.1:${HOST_RAG_API_PORT:-8000}/v1"
       OPENAI_API_KEY: "not-needed"
       RAG_AGENTIC_API_BASE_URL: "http://127.0.0.1:${HOST_RAG_API_PORT:-8000}"
+      RAG_POWER_DAEMON_URL: "${RAG_POWER_DAEMON_URL:-http://127.0.0.1:9009}"
 
       # Disable internal Ollama since we use external RAG API
       ENABLE_OLLAMA_API: "false"
@@ -148,17 +149,40 @@ services:
       # WebUI configuration
       WEBUI_SECRET_KEY: "${WEBUI_SECRET_KEY:-change-this-secret-in-production}"
       # Restrict CORS to localhost only
-      CORS_ALLOW_ORIGIN: "http://127.0.0.1:${HOST_OPEN_WEBUI_PORT:-5555},http://localhost:${HOST_OPEN_WEBUI_PORT:-5555}"
+      CORS_ALLOW_ORIGIN: "http://127.0.0.1:${HOST_OPEN_WEBUI_PORT:-5555};http://localhost:${HOST_OPEN_WEBUI_PORT:-5555}"
+
+      # Open WebUI binds to this port on localhost
+      PORT: "${HOST_OPEN_WEBUI_PORT:-5555}"
 
       # Optional: Disable features we don't need
       ENABLE_RAG_WEB_SEARCH: "false"
       ENABLE_IMAGE_GENERATION: "false"
+      # Required by recent Open WebUI builds to avoid config lookup errors
+      RAG_PERFORMANCE_PROFILE: "balanced"
+
+      # Avoid local embedding model load; use RAG API instead
+      RAG_EMBEDDING_ENGINE: "openai"
+      RAG_OPENAI_API_BASE_URL: "http://127.0.0.1:${HOST_RAG_API_PORT:-8000}/v1"
+      RAG_OPENAI_API_KEY: "not-needed"
+
+      # Skip alembic migrations on startup (DB already exists)
+      SKIP_DB_MIGRATIONS: "false"
+      # Avoid slow torch import during env initialization
+      SKIP_TORCH_IMPORT: "true"
+      # Avoid parsing CHANGELOG at startup
+      SKIP_CHANGELOG: "true"
+
+      # Use Weaviate instead of Chroma to avoid heavy chromadb imports
+      VECTOR_DB: "weaviate"
+      WEAVIATE_HTTP_HOST: "127.0.0.1"
+      WEAVIATE_HTTP_PORT: "${HOST_WEAVIATE_HTTP_PORT:-8080}"
+      WEAVIATE_GRPC_PORT: "${WEAVIATE_GRPC_PORT:-50051}"
 
     volumes:
       - ${HOST_OPEN_WEBUI_DATA:-open-webui_data}:/app/backend/data:Z
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:${HOST_OPEN_WEBUI_PORT:-5555}/health"]
       interval: 30s
       timeout: 10s
       retries: 3

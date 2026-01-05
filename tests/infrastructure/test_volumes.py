@@ -57,9 +57,15 @@ class VolumeConfig:
         # Load external volumes from EXTERNAL_VOLUMES env var
         self.volumes = self._load_external_volumes()
 
-        if self.volumes and self.volumes[0]['name'] == 'Libros':
-            self.host_libros_dir = self.volumes[0]['primary']
-            self.fallback_libros_dir = Path(self.volumes[0]['fallback'])
+        libros_config = next((vol for vol in self.volumes if vol.get('name') == 'Libros'), None)
+        if libros_config:
+            self.host_libros_dir = libros_config['primary']
+            self.fallback_libros_dir = Path(libros_config['fallback'])
+        else:
+            self.host_libros_dir = os.getenv("HOST_LIBROS_DIR", "/mnt/resources/Libros")
+            self.fallback_libros_dir = Path(
+                self.project_root / os.getenv("FALLBACK_LIBROS_DIR", "data/libros-fallback")
+            )
 
     def _load_external_volumes(self) -> List[Dict[str, str]]:
         """
