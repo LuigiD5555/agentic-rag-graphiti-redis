@@ -63,6 +63,10 @@ async def create_response(
     question = _extract_text_from_input(request.input)
 
     # Execute RAG query
+    selected_model = request.model
+    if not selected_model or selected_model == "rag-local":
+        selected_model = None
+
     try:
         result = rag.query(
             question=question,
@@ -70,6 +74,7 @@ async def create_response(
             temperature=request.temperature,
             max_tokens=request.max_tokens,
             thread_id=thread_id,
+            model=selected_model,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"RAG query failed: {str(e)}")

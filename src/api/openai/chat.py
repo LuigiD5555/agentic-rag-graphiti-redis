@@ -1,8 +1,11 @@
 """Router for /v1/chat/completions endpoint (OpenAI-compatible)."""
 import uuid
+import json
 import logging
+import time
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from src.api.models import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -48,18 +51,87 @@ async def get_rag_orchestrator() -> RAGOrchestrator:
     raise HTTPException(status_code=500, detail="RAG orchestrator not initialized")
 
 
-@router.post("/chat/completions", response_model=ChatCompletionResponse)
+async def _stream_chat_completion(
+    request: ChatCompletionRequest,
+    rag: RAGOrchestrator,
+    thread_id: str,
+    user_id: str,
+    answer: str,
+    result: Dict[str, Any],
+    selected_model: str,
+):
+    """Generate streaming response in OpenAI SSE format."""
+    completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
+
+    # Use selected_model or fallback to avoid null/rag-local in stream
+    model_name = selected_model or "gpt-3.5-turbo"
+
+    # Send the answer content in chunks (simulate word-by-word streaming)
+    created_timestamp = int(time.time())
+    role_chunk = {
+        "id": completion_id,
+        "object": "chat.completion.chunk",
+        "created": created_timestamp,
+        "model": model_name,
+        "choices": [
+            {
+                "index": 0,
+                "delta": {"role": "assistant"},
+                "finish_reason": None,
+            }
+        ],
+    }
+    yield f"data: {json.dumps(role_chunk)}\n\n"
+
+    words = answer.split()
+    for i, word in enumerate(words):
+        chunk_content = word + (" " if i < len(words) - 1 else "")
+        chunk = {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created_timestamp,
+            "model": model_name,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"content": chunk_content},
+                    "finish_reason": None,
+                }
+            ],
+        }
+        yield f"data: {json.dumps(chunk)}\n\n"
+
+    # Send final chunk with finish_reason
+    final_chunk = {
+        "id": completion_id,
+        "object": "chat.completion.chunk",
+        "created": created_timestamp,
+        "model": model_name,
+        "choices": [
+            {
+                "index": 0,
+                "delta": {},
+                "finish_reason": "stop",
+            }
+        ],
+    }
+    yield f"data: {json.dumps(final_chunk)}\n\n"
+    yield "data: [DONE]\n\n"
+
+
+@router.post("/chat/completions", response_model=None)
 async def create_chat_completion(
     request: ChatCompletionRequest,
+    http_request: Request,
     rag: RAGOrchestrator = Depends(get_rag_orchestrator),
     thread_id: str = Depends(get_thread_id),
     user_id: str = Depends(get_user_id),
-) -> ChatCompletionResponse:
+):
     """Create a chat completion using the RAG system.
 
     This endpoint is compatible with OpenAI's chat completions API.
     It extracts the user's question from the messages, performs RAG retrieval,
-    and generates a response.
+    and generates a response. Supports both streaming and non-streaming modes.
 
     Args:
         request: Chat completion request with messages and parameters.
@@ -69,10 +141,16 @@ async def create_chat_completion(
 
     Returns:
         Chat completion response with answer and usage information.
+        If stream=true, returns a StreamingResponse with SSE format.
     """
+    # Respect client streaming preference to avoid JSON parsing errors.
     state = load_or_create_state(user_id, thread_id)
 
     question = _extract_question_from_messages(request.messages)
+
+    selected_model = request.model
+    if not selected_model or selected_model == "rag-local":
+        selected_model = None
 
     try:
         result = rag.query(
@@ -81,8 +159,10 @@ async def create_chat_completion(
             temperature=request.temperature,
             max_tokens=request.max_tokens,
             thread_id=thread_id,
+            model=selected_model,
         )
     except Exception as e:
+        logger.error(f"RAG query failed: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"RAG query failed: {str(e)}")
 
     answer = result["answer"]
@@ -103,6 +183,23 @@ async def create_chat_completion(
 
     save_state(state, thread_id)
 
+    # Handle streaming response only when the client explicitly accepts SSE.
+    accept_header = (http_request.headers.get("accept") or "").lower()
+    stream_allowed = "text/event-stream" in accept_header
+    if request.stream and not stream_allowed:
+        logger.warning(
+            "Streaming requested but client does not accept SSE; returning JSON response. "
+            "accept=%s",
+            accept_header,
+        )
+
+    if request.stream and stream_allowed:
+        return StreamingResponse(
+            _stream_chat_completion(request, rag, thread_id, user_id, answer, result, selected_model),
+            media_type="text/event-stream",
+        )
+
+    # Handle non-streaming response
     prompt_text = "\n".join(msg.content for msg in request.messages)
     prompt_tokens = _estimate_tokens(prompt_text)
     completion_tokens = _estimate_tokens(answer)
@@ -127,4 +224,5 @@ async def create_chat_completion(
         ),
     )
 
+    logger.info(f"Sending response: {response.model_dump_json()[:500]}...")
     return response

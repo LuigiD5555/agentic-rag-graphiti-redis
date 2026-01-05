@@ -2,6 +2,7 @@
 from typing import List, Dict, Optional
 from openai import OpenAI
 from src.rag.audit import get_logger
+from src.rag.models import is_embedding_model
 
 log = get_logger(__name__)
 
@@ -59,12 +60,20 @@ class LMStudioChatService:
         )
 
     def _get_first_available_model(self) -> str:
-        """Get first available model from LM Studio."""
+        """Get first available non-embedding model from LM Studio."""
         try:
             models = self.client.models.list()
             if models.data:
+                # Filter out embedding models and select first language model
+                for model in models.data:
+                    model_id = model.id
+                    if not is_embedding_model(model_id):
+                        log.info("Auto-selected language model: %s", model_id)
+                        return model_id
+
+                # Fallback: if all models are embedding models, use first anyway
                 model_id = models.data[0].id
-                log.info("Auto-selected model: %s", model_id)
+                log.warning("No language models found, using first model: %s", model_id)
                 return model_id
             else:
                 log.warning("No models found in LM Studio, using fallback")

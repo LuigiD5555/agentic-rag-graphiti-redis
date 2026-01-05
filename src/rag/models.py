@@ -26,27 +26,32 @@ def list_models(base_url: str, timeout: float = 2.0) -> List[Dict[str, Any]]:
     return []
 
 
+def is_embedding_model(model_id: str) -> bool:
+    """Check if a model is an embedding model based on its ID."""
+    lid = model_id.lower()
+    embedding_keywords = ["embed", "embedding", "minilm", "bge", "nomic", "paraphrase"]
+    return any(keyword in lid for keyword in embedding_keywords)
+
+
 def pick_first_active_model(models: List[Dict[str, Any]]) -> Optional[str]:
-    """Pick the first model id if any."""
+    """Pick the first non-embedding model id if any."""
     for m in models:
         mid = m.get("id") or m.get("name")
-        if mid:
+        if mid and not is_embedding_model(mid):
             return mid
     return None
 
 
 def pick_first_embedding_model(models: List[Dict[str, Any]]) -> Optional[str]:
     """
-    Heuristic: prefer ids containing 'embed' or 'minilm'.
-    Fallback: first model.
+    Pick the first embedding model based on keywords in the model ID.
+    Fallback: None (no chat model should be used as embedding model).
     """
-    candidates = []
     for m in models:
         mid = m.get("id") or m.get("name") or ""
-        lid = mid.lower()
-        if "embed" in lid or "minilm" in lid or "nomic" in lid:
-            candidates.append(mid)
-    return candidates[0] if candidates else pick_first_active_model(models)
+        if mid and is_embedding_model(mid):
+            return mid
+    return None
 
 
 def resolve_models_from_env() -> Dict[str, Optional[str]]:
