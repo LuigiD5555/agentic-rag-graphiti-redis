@@ -45,7 +45,8 @@ class AutoIngestionScheduler:
         config: Config,
         scan_interval: int = 300,  # 5 minutes default
         initial_scan: bool = True,
-        initial_wait: int = 30
+        initial_wait: int = 30,
+        max_files: int = 0
     ):
         """
         Initialize the auto-ingestion scheduler.
@@ -60,6 +61,7 @@ class AutoIngestionScheduler:
         self.scan_interval = scan_interval
         self.initial_scan = initial_scan
         self.initial_wait = initial_wait
+        self.max_files = max_files
         self.orchestrator = IngestionOrchestrator(config)
 
         # Shutdown flag
@@ -73,7 +75,11 @@ class AutoIngestionScheduler:
         self.last_scan_time: Optional[datetime] = None
         self.last_scan_duration: float = 0.0
 
-        logger.info(f"AutoIngestionScheduler initialized: interval={scan_interval}s")
+        logger.info(
+            "AutoIngestionScheduler initialized: interval=%ss, max_files=%s",
+            scan_interval,
+            max_files if max_files else "unlimited",
+        )
 
     def run_ingestion_scan(self) -> dict:
         """
@@ -105,7 +111,7 @@ class AutoIngestionScheduler:
                 dry_run=False,
                 per_file=False,
                 streaming=True,  # Stream results as they're found
-                max_files=0,
+                max_files=self.max_files,
                 scan_progress=100,  # Log every 100 directories
                 log_level=None
             )
@@ -223,6 +229,7 @@ def create_scheduler_from_env() -> AutoIngestionScheduler:
         AUTO_SCAN_INTERVAL: Seconds between scans (default: 300 = 5 minutes)
         AUTO_SCAN_INITIAL: Whether to run initial scan (default: true)
         AUTO_SCAN_INITIAL_WAIT: Seconds to wait before initial scan (default: 30)
+        AUTO_SCAN_MAX_FILES: Max files to ingest per scan (default: 0 = no limit)
 
     Returns:
         Configured AutoIngestionScheduler instance
@@ -235,17 +242,20 @@ def create_scheduler_from_env() -> AutoIngestionScheduler:
     scan_interval = int(os.environ.get("AUTO_SCAN_INTERVAL", "300"))
     initial_scan = os.environ.get("AUTO_SCAN_INITIAL", "true").lower() == "true"
     initial_wait = int(os.environ.get("AUTO_SCAN_INITIAL_WAIT", "30"))
+    max_files = int(os.environ.get("AUTO_SCAN_MAX_FILES", "0"))
 
     logger.info(f"Scheduler configuration:")
     logger.info(f"  Scan interval: {scan_interval}s ({scan_interval // 60} minutes)")
     logger.info(f"  Initial scan: {initial_scan}")
     logger.info(f"  Initial wait: {initial_wait}s")
+    logger.info(f"  Max files per scan: {max_files if max_files else 'unlimited'}")
 
     return AutoIngestionScheduler(
         config=config,
         scan_interval=scan_interval,
         initial_scan=initial_scan,
-        initial_wait=initial_wait
+        initial_wait=initial_wait,
+        max_files=max_files,
     )
 
 

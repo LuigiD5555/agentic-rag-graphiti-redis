@@ -25,7 +25,9 @@ class IngestionOrchestrator:
         self._config = config
 
         # Initialize Redis cache manager
-        settings_dict = {k: getattr(config, k) for k in dir(config) if not k.startswith('_')}
+        # Use Config class attributes instead of instance to avoid Pydantic v2.11 deprecation
+        config_class = type(config)
+        settings_dict = {k: getattr(config, k) for k in dir(config_class) if not k.startswith('_')}
         self._cache_manager = IngestionCacheManager.from_settings(settings_dict)
 
         # Initialize discovery service with cache manager
