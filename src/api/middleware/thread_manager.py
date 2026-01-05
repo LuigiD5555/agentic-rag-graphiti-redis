@@ -1,4 +1,6 @@
 """Thread ID management middleware for memory system."""
+import hashlib
+import json
 import logging
 import os
 from typing import Optional
@@ -13,6 +15,53 @@ from src.memory.core.identifiers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_conversation_id_from_body(body_bytes: bytes, user_id: str) -> Optional[str]:
+    """Extract stable conversation ID from request body.
+
+    For Open WebUI and other clients that send conversation history,
+    we generate a stable ID based on:
+    1. First user message in the conversation (if available)
+    2. User ID + timestamp (fallback)
+
+    Args:
+        body_bytes: Raw request body
+        user_id: User identifier
+
+    Returns:
+        Stable conversation ID (64-char hex) or None if extraction fails
+    """
+    try:
+        body = json.loads(body_bytes.decode('utf-8'))
+        messages = body.get('messages', [])
+
+        if not messages:
+            return None
+
+        # Find the first user message in the conversation
+        first_user_msg = None
+        for msg in messages:
+            if isinstance(msg, dict) and msg.get('role') == 'user':
+                first_user_msg = msg.get('content', '')
+                break
+
+        if not first_user_msg:
+            return None
+
+        # Generate stable hash from user_id + first message
+        # This ensures same conversation has same ID across requests
+        conversation_seed = f"{user_id}:{first_user_msg}"
+        hasher = hashlib.sha256()
+        hasher.update(conversation_seed.encode('utf-8'))
+
+        stable_id = hasher.hexdigest()
+        logger.debug(f"Extracted stable conversation ID from first message (len={len(first_user_msg)})")
+        return stable_id
+
+    except Exception as e:
+        logger.warning(f"Failed to extract conversation ID from body: {e}")
+        return None
 
 
 class ThreadManagerMiddleware(BaseHTTPMiddleware):
@@ -53,6 +102,9 @@ class ThreadManagerMiddleware(BaseHTTPMiddleware):
         Returns:
             Response with thread ID header
         """
+        # Debug: Log all headers for troubleshooting (temporary for diagnosis)
+        logger.debug(f"Request headers: {dict(request.headers)}")
+
         # Extract or generate user_id
         user_id = request.headers.get(self.USER_ID_HEADER)
 
@@ -69,15 +121,33 @@ class ThreadManagerMiddleware(BaseHTTPMiddleware):
         thread_id = request.headers.get(self.THREAD_ID_HEADER)
 
         if thread_id and validate_thread_id(thread_id):
-            # Valid existing thread
-            logger.debug(f"Using existing thread_id: {thread_id[:16]}...")
+            # Valid existing thread from header
+            logger.debug(f"Using existing thread_id from header: {thread_id[:16]}...")
         else:
-            # Generate new thread
-            thread_id = generate_thread_id(
-                user_id=user_id,
-                server_secret=self.server_secret
-            )
-            logger.debug(f"Generated new thread_id: {thread_id[:16]}...")
+            # Try to extract conversation ID from request body
+            # (for Open WebUI and other clients that send conversation history)
+            body_bytes = await request.body()
+
+            # Make body available again for endpoint processing
+            async def receive():
+                return {"type": "http.request", "body": body_bytes}
+
+            request._receive = receive
+
+            # Extract stable conversation ID from first message
+            conversation_id = _extract_conversation_id_from_body(body_bytes, user_id)
+
+            if conversation_id:
+                # Use stable conversation ID
+                thread_id = conversation_id
+                logger.info(f"Using stable conversation ID from first message: {thread_id[:16]}...")
+            else:
+                # Fallback: generate new random thread
+                thread_id = generate_thread_id(
+                    user_id=user_id,
+                    server_secret=self.server_secret
+                )
+                logger.debug(f"Generated new thread_id: {thread_id[:16]}...")
 
         # Inject into request state
         request.state.user_id = user_id

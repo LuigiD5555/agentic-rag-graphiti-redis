@@ -152,6 +152,10 @@ async def create_chat_completion(
     if not selected_model or selected_model == "rag-local":
         selected_model = None
 
+    # Debug: Log conversation history length
+    history_len = len(state.get("messages", []))
+    logger.debug(f"Thread {thread_id[:8]}... has {history_len} messages in history")
+
     try:
         result = rag.query(
             question=question,
@@ -160,6 +164,7 @@ async def create_chat_completion(
             max_tokens=request.max_tokens,
             thread_id=thread_id,
             model=selected_model,
+            conversation_history=state["messages"],
         )
     except Exception as e:
         logger.error(f"RAG query failed: {str(e)}", exc_info=True)
@@ -168,11 +173,29 @@ async def create_chat_completion(
     answer = result["answer"]
 
     if result.get("sources"):
-        sources_text = "\n\nSources:\n" + "\n".join(
-            f"- {src['path']} (score: {src['relevance_score']:.3f})"
-            for src in result["sources"]
-        )
-        answer += sources_text
+        # Filter out sources with very low relevance (< 5%)
+        import os
+        relevant_sources = [src for src in result["sources"] if src['relevance_score'] >= 0.05]
+
+        if relevant_sources:
+            sources_text = "\n\n---\n**Fuentes consultadas:**\n"
+            for idx, src in enumerate(relevant_sources, 1):
+                path = src['path']
+                score = src['relevance_score']
+
+                # Extract filename and directory
+                filename = os.path.basename(path)
+                directory = os.path.dirname(path)
+
+                # Convert score to percentage
+                relevance_pct = score * 100
+
+                # Format source with better readability (no emojis)
+                sources_text += f"\n{idx}. {filename}\n"
+                sources_text += f"   Ubicacion: {directory}/\n"
+                sources_text += f"   Relevancia: {relevance_pct:.1f}%\n"
+
+            answer += sources_text
 
     state["messages"].append({"role": "user", "content": question})
     state["messages"].append({"role": "assistant", "content": answer})
