@@ -118,8 +118,36 @@ def save_state(
         logger.error(f"Failed to save state: {e}", exc_info=True)
 
 
+def _estimate_state_size_bytes(state: ConversationState) -> int:
+    """Estimate size of state in bytes.
+
+    Args:
+        state: Current conversation state
+
+    Returns:
+        Estimated size in bytes
+    """
+    import sys
+    import json
+
+    try:
+        # Serialize state to JSON to get accurate size estimate
+        state_json = json.dumps(dict(state))
+        return sys.getsizeof(state_json)
+    except Exception as e:
+        logger.warning(f"Failed to estimate state size: {e}")
+        # Fallback: rough estimate based on message count
+        messages = state.get("messages", [])
+        # Assume ~500 bytes per message on average
+        return len(messages) * 500
+
+
 def should_compress_state(state: ConversationState) -> bool:
     """Check if state should be compressed.
+
+    Compression is triggered when:
+    1. State size approaches memory limit (configurable)
+    2. Message count exceeds 2x window size
 
     Args:
         state: Current conversation state
@@ -128,10 +156,30 @@ def should_compress_state(state: ConversationState) -> bool:
         True if compression recommended
     """
     window_size = int(os.getenv("MEMORY_WINDOW_SIZE", "10"))
+    max_state_size_kb = int(os.getenv("MAX_STATE_SIZE_KB", "100"))  # 100KB default
+    compression_threshold = float(os.getenv("COMPRESSION_THRESHOLD", "0.8"))  # Compress at 80%
+
     messages = state.get("messages", [])
 
-    # Compress if we have more than 2x window size
-    return len(messages) > window_size * 2
+    # Check 1: Message count threshold (existing behavior)
+    message_count_exceeded = len(messages) > window_size * 2
+
+    # Check 2: Memory size threshold (new behavior)
+    state_size_bytes = _estimate_state_size_bytes(state)
+    state_size_kb = state_size_bytes / 1024
+    max_size_kb = max_state_size_kb
+    size_threshold_exceeded = state_size_kb >= (max_size_kb * compression_threshold)
+
+    # Log compression trigger details
+    if message_count_exceeded or size_threshold_exceeded:
+        logger.info(
+            f"Compression check: messages={len(messages)}/{window_size * 2}, "
+            f"size={state_size_kb:.1f}KB/{max_size_kb * compression_threshold:.1f}KB "
+            f"(limit={max_size_kb}KB)"
+        )
+
+    # Trigger compression if either threshold exceeded
+    return message_count_exceeded or size_threshold_exceeded
 
 
 def compress_and_update_state(state: ConversationState) -> ConversationState:
