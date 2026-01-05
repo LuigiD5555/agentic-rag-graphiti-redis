@@ -27,6 +27,13 @@ class RAGOrchestrator:
         "- If multiple sources provide conflicting information, acknowledge this.\n"
     )
 
+    CONVERSATIONAL_SYSTEM_PROMPT = (
+        "You are a helpful and friendly assistant. "
+        "Respond naturally to greetings, thanks, and casual conversation. "
+        "Be concise, warm, and conversational. "
+        "You don't need to provide sources or context - just engage naturally with the user."
+    )
+
     def __init__(
         self,
         retriever: WeaviateRetriever,
@@ -259,7 +266,13 @@ class RAGOrchestrator:
                 "Low relevance score detected: %.3f (threshold: %.2f)",
                 avg_score, self.min_relevance_score
             )
-            trigger_web_search = True
+            # For GENERAL_KNOWLEDGE queries with low relevance, prefer web search
+            # For PERSONAL_KB queries, trust the RAG results even if low (user's data is what they want)
+            if intent == "GENERAL_KNOWLEDGE":
+                trigger_web_search = True
+            else:
+                log.info("PERSONAL_KB intent: using RAG results despite low relevance")
+                trigger_web_search = False
 
         # Step 2.5: Execute web search if triggered and enabled
         if trigger_web_search and self.enable_web_fallback and self.web_search_client:
@@ -319,17 +332,26 @@ class RAGOrchestrator:
         if not retrieved_docs:
             log.warning("No documents retrieved from any source (local or web)")
 
-            # Fail soft: Use LLM without context instead of returning generic message
-            log.info("Falling back to LLM without RAG context")
-            answer = self._generate_answer(
-                question=question,
-                context="",  # No context available
-                temperature=temperature,
-                max_tokens=max_tokens,
-                system_prompt=system_prompt,
-                model=model,
-                conversation_history=conversation_history,
-            )
+            # For GENERAL_KNOWLEDGE, use LLM without context (model has general knowledge)
+            # For PERSONAL_KB, inform user that no relevant documents were found
+            if intent == "GENERAL_KNOWLEDGE":
+                log.info("GENERAL_KNOWLEDGE: Falling back to LLM general knowledge")
+                answer = self._generate_answer(
+                    question=question,
+                    context="",  # No context available
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    system_prompt=system_prompt,
+                    model=model,
+                    conversation_history=conversation_history,
+                )
+            else:
+                # PERSONAL_KB but no documents found - inform user
+                log.info("PERSONAL_KB: No documents found, informing user")
+                answer = (
+                    "I couldn't find relevant information in your documents to answer this question. "
+                    "Could you provide more context or check if the information is available in your files?"
+                )
 
             return {
                 "answer": answer,
@@ -340,7 +362,7 @@ class RAGOrchestrator:
                     "model": model,
                     "retrieval_error": retrieval_error,
                     "used_web_search": used_web_search,
-                    "fallback_mode": "llm_only",
+                    "fallback_mode": "llm_only" if intent == "GENERAL_KNOWLEDGE" else "no_docs_found",
                     "retrieval_metadata": retrieval_metadata,
                     "intent": intent,
                     "rag_gating": self.enable_rag_gating,
@@ -351,6 +373,60 @@ class RAGOrchestrator:
             "Retrieved %d documents (%d local, %d web)",
             len(retrieved_docs), len(kb_results), len(web_results)
         )
+
+        # Step 2.8: Check if all retrieved documents have extremely low relevance
+        # If all scores are below 5%, treat as if no documents were found
+        max_score = max((doc.get("score", 0.0) for doc in retrieved_docs), default=0.0)
+        if max_score < 0.05:
+            log.warning("All retrieved documents have very low relevance (max=%.3f)", max_score)
+
+            # For GENERAL_KNOWLEDGE, use LLM without context
+            if intent == "GENERAL_KNOWLEDGE":
+                log.info("GENERAL_KNOWLEDGE: Falling back to LLM (irrelevant RAG results)")
+                answer = self._generate_answer(
+                    question=question,
+                    context="",  # Ignore irrelevant context
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    system_prompt=system_prompt,
+                    model=model,
+                    conversation_history=conversation_history,
+                )
+
+                return {
+                    "answer": answer,
+                    "sources": [],  # Don't show irrelevant sources
+                    "metadata": {
+                        "retrieved_count": 0,
+                        "query": question,
+                        "model": model,
+                        "fallback_mode": "llm_only_irrelevant_results",
+                        "max_relevance_score": max_score,
+                        "intent": intent,
+                        "rag_gating": self.enable_rag_gating,
+                    },
+                }
+            else:
+                # PERSONAL_KB: inform user that no relevant documents were found
+                log.info("PERSONAL_KB: No relevant documents found (max score=%.3f)", max_score)
+                answer = (
+                    "No encontré información relevante en tus documentos para responder esta pregunta. "
+                    "Verifica que los documentos estén indexados correctamente o proporciona más contexto."
+                )
+
+                return {
+                    "answer": answer,
+                    "sources": [],
+                    "metadata": {
+                        "retrieved_count": 0,
+                        "query": question,
+                        "model": model,
+                        "fallback_mode": "no_relevant_docs",
+                        "max_relevance_score": max_score,
+                        "intent": intent,
+                        "rag_gating": self.enable_rag_gating,
+                    },
+                }
 
         # Step 2: Build context from retrieved documents
         context = self._build_context(retrieved_docs)
@@ -369,6 +445,16 @@ class RAGOrchestrator:
             model=model,
             conversation_history=conversation_history,
         )
+
+        # Step 3.5: Add prefix if we used web search as primary source
+        # (when no local docs were useful and we got results from web)
+        if used_web_search and len(kb_results) == 0 and len(web_results) > 0:
+            answer = (
+                "No encontre informacion relevante en tus documentos, "
+                "pero busque en internet y encontre lo siguiente:\n\n"
+                + answer
+            )
+            log.info("Added web search fallback prefix to answer")
 
         # Step 4: Extract unique sources
         sources = self._extract_sources(retrieved_docs)
@@ -433,7 +519,7 @@ class RAGOrchestrator:
 
         Args:
             question: User's question.
-            context: Retrieved context.
+            context: Retrieved context (empty string for conversational queries).
             temperature: LLM temperature.
             max_tokens: Max response tokens.
             system_prompt: Override system prompt.
@@ -443,44 +529,64 @@ class RAGOrchestrator:
         Returns:
             Generated answer.
         """
+        # Determine if this is a conversational query (no RAG context)
+        is_conversational = not context or len(context.strip()) == 0
+
         # Detect language and adapt system prompt if multilingual is enabled
         if self.enable_multilingual and not system_prompt:
             detected_lang = self.language_detector.detect_language(question)
             lang_name = self.language_detector.get_language_name(detected_lang)
             log.info("Detected query language: %s (%s)", lang_name, detected_lang)
 
-            # Get localized system prompt
-            localized_prompt = self.language_detector.get_system_prompt(detected_lang)
-            # Add explicit language instruction
-            final_prompt = self.language_detector.add_language_instruction(
-                localized_prompt, detected_lang
-            )
+            if is_conversational:
+                # Use conversational prompt for queries without RAG context
+                final_prompt = self.CONVERSATIONAL_SYSTEM_PROMPT
+                log.info("Using conversational system prompt (no RAG context)")
+            else:
+                # Get localized system prompt for RAG queries
+                localized_prompt = self.language_detector.get_system_prompt(detected_lang)
+                # Add explicit language instruction
+                final_prompt = self.language_detector.add_language_instruction(
+                    localized_prompt, detected_lang
+                )
         else:
-            final_prompt = system_prompt or self.system_prompt
+            # Use provided system_prompt or default based on context availability
+            if is_conversational:
+                final_prompt = system_prompt or self.CONVERSATIONAL_SYSTEM_PROMPT
+                log.info("Using conversational system prompt (no RAG context)")
+            else:
+                final_prompt = system_prompt or self.system_prompt
 
         # Build messages with conversation history if provided
         messages = [{"role": "system", "content": final_prompt}]
 
-        # Add conversation history (excluding the last user message)
+        # Add full conversation history (doesn't include current question yet)
         if conversation_history:
-            # Filter out the last user message (it's the current question)
-            for msg in conversation_history[:-1]:
+            for msg in conversation_history:
                 messages.append({
                     "role": msg["role"],
                     "content": msg["content"]
                 })
-            log.info("Added %d historical messages to context", len(conversation_history) - 1)
+            log.info("Added %d historical messages to context", len(conversation_history))
 
-        # Add current question with RAG context
-        messages.append({
-            "role": "user",
-            "content": f"""Context:
+        # Format user message based on whether we have RAG context
+        if is_conversational:
+            # Simple conversational message without context formatting
+            messages.append({
+                "role": "user",
+                "content": question
+            })
+        else:
+            # RAG-style message with context
+            messages.append({
+                "role": "user",
+                "content": f"""Context:
 {context}
 
 Question: {question}
 
 Answer:"""
-        })
+            })
 
         answer = self.chat_service.chat(
             messages=messages,

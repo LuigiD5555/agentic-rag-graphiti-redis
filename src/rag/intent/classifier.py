@@ -112,16 +112,30 @@ class IntentClassifier:
 
     # Multi-language patterns for PERSONAL_KB (user's documents/notes)
     PERSONAL_KB_PATTERNS = {
-        'es': ['mis notas', 'mis apuntes', 'en el pdf', 'en mi repo', 'mis archivos',
-               'según mis', 'mi setup', 'el error que me dio', 'en mi documento'],
-        'en': ['my notes', 'in my notes', 'in the pdf', 'in my repo', 'my files',
-               'according to my', 'my setup', 'the error i got', 'in my document'],
-        'fr': ['mes notes', 'dans le pdf', 'mon repo', 'mes fichiers', 'selon mes'],
-        'de': ['meine notizen', 'im pdf', 'mein repo', 'meine dateien', 'laut meinen'],
-        'ja': ['私のノート', 'PDFで', '私のファイル', '私のリポジトリ'],
-        'ko': ['내 노트', 'PDF에서', '내 파일', '내 저장소'],
-        'ru': ['мои заметки', 'в pdf', 'мои файлы', 'мой репозиторий', 'в моих'],
-        'zh': ['我的笔记', '在PDF里', '我的文件', '我的仓库', '根据我的'],
+        'es': ['mis notas', 'mis apuntes', 'los apuntes', 'las notas', 'el documento',
+               'en el pdf', 'en mi repo', 'mis archivos', 'los archivos',
+               'según mis', 'según el', 'mi setup', 'el error que me dio', 'en mi documento',
+               'revisa el', 'revisa los', 'busca en el', 'busca en los',
+               'en el archivo', 'del pdf', 'del documento', 'de los apuntes'],
+        'en': ['my notes', 'the notes', 'in my notes', 'in the notes', 'in the pdf',
+               'in my repo', 'my files', 'the files', 'the document',
+               'according to my', 'according to the', 'my setup', 'the error i got',
+               'in my document', 'in the document',
+               'check the', 'search in the', 'from the pdf', 'from the document', 'from the notes'],
+        'fr': ['mes notes', 'les notes', 'dans le pdf', 'mon repo', 'mes fichiers',
+               'les fichiers', 'selon mes', 'selon le',
+               'vérifie le', 'cherche dans le', 'du pdf', 'du document'],
+        'de': ['meine notizen', 'die notizen', 'im pdf', 'mein repo', 'meine dateien',
+               'die dateien', 'laut meinen', 'laut dem',
+               'prüfe die', 'suche in den', 'aus dem pdf', 'aus dem dokument'],
+        'ja': ['私のノート', 'ノート', 'PDFで', '私のファイル', 'ファイル', '私のリポジトリ',
+               'ドキュメント', 'PDFから', 'ノートから'],
+        'ko': ['내 노트', '노트', 'PDF에서', '내 파일', '파일', '내 저장소',
+               '문서', 'PDF에서', '노트에서'],
+        'ru': ['мои заметки', 'заметки', 'в pdf', 'мои файлы', 'файлы', 'мой репозиторий',
+               'в моих', 'в документе', 'из pdf', 'из документа'],
+        'zh': ['我的笔记', '笔记', '在PDF里', '我的文件', '文件', '我的仓库',
+               '根据我的', '在文档里', '从PDF', '从文档'],
     }
 
     def __init__(self):
@@ -230,8 +244,9 @@ class IntentClassifier:
         Returns:
             True if RAG should be used, False otherwise.
         """
-        # Only PERSONAL_KB requires RAG
-        return intent == "PERSONAL_KB"
+        # Use RAG for PERSONAL_KB (explicit references) and GENERAL_KNOWLEDGE (try RAG first)
+        # Skip RAG only for SMALL_TALK, PERSONAL_CHAT, and CONTROL
+        return intent in ("PERSONAL_KB", "GENERAL_KNOWLEDGE")
 
 
 __all__ = ["IntentClassifier", "IntentType"]
