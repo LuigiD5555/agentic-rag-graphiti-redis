@@ -14,6 +14,8 @@ ExecStartPre=/usr/bin/podman rm -f rag-tool-ocr
 # 2) Start the container (API on port 8000 inside, mapped to 19103 on host)
 ExecStartPre=/usr/bin/podman run -d --name rag-tool-ocr \
   --pull=never \
+  --memory=1g \
+  --cpus=0.5 \
   -p 127.0.0.1:19103:8000 \
   --security-opt=no-new-privileges \
   --cap-drop=all \

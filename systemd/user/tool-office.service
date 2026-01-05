@@ -14,6 +14,7 @@ ExecStartPre=/usr/bin/podman rm -f rag-tool-office
 # 2) Start the container (API on port 8000 inside, mapped to 19102 on host)
 ExecStartPre=/usr/bin/podman run -d --name rag-tool-office \
   --pull=never \
+  --memory=500m \
   -p 127.0.0.1:19102:8000 \
   -e HOME=/tmp \
   --security-opt=no-new-privileges \

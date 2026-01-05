@@ -14,6 +14,7 @@ ExecStartPre=/usr/bin/podman rm -f rag-tool-document-processor
 # 2) Start the consolidated container (API on port 8000 inside, mapped to 19104 on host)
 ExecStartPre=/usr/bin/podman run -d --name rag-tool-document-processor \
   --pull=never \
+  --memory=500m \
   -p 127.0.0.1:19104:8000 \
   -e HOME=/tmp \
   --security-opt=no-new-privileges \

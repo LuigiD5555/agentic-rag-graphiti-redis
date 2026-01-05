@@ -14,6 +14,8 @@ ExecStartPre=/usr/bin/podman rm -f rag-tool-extractor
 # 2) Start the container (API on port 8000 inside, mapped to 19101 on host)
 ExecStartPre=/usr/bin/podman run -d --name rag-tool-extractor \
   --pull=never \
+  --memory=512m \
+  --cpus=0.25 \
   -p 127.0.0.1:19101:8000 \
   --security-opt=no-new-privileges \
   --cap-drop=all \
