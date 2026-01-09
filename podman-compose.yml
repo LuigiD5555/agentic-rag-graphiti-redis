@@ -131,6 +131,9 @@ services:
     restart: unless-stopped
     logging:
       driver: journald
+    # Only start when explicitly requested via profile
+    profiles:
+      - webui
     depends_on:
       app:
         condition: service_healthy
