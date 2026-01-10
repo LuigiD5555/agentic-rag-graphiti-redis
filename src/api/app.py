@@ -4,7 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI, Request, APIRouter
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import weaviate
@@ -19,6 +19,7 @@ from src.rag.embeddings_factory import get_embedding_service
 from src.conf import settings as rag_config
 from src.ingestion.orchestrator import IngestionOrchestrator
 from src.providers.factory import ProviderFactory
+from src.providers.api_factory import get_api_router_family
 from src.apps.websearch import SearXNGClient
 
 
@@ -316,50 +317,18 @@ def get_snapshot_scheduler_instance():
     return _snapshot_scheduler
 
 
-# Include routers based on API mode
-if API_MODE == "openai":
-    # OpenAI-compatible routers
-    from src.api.openai import (
-        chat_router,
-        models_router,
-        responses_router,
-        embeddings_router,
-    )
-    from src.api.openai.chat import get_rag_orchestrator as openai_chat_get_rag
-    from src.api.openai.responses import get_rag_orchestrator as openai_responses_get_rag
-    from src.api.openai.embeddings import get_embedding_service as openai_get_embedding
-
-    app.dependency_overrides[openai_chat_get_rag] = get_rag_instance
-    app.dependency_overrides[openai_responses_get_rag] = get_rag_instance
-    app.dependency_overrides[openai_get_embedding] = get_embedding_instance
-
-    app.include_router(models_router)
-    app.include_router(chat_router)
-    app.include_router(responses_router)
-    app.include_router(embeddings_router)
-
-    logger.info("Loaded OpenAI-compatible routers")
-else:
-    # Ollama-compatible routers
-    from src.api.ollama import ollama_router
-    from src.api.ollama.router import get_rag_orchestrator as ollama_get_rag
-    from src.api.ollama.router import get_embedding_service as ollama_get_embedding
-    from src.api.ollama.router import get_chat_memory_manager as ollama_get_chat_memory
-    from src.api.ollama.router import get_snapshot_scheduler as ollama_get_scheduler
-
-    app.dependency_overrides[ollama_get_rag] = get_rag_instance
-    app.dependency_overrides[ollama_get_embedding] = get_embedding_instance
-    app.dependency_overrides[ollama_get_chat_memory] = get_chat_memory_instance
-    app.dependency_overrides[ollama_get_scheduler] = get_snapshot_scheduler_instance
-
-    app.include_router(ollama_router)
-
-    # Also include Ollama router with /ollama prefix for Open WebUI compatibility
-    ollama_compat_router = APIRouter(prefix="/ollama")
-    ollama_compat_router.include_router(ollama_router)
-    app.include_router(ollama_compat_router)
-
-    logger.info("Loaded Ollama-compatible routers")
+# Include routers based on API mode (via factory to hide HTTP specifics)
+api_family = get_api_router_family(rag_config)
+api_family.apply(
+    app,
+    providers={
+        "rag": get_rag_instance,
+        "embedding": get_embedding_instance,
+        "chat_memory": get_chat_memory_instance,
+        "snapshot_scheduler": get_snapshot_scheduler_instance,
+    },
+)
+logger.info("Loaded API router family: %s", api_family.name)
 
 
 # Always include RAG router (for ingestion)
