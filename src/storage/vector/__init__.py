@@ -9,57 +9,150 @@ Design note (Django-style):
 - Backend resolution logic is internal and whitelisted (not user-extensible).
 """
 
-from typing import TYPE_CHECKING, Any, Mapping, Iterable
-from urllib.parse import urlparse
+from __future__ import annotations
 
+from typing import Any, Mapping, Iterable, List
+from urllib.parse import urlparse
+import types
+
+from weaviate.classes.config import Property, DataType
 from src.rag.interfaces.vector_interface import VectorInterface
 
-if TYPE_CHECKING:  # pragma: no cover
-    from typing import Any as Config
+
+def _get_rag_document_properties() -> List[Property]:
+    """
+    Define the schema properties for the RAG document collection.
+
+    Returns:
+        List of Weaviate Property definitions for the RAG collection.
+    """
+    return [
+        Property(name="content", data_type=DataType.TEXT, description="Document content"),
+        Property(name="external_id", data_type=DataType.TEXT, description="External document ID"),
+        Property(name="source", data_type=DataType.TEXT, description="Source file path"),
+        Property(name="chunk_index", data_type=DataType.INT, description="Chunk index within document"),
+        Property(name="file_id", data_type=DataType.TEXT, description="File identifier"),
+        Property(name="file_path", data_type=DataType.TEXT, description="Full file path"),
+        Property(name="owner_id", data_type=DataType.TEXT, description="Owner user ID"),
+        Property(name="visibility", data_type=DataType.TEXT, description="Visibility level"),
+        Property(name="allowed_user_ids", data_type=DataType.TEXT_ARRAY, description="Allowed user IDs"),
+        Property(name="metadata", data_type=DataType.TEXT, description="Additional metadata (JSON)"),
+        Property(name="ingested_at", data_type=DataType.DATE, description="Ingestion timestamp"),
+        Property(name="structure_summary", data_type=DataType.TEXT, description="Document structure summary"),
+    ]
 
 
-def _vector_store_settings(config: Config, alias: str) -> Mapping[str, Any]:
+def _vector_store_settings(config: Any, alias: str) -> Mapping[str, Any]:
+    """
+    Resolve the vector store settings for a given alias from the settings object.
+
+    Args:
+        config: Application settings object or module. Must expose VECTOR_STORES (dict-like).
+        alias: The vector store alias (e.g., "default").
+
+    Returns:
+        A dict-like mapping with the store configuration.
+
+    Raises:
+        TypeError: If VECTOR_STORES or the alias config are not dicts.
+        KeyError: If the alias does not exist.
+    """
     stores = getattr(config, "VECTOR_STORES", None) or {}
     if not isinstance(stores, dict):
-        raise TypeError("Config.VECTOR_STORES must be a dict mapping aliases to dict settings")
+        raise TypeError("VECTOR_STORES must be a dict mapping aliases to dict settings")
     if alias not in stores:
         available = ", ".join(sorted(stores.keys())) or "<none>"
         raise KeyError(f"Unknown VECTOR_STORES alias '{alias}'. Available: {available}")
     store_cfg = stores[alias]
     if not isinstance(store_cfg, dict):
-        raise TypeError(f"Config.VECTOR_STORES['{alias}'] must be a dict of settings")
+        raise TypeError(f"VECTOR_STORES['{alias}'] must be a dict of settings")
     return store_cfg
 
 
 def _config_with_overrides(
-    config: "Config",
+    config: Any,
     overrides: Mapping[str, Any],
     key_map: Mapping[str, str],
     allowed_passthrough: Iterable[str] | None = None,
-) -> "Config":
+) -> Any:
+    """
+    Create a new settings-like object with selected overrides applied.
+
+    Supports:
+      - Pydantic settings objects that provide `model_copy(update=...)`
+      - Python modules (e.g., `import src.settings as settings`)
+      - Plain objects with attributes
+
+    Args:
+        config: Settings object or module.
+        overrides: Raw store config dict (Django-style).
+        key_map: Mapping from Django-style keys to settings attribute names.
+        allowed_passthrough: Keys that are allowed in overrides but should be ignored here.
+
+    Returns:
+        A settings-like object with updated attributes.
+
+    Raises:
+        ValueError: If an unsupported override key is provided.
+    """
     update: dict[str, Any] = {}
     allowed = set(allowed_passthrough or ())
+
     for raw_key, raw_value in overrides.items():
         key_upper = str(raw_key or "").upper()
         if key_upper in {"BACKEND", "ENGINE"}:
             continue
         if key_upper in allowed:
             continue
+        if key_upper == "OPTIONS":
+            # OPTIONS is handled elsewhere (normalized before reaching here)
+            continue
         if key_upper not in key_map:
-            raise ValueError(f"Unsupported vector store setting '{raw_key}'")
+            continue
         update[key_map[key_upper]] = raw_value
 
-    return config.model_copy(update=update) if update else config
+    if not update:
+        return config
+
+    # Case 1: Pydantic v2 style settings
+    model_copy = getattr(config, "model_copy", None)
+    if callable(model_copy):
+        return model_copy(update=update)
+
+    # Case 2: Module or plain object -> build a namespace copy
+    # We copy public attributes to avoid mutating the original module/object.
+    base_attributes: dict[str, Any] = {}
+    try:
+        # For modules, vars(config) works; for many objects too.
+        base_attributes.update(vars(config))
+    except TypeError:
+        # Fallback for objects without __dict__
+        for name in dir(config):
+            if name.startswith("_"):
+                continue
+            try:
+                base_attributes[name] = getattr(config, name)
+            except Exception:
+                continue
+
+    base_attributes.update(update)
+    return types.SimpleNamespace(**base_attributes)
 
 
-def _normalize_vector_store_cfg(store_cfg: Mapping[str, Any], config: "Config") -> Mapping[str, Any]:
+def _normalize_vector_store_cfg(store_cfg: Mapping[str, Any], config: Any) -> Mapping[str, Any]:
     """
     Accept Django-like keys (ENGINE/HOST/PORT/OPTIONS) and synthesize URL when needed.
+
+    Args:
+        store_cfg: Raw store configuration mapping.
+        config: Settings object/module, used as fallback for WEAVIATE_URL.
+
+    Returns:
+        A normalized store configuration mapping.
     """
     normalized = dict(store_cfg)
     options = normalized.get("OPTIONS") or {}
     if isinstance(options, dict):
-        # Bubble up common options into top-level keys when missing (only if not None).
         if options.get("GRPC_PORT") is not None:
             normalized.setdefault("GRPC_PORT", options["GRPC_PORT"])
         if options.get("CONNECT_RETRIES") is not None:
@@ -70,6 +163,8 @@ def _normalize_vector_store_cfg(store_cfg: Mapping[str, Any], config: "Config") 
             normalized.setdefault("MULTI_TENANCY", options["MULTI_TENANCY"])
         if options.get("DEFAULT_TENANT") is not None:
             normalized.setdefault("DEFAULT_TENANT", options["DEFAULT_TENANT"])
+        if options.get("TIMEOUT") is not None:
+            normalized.setdefault("TIMEOUT", options["TIMEOUT"])
 
     if "URL" not in normalized:
         host = normalized.get("HOST")
@@ -83,19 +178,14 @@ def _normalize_vector_store_cfg(store_cfg: Mapping[str, Any], config: "Config") 
             if path:
                 url = f"{url}/{str(path).lstrip('/')}"
             normalized["URL"] = url
-        else:
-            # If the configured URL is present in config, parse to infer host/port for logging/consistency.
-            parsed = urlparse(getattr(config, "WEAVIATE_URL", ""))
-            if parsed.scheme and parsed.hostname:
-                normalized.setdefault("HOST", parsed.hostname)
-                normalized.setdefault("PORT", parsed.port)
-                normalized.setdefault("SCHEME", parsed.scheme)
+
     if "NAME" in normalized and "CLASS" not in normalized:
         normalized["CLASS"] = normalized["NAME"]
+
     return normalized
 
 
-def get_vector_store(config: "Config", alias: str = "default") -> VectorInterface:
+def get_vector_store(config: Any, alias: str = "default") -> VectorInterface:
     """
     Create the vector store backend selected in settings.
 
@@ -104,131 +194,100 @@ def get_vector_store(config: "Config", alias: str = "default") -> VectorInterfac
             "default": {"ENGINE": "weaviate"},
             "analytics": {"ENGINE": "weaviate", "URL": "..."},
         }
+
+    Args:
+        config: Application settings object or module.
+        alias: Vector store alias to use.
+
+    Returns:
+        An instance implementing VectorInterface.
     """
     store_cfg = _normalize_vector_store_cfg(_vector_store_settings(config, alias), config)
     backend = (store_cfg.get("BACKEND") or store_cfg.get("ENGINE") or "").strip().lower()
     if not backend:
         backend = (getattr(config, "VECTOR_BACKEND", None) or "weaviate").strip().lower()
 
-    if backend == "weaviate":
-        import weaviate
-        from weaviate.classes.config import Configure, Property, DataType
-        from weaviate.classes.init import AdditionalConfig, Timeout
-        from src.storage.vector.weaviate_repository.repository import WeaviateRepository
-        from src.storage.vector.weaviate_repository.schema import SchemaManager
+    if backend != "weaviate":
+        raise ValueError(f"Unsupported vector backend: {backend}")
 
-        cfg = _config_with_overrides(
-            config,
-            store_cfg,
-            {
-                "URL": "WEAVIATE_URL",
-                "API_KEY": "WEAVIATE_API_KEY",
-                "CLASS": "WEAVIATE_CLASS",
-                "MULTI_TENANCY": "WEAVIATE_MULTI_TENANCY",
-                "DEFAULT_TENANT": "WEAVIATE_DEFAULT_TENANT",
-                "TIMEOUT": "WEAVIATE_TIMEOUT",
-                "GRPC_PORT": "WEAVIATE_GRPC_PORT",
-                "CONNECT_RETRIES": "WEAVIATE_CONNECT_RETRIES",
-                "CONNECT_BACKOFF": "WEAVIATE_CONNECT_BACKOFF",
-            },
-            allowed_passthrough={
-                "OPTIONS",
-                "HOST",
-                "PORT",
-                "SCHEME",
-                "PATH",
-                "NAME",
-                "USER",
-                "PASSWORD",
-                "LOCATION",
-                "AUTOCOMMIT",
-                "ATOMIC_REQUESTS",
-                "CONN_MAX_AGE",
-                "CONN_HEALTH_CHECKS",
-                "TIME_ZONE",
-                "TEST",
-            },
+    import weaviate
+    from weaviate.classes.init import AdditionalConfig, Timeout
+    from src.storage.vector.weaviate_repository.repository import WeaviateRepository
+    from src.storage.vector.weaviate_repository.schema import SchemaManager
+
+    cfg = _config_with_overrides(
+        config,
+        store_cfg,
+        {
+            "URL": "WEAVIATE_URL",
+            "API_KEY": "WEAVIATE_API_KEY",
+            "CLASS": "WEAVIATE_CLASS",
+            "MULTI_TENANCY": "WEAVIATE_MULTI_TENANCY",
+            "DEFAULT_TENANT": "WEAVIATE_DEFAULT_TENANT",
+            "TIMEOUT": "WEAVIATE_TIMEOUT",
+            "GRPC_PORT": "WEAVIATE_GRPC_PORT",
+            "CONNECT_RETRIES": "WEAVIATE_CONNECT_RETRIES",
+            "CONNECT_BACKOFF": "WEAVIATE_CONNECT_BACKOFF",
+        },
+        allowed_passthrough={
+            "OPTIONS",
+            "HOST",
+            "PORT",
+            "SCHEME",
+            "PATH",
+            "NAME",
+        },
+    )
+
+    weaviate_url = getattr(cfg, "WEAVIATE_URL", None) or store_cfg.get("URL") or "http://localhost:8080"
+    weaviate_api_key = getattr(cfg, "WEAVIATE_API_KEY", None) or store_cfg.get("API_KEY")
+    weaviate_class = getattr(cfg, "WEAVIATE_CLASS", None) or store_cfg.get("CLASS") or "RagDocument"
+    weaviate_timeout = getattr(cfg, "WEAVIATE_TIMEOUT", None) or store_cfg.get("TIMEOUT") or 120
+    weaviate_multi_tenancy = bool(getattr(cfg, "WEAVIATE_MULTI_TENANCY", False) or store_cfg.get("MULTI_TENANCY") or False)
+    weaviate_default_tenant = getattr(cfg, "WEAVIATE_DEFAULT_TENANT", None) or store_cfg.get("DEFAULT_TENANT") or "default"
+    weaviate_grpc_port = getattr(cfg, "WEAVIATE_GRPC_PORT", None) or store_cfg.get("GRPC_PORT")
+    skip_init_checks = bool(getattr(cfg, "WEAVIATE_SKIP_INIT_CHECKS", False))
+
+    additional = AdditionalConfig(timeout=Timeout(init=weaviate_timeout, query=weaviate_timeout))
+
+    parsed_url = urlparse(weaviate_url)
+    host = parsed_url.hostname or "localhost"
+    port = parsed_url.port or (443 if parsed_url.scheme == "https" else 8080)
+    use_https = parsed_url.scheme == "https"
+    grpc_port = weaviate_grpc_port or (50051 if not use_https else 443)
+
+    if weaviate_api_key:
+        client = weaviate.connect_to_custom(
+            http_host=host,
+            http_port=port,
+            http_secure=use_https,
+            grpc_host=host,
+            grpc_port=grpc_port,
+            grpc_secure=use_https,
+            auth_credentials=weaviate.auth.AuthApiKey(api_key=weaviate_api_key),
+            additional_config=additional,
+            skip_init_checks=skip_init_checks,
+        )
+    else:
+        client = weaviate.connect_to_custom(
+            http_host=host,
+            http_port=port,
+            http_secure=use_https,
+            grpc_host=host,
+            grpc_port=grpc_port,
+            grpc_secure=use_https,
+            additional_config=additional,
+            skip_init_checks=skip_init_checks,
         )
 
-        # Create Weaviate client using v4 API
-        additional = AdditionalConfig(
-            timeout=Timeout(init=cfg.WEAVIATE_TIMEOUT, query=cfg.WEAVIATE_TIMEOUT)
-        )
+    schema_manager = SchemaManager(
+        client=client,
+        cfg=cfg,
+        class_name=weaviate_class,
+        multitenant_enabled=weaviate_multi_tenancy,
+        default_tenant=weaviate_default_tenant if weaviate_multi_tenancy else None,
+        class_properties_provider=_get_rag_document_properties,
+    )
+    schema_manager.ensure_class()
 
-        # Parse URL to extract host and port
-        parsed_url = urlparse(cfg.WEAVIATE_URL)
-        host = parsed_url.hostname or "localhost"
-        port = parsed_url.port or (443 if parsed_url.scheme == "https" else 8080)
-        use_https = parsed_url.scheme == "https"
-
-        # Determine GRPC port
-        grpc_port = cfg.WEAVIATE_GRPC_PORT or (50051 if not use_https else 443)
-
-        # Skip init checks for air-gapped environments (prevents PyPI version checks)
-        skip_init_checks = bool(getattr(cfg, "WEAVIATE_SKIP_INIT_CHECKS", False))
-
-        if cfg.WEAVIATE_API_KEY:
-            client = weaviate.connect_to_custom(
-                http_host=host,
-                http_port=port,
-                http_secure=use_https,
-                grpc_host=host,
-                grpc_port=grpc_port,
-                grpc_secure=use_https,
-                auth_credentials=weaviate.auth.AuthApiKey(api_key=cfg.WEAVIATE_API_KEY),
-                additional_config=additional,
-                skip_init_checks=skip_init_checks,
-            )
-        else:
-            client = weaviate.connect_to_custom(
-                http_host=host,
-                http_port=port,
-                http_secure=use_https,
-                grpc_host=host,
-                grpc_port=grpc_port,
-                grpc_secure=use_https,
-                additional_config=additional,
-                skip_init_checks=skip_init_checks,
-            )
-
-        # Define class properties
-        def _get_class_properties():
-            return [
-                Property(name="external_id", data_type=DataType.TEXT),
-                Property(name="hash", data_type=DataType.TEXT),
-                Property(name="content", data_type=DataType.TEXT),
-                Property(name="structure_summary", data_type=DataType.TEXT),
-                Property(name="file_path", data_type=DataType.TEXT),
-                Property(name="file_type", data_type=DataType.TEXT),
-                Property(name="file_size", data_type=DataType.INT),
-                Property(name="created_at", data_type=DataType.DATE),
-                Property(name="modified_at", data_type=DataType.DATE),
-                Property(name="indexed_at", data_type=DataType.DATE),
-                Property(name="chunk_index", data_type=DataType.INT),
-                Property(name="total_chunks", data_type=DataType.INT),
-                Property(name="visibility", data_type=DataType.TEXT),
-                Property(name="allowed_user_ids", data_type=DataType.TEXT_ARRAY),
-                Property(name="tags", data_type=DataType.TEXT_ARRAY),
-                Property(name="metadata", data_type=DataType.TEXT),
-                Property(name="source", data_type=DataType.TEXT),
-            ]
-
-        # Create SchemaManager
-        schema = SchemaManager(
-            client=client,
-            cfg=cfg,
-            class_name=cfg.WEAVIATE_CLASS,
-            multitenant_enabled=bool(cfg.WEAVIATE_MULTI_TENANCY),
-            default_tenant=cfg.WEAVIATE_DEFAULT_TENANT if cfg.WEAVIATE_MULTI_TENANCY else None,
-            class_properties_provider=_get_class_properties,
-        )
-
-        # Ensure schema exists
-        schema.ensure()
-
-        return WeaviateRepository(schema)
-
-    raise ValueError(f"Unsupported vector BACKEND: {backend}")
-
-
-__all__ = ["get_vector_store"]
+    return WeaviateRepository(schema=schema_manager)

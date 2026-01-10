@@ -2,12 +2,12 @@
 import hashlib
 import json
 import logging
-import os
 from typing import Optional
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
+from src.conf import settings
 from src.memory.core.identifiers import (
     generate_user_id,
     generate_thread_id,
@@ -82,10 +82,7 @@ class ThreadManagerMiddleware(BaseHTTPMiddleware):
             server_secret: Secret for HMAC thread ID generation
         """
         super().__init__(app)
-        self.server_secret = server_secret or os.getenv(
-            "THREAD_SECRET",
-            "change-this-secret-in-production"
-        )
+        self.server_secret = server_secret or settings.THREAD_SECRET
         logger.info("ThreadManagerMiddleware initialized")
 
     async def dispatch(
@@ -126,16 +123,19 @@ class ThreadManagerMiddleware(BaseHTTPMiddleware):
         else:
             # Try to extract conversation ID from request body
             # (for Open WebUI and other clients that send conversation history)
-            body_bytes = await request.body()
+            # Only attempt for methods that can have a body (POST, PUT, PATCH)
+            conversation_id = None
+            if request.method in {"POST", "PUT", "PATCH"}:
+                body_bytes = await request.body()
 
-            # Make body available again for endpoint processing
-            async def receive():
-                return {"type": "http.request", "body": body_bytes}
+                # Make body available again for endpoint processing
+                async def receive():
+                    return {"type": "http.request", "body": body_bytes}
 
-            request._receive = receive
+                request._receive = receive
 
-            # Extract stable conversation ID from first message
-            conversation_id = _extract_conversation_id_from_body(body_bytes, user_id)
+                # Extract stable conversation ID from first message
+                conversation_id = _extract_conversation_id_from_body(body_bytes, user_id)
 
             if conversation_id:
                 # Use stable conversation ID

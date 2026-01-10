@@ -1,16 +1,15 @@
 """Start script that runs both API and auto-scan scheduler."""
-import os
 import sys
 import multiprocessing
 from src.ingestion.auto_scan.scheduler import main as autoscan_main
-import src.settings as settings
+from src.conf import settings
 
 
 def start_api():
     """Start the API server."""
     import uvicorn
 
-    port = int(os.getenv("API_PORT", "8001"))
+    port = settings.API_PORT
     uvicorn.run(
         "src.api.app:app",
         host="0.0.0.0",

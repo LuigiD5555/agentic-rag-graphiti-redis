@@ -1,6 +1,5 @@
 """Main cache manager class."""
 from typing import TYPE_CHECKING, Dict, Any
-import os
 import time
 
 if TYPE_CHECKING:
@@ -13,6 +12,7 @@ except ImportError:
     REDIS_AVAILABLE = False
     redis_module = None  # type: ignore
 
+from src.conf import settings
 from src.rag.audit import get_logger
 from .file_cache import FileCacheOperations
 from .directory_cache import DirectoryCacheOperations
@@ -74,13 +74,15 @@ class IngestionCacheManager(FileCacheOperations, DirectoryCacheOperations):
         cache_config = settings.get("CACHES", {}).get("default", {})
         location = cache_config.get("LOCATION", "").strip()
 
-        # Build Redis URL from config or environment
+        # Build Redis URL from centralized settings module
         if not location:
-            redis_host = os.getenv("REDIS_HOST", "127.0.0.1")
-            redis_port = os.getenv("REDIS_PORT", "6379")
+            from src.conf import settings as global_settings
+            redis_host = global_settings.REDIS_HOST or "127.0.0.1"
+            redis_port = global_settings.REDIS_PORT or 6379
             location = f"redis://{redis_host}:{redis_port}/0"
 
-        redis_password = (os.getenv("REDIS_PASSWORD") or "").strip() or None
+        from src.conf import settings as global_settings
+        redis_password = global_settings.REDIS_PASSWORD or None
 
         # Retry logic with exponential backoff
         delay = 1.0

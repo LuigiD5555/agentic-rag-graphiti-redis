@@ -7,12 +7,12 @@ when the application container runs with `network_mode: host` (or equivalent),
 where Compose service DNS names (e.g., `redis`) are not available.
 """
 
-import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
+from src.conf import settings
 from src.rag.interfaces.cache_interface import CacheServiceProtocol
 
 from .redis_cache import CacheService as RedisCacheService
@@ -107,31 +107,24 @@ class CacheFactory:
 
     def _redis_endpoint_from_environment(self) -> RedisEndpoint | None:
         """
-        Read REDIS_URL or REDIS_HOST/REDIS_PORT from environment variables.
+        Read REDIS_URL or REDIS_HOST/REDIS_PORT from centralized settings.
         """
-        redis_url = (os.getenv("REDIS_URL") or "").strip()
+        redis_url = (settings.REDIS_URL or "").strip()
         if redis_url:
             return self._parse_redis_url(redis_url)
 
-        redis_host = (os.getenv("REDIS_HOST") or "").strip()
-        redis_port_text = (os.getenv("REDIS_PORT") or "").strip()
-
-        import src.settings as settings
+        redis_host = settings.REDIS_HOST or ""
+        redis_port = settings.REDIS_PORT
         redis_password = settings.REDIS_PASSWORD or None
 
-        if not redis_host and not redis_port_text:
+        if not redis_host and not redis_port:
             return None
 
         if not redis_host:
             raise ValueError("REDIS_HOST is required when REDIS_PORT is provided")
 
-        if not redis_port_text:
+        if not redis_port:
             raise ValueError("REDIS_PORT is required when REDIS_HOST is provided")
-
-        try:
-            redis_port = int(redis_port_text)
-        except ValueError as exc:
-            raise ValueError("REDIS_PORT must be an integer") from exc
 
         return RedisEndpoint(host=redis_host, port=redis_port, password=redis_password)
 

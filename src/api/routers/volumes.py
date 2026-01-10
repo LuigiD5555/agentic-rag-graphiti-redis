@@ -13,8 +13,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-# FIX: Import settings directly from src.settings, not non-existent src.config
-import src.settings as app_settings
+from src.conf import settings as app_settings
 
 
 router = APIRouter(prefix="/volumes", tags=["volumes"])

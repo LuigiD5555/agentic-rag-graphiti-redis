@@ -1,10 +1,8 @@
 """Validation helpers for translating CLI args into ingestion options."""
 import argparse
 import os
-from pathlib import Path
 
 from src.ingestion.options import IngestionOptions
-from src.settings import _DEFAULT_EXCLUDED_FILES
 from src.rag.audit import get_logger
 
 logger = get_logger(__name__)
@@ -72,7 +70,21 @@ def build_ingestion_options_from_args(args: argparse.Namespace, config: object) 
         allowed_extensions.discard("")
 
     # Always start with built-in defaults, then add user-specified exclusions
-    excluded_directory_names = _DEFAULT_EXCLUDED_FILES.copy()
+    excluded_directory_names = set()
+
+    # Prefer runtime config (Django-style settings object). Fallback to the
+    # module-level defaults if the caller provided a plain module.
+    built_in_exclusions = getattr(config, "DEFAULT_EXCLUDED_FILES", None)
+    if built_in_exclusions:
+        excluded_directory_names.update(set(built_in_exclusions))
+    else:
+        try:
+            # Lazily import to avoid import-order issues during startup.
+            from src.settings import _DEFAULT_EXCLUDED_FILES  # type: ignore
+
+            excluded_directory_names.update(_DEFAULT_EXCLUDED_FILES)
+        except ImportError:
+            pass
 
     if getattr(args, "exclude_dirs", None) is not None:
         # CLI args provided - merge with defaults

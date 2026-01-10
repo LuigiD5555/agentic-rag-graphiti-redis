@@ -1,9 +1,10 @@
 """LLM-based summarizer using LFM2-1.2B for memory compression."""
 import logging
-import os
 from typing import Optional
 
 import requests
+
+from src.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +48,8 @@ Summary:"""
             model_name: Model name (defaults to env var or "lfm2-1.2b")
             max_tokens: Max tokens for summary
         """
-        self.endpoint = model_endpoint or os.getenv(
-            "COMPRESSION_MODEL_ENDPOINT",
-            "http://127.0.0.1:1234/v1/chat/completions"
-        )
-        self.model_name = model_name or os.getenv(
-            "COMPRESSION_MODEL_NAME",
-            "lfm2-1.2b"
-        )
+        self.endpoint = model_endpoint or settings.COMPRESSION_MODEL_ENDPOINT
+        self.model_name = model_name or settings.COMPRESSION_MODEL_NAME
         self.max_tokens = max_tokens
 
         logger.info(

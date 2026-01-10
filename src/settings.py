@@ -70,6 +70,11 @@ CACHES = {
     }
 }
 
+# Redis configuration (centralized like Django settings)
+REDIS_URL: str = ""  # If set, overrides REDIS_HOST/PORT
+REDIS_HOST: str = "localhost"
+REDIS_PORT: int = 6379
+REDIS_DB: int = 0
 REDIS_PASSWORD: str = ""
 
 # Provider adapters registry (aliases -> provider config dict).
@@ -123,6 +128,17 @@ APP_ENTRYPOINT_GROUP = "rag_agentic_graphiti.apps"
 # Embeddings settings (used by ingestion/pipeline token limits and embedding size).
 EMBEDDING_DIM = 768
 EMBEDDING_MAX_TOKENS = 512
+
+# ChatMemory settings (conversation snapshot persistence).
+CHATMEMORY_TTL_DAYS = 30  # Default TTL for conversation snapshots
+CHATMEMORY_VECTORIZER = "none"  # External embeddings (not Weaviate's built-in vectorizer)
+SNAPSHOT_TTL_DAYS = 30  # Alias for backward compatibility
+SNAPSHOT_ENABLED = False  # Enable automatic snapshot scheduler
+SNAPSHOT_INTERVAL_HOURS = 24  # Snapshot creation interval
+CLEANUP_ENABLED = False  # Enable automatic cleanup scheduler
+CLEANUP_INTERVAL_HOURS = 24  # Cleanup interval for expired snapshots
+TEMPORAL_CLEANUP_ENABLED = False  # Enable temporal document cleanup
+TEMPORAL_CLEANUP_INTERVAL_HOURS = 24  # Temporal cleanup interval
 
 # LiteLLM gateway setting (used by the LiteLLM adapter).
 LITELLM_TARGET_PROVIDER = "lmstudio"
@@ -202,6 +218,145 @@ AUTO_SCAN_INTERVAL = 300  # Seconds between scans (default: 5 minutes)
 AUTO_SCAN_INITIAL = True  # Whether to run initial scan on startup
 AUTO_SCAN_INITIAL_WAIT = 30  # Seconds to wait before initial scan
 AUTO_SCAN_MAX_FILES = 0  # Max files per scan (0 = unlimited)
+
+# ===== Neo4j Graph Store =====
+NEO4J_URI = "bolt://neo4j:7687"
+NEO4J_USER = "neo4j"
+NEO4J_PASSWORD = ""
+
+# ===== API Configuration =====
+API_MODE = "openai"  # "openai" or "ollama"
+API_PORT = 8001  # Port for API server
+SOCKET_PORT = 5555  # Port for RAG socket server
+OPENAI_API_BASE = "http://127.0.0.1:1234/v1"
+OPENAI_API_KEY = "lm-studio"
+
+# ===== Provider (LM Studio) =====
+PROVIDER = "lmstudio"
+LMSTUDIO_HOST = "host.containers.internal"
+LMSTUDIO_PORT = 1234
+LMSTUDIO_EXTRA_HOSTS = []
+LMSTUDIO_CHAT_MODEL = ""
+LMSTUDIO_EMBED_MODEL = ""
+LMSTUDIO_REQUIRE_SERVER = False
+LMSTUDIO_KEEPALIVE_CHAT = 60
+LMSTUDIO_KEEPALIVE_EMBED = 30
+LMSTUDIO_KEEPALIVE_RERANK = 30
+LMSTUDIO_API_ROOTS = []
+
+# ===== Embeddings =====
+EMBEDDING_MODEL = ""  # Explicit model name (required)
+
+# Dual Embeddings System
+ENABLE_DUAL_EMBEDDINGS = False
+SMALL_EMBEDDING_MODEL = ""
+LARGE_EMBEDDING_MODEL = ""
+SMALL_EMBEDDING_DIM = 384
+LARGE_EMBEDDING_DIM = 768
+DUAL_EMBEDDINGS_SMALL_COLLECTION = "RAGDocument384"
+DUAL_EMBEDDINGS_LARGE_COLLECTION = "RAGDocument768"
+
+# ===== RAG Configuration =====
+ENABLE_RAG_GATING = True
+MIN_RELEVANCE_SCORE = 0.5
+ENABLE_RERANKER = False
+
+# RAG Profile System
+RAG_PROFILE = "auto"
+RAG_PERFORMANCE_PROFILE = "performance"
+RESOURCE_MODE = "performance"
+
+# RAG Performance Optimizations
+RAG_EMBED_BATCH_SIZE = 16
+RAG_EMBED_LOG_EVERY_N_CHUNKS = 20
+RAG_PARALLEL_WORKERS = 3
+RAG_PIPELINE_WORKERS = 3
+
+# RAG Document Splitting Optimizations
+RAG_SPLIT_BATCH_SIZE = 128  # Batch size for document splitting
+RAG_SPLIT_LOG_EVERY_SECONDS = 15  # Log splitting progress every N seconds
+RAG_MAX_DOCS_PER_FILE = 200000  # Maximum documents per file (prevents pathological loaders)
+
+# RAG Caching
+RAG_EMBED_CACHE_ENABLED = True
+RAG_EMBED_CACHE_TTL = 21600
+RAG_EMBED_CACHE_PREFIX = "embed:"
+RAG_EMBED_CACHE_DB = 0
+RAG_PDF_CACHE_ENABLED = True
+RAG_PDF_CACHE_TTL = 2592000
+
+# ===== Memory System =====
+MEMORY_TTL = 172800  # 48 hours
+MEMORY_WINDOW_SIZE = 10
+CHECKPOINT_NS = "memory"
+COMPRESSION_MODEL_ENDPOINT = "http://127.0.0.1:1234/v1/chat/completions"
+COMPRESSION_MODEL_NAME = "lfm2-2.6b"
+COMPRESSION_MAX_TOKENS = 500
+MAX_STATE_SIZE_KB = 100
+COMPRESSION_THRESHOLD = 0.8
+ARTIFACTS_BASE_DIR = "/tmp/artifacts"
+ARTIFACTS_TTL_HOURS = 48
+THREAD_SECRET = "change-this-secret-in-production-use-openssl-rand"
+
+# ===== Temporal RAG =====
+TEMPORAL_RAG_ENABLED = True
+TEMPORAL_TENANT_TTL = 86400  # 24 hours
+TEMPORAL_FILE_MAX_SIZE_MB = 50
+TEMPORAL_PROMOTION_THRESHOLD = 3
+TEMPORAL_PARETO_MIN_QUERIES = 5
+TEMPORAL_PARETO_TOP_PERCENT = 20
+TEMPORAL_CLEANUP_INTERVAL = 3600
+
+# ===== Web Search (SearXNG) =====
+ENABLE_RAG_WEB_SEARCH = False
+RAG_WEB_SEARCH_ENGINE = "searxng"
+SEARXNG_QUERY_URL = "http://127.0.0.1:19105/search?q=<query>"
+SEARXNG_URL = "http://127.0.0.1:19105"
+ENABLE_WEB_FALLBACK = False
+SEARXNG_TIMEOUT = 10.0
+SEARXNG_MAX_RESULTS = 5
+SEARXNG_LANGUAGE = "es"
+
+# ===== Processing Tools =====
+ENABLE_OFFICE_CONVERSION = True
+ENABLE_EXTRACTOR_EXTRACTION = True
+ENABLE_OCR = False
+ENABLE_GPU_ACCELERATION = False
+TOOL_OFFICE_URL = "http://host.containers.internal:9106"
+TOOL_FILEEXTRACTOR_URL = "http://host.containers.internal:9101"
+TOOL_OCR_URL = "http://host.containers.internal:9106"
+TOOL_GPU_URL = "http://host.containers.internal:9104"
+TOOL_REQUEST_TIMEOUT = 120
+TOOL_OFFICE_TIMEOUT = 60
+TOOL_EXTRACTOR_TIMEOUT = 180
+TOOL_OCR_TIMEOUT = 120
+TOOL_GPU_TIMEOUT = 60
+TOOL_IDLE_TIMEOUT_OFFICE = 600
+TOOL_IDLE_TIMEOUT_EXTRACTOR = 600
+TOOL_IDLE_TIMEOUT_OCR = 600
+TOOL_IDLE_TIMEOUT_GPU = 600
+TOOL_CONNECT_RETRIES = 10
+TOOL_CONNECT_RETRY_DELAY = 0.5
+OCR_DEFAULT_LANGUAGE = "eng"
+OCR_DEFAULT_PSM = 3
+ARCHIVE_MAX_SIZE_MB = 500
+ARCHIVE_MAX_FILES = 10000
+OFFICE_DEFAULT_OUTPUT_FORMAT = "txt"
+PREPROCESSING_WORK_DIR = "/tmp/rag-preprocessing"
+EXTERNAL_VOLUMES = "[]"
+
+# ===== Weaviate Vector Store =====
+VECTOR_BACKEND = "weaviate"
+WEAVIATE_URL = "http://localhost:8080"
+WEAVIATE_API_KEY = ""
+WEAVIATE_CLASS = "RAGDocument"
+WEAVIATE_TIMEOUT = 30
+WEAVIATE_GRPC_PORT = 50051
+WEAVIATE_CONNECT_RETRIES = 5
+WEAVIATE_CONNECT_BACKOFF = 2.0
+WEAVIATE_MULTI_TENANCY = True
+WEAVIATE_DEFAULT_TENANT = "tenant-default"
+WEAVIATE_SKIP_INIT_CHECKS = False
 
 # If provided (via user settings JSON), this list REPLACES _DEFAULT_EXCLUDED_FILES.
 # GUI can manage this list to fully control fast-prune directory basenames.
@@ -289,4 +444,13 @@ _USER_SETTING_FIELDS = (
     "CHUNK_SIZE",
     "CHUNK_OVERLAP",
     "EMBEDDING_MAX_TOKENS",
+    "CHATMEMORY_TTL_DAYS",
+    "CHATMEMORY_VECTORIZER",
+    "SNAPSHOT_TTL_DAYS",
+    "SNAPSHOT_ENABLED",
+    "SNAPSHOT_INTERVAL_HOURS",
+    "CLEANUP_ENABLED",
+    "CLEANUP_INTERVAL_HOURS",
+    "TEMPORAL_CLEANUP_ENABLED",
+    "TEMPORAL_CLEANUP_INTERVAL_HOURS",
 )

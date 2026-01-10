@@ -4,14 +4,13 @@ This module handles automatic preprocessing of files that need conversion
 before ingestion (Office docs, archives, images needing OCR, etc.).
 """
 
-import os
 import time
 from pathlib import Path
 from typing import Optional, Dict, Any
 import requests
 
+from src.conf import settings
 from src.rag.audit import get_logger
-import src.settings as settings
 
 log = get_logger(__name__)
 
@@ -42,18 +41,12 @@ class FilePreprocessor:
             timeout: Request timeout in seconds
             work_dir: Working directory for processed files
         """
-        self.office_url = office_url or os.getenv("TOOL_OFFICE_URL", "http://127.0.0.1:9102")
-        self.archive_url = archive_url or os.getenv(
-            "TOOL_FILEEXTRACTOR_URL",
-            os.getenv("TOOL_EXTRACTOR_URL", "http://127.0.0.1:9101")
-        )
-        self.ocr_url = ocr_url or os.getenv("TOOL_OCR_URL", "http://127.0.0.1:9103")
-        self.enable_office = enable_office and os.getenv("ENABLE_OFFICE_CONVERSION", "true").lower() == "true"
-        self.enable_archive = enable_archive and os.getenv(
-            "ENABLE_EXTRACTOR_EXTRACTION",
-            "true"
-        ).lower() == "true"
-        self.enable_ocr = enable_ocr or os.getenv("ENABLE_OCR", "false").lower() == "true"
+        self.office_url = office_url or settings.TOOL_OFFICE_URL
+        self.archive_url = archive_url or settings.TOOL_FILEEXTRACTOR_URL
+        self.ocr_url = ocr_url or settings.TOOL_OCR_URL
+        self.enable_office = enable_office and settings.ENABLE_OFFICE_CONVERSION
+        self.enable_archive = enable_archive and settings.ENABLE_EXTRACTOR_EXTRACTION
+        self.enable_ocr = enable_ocr or settings.ENABLE_OCR
         self.timeout = timeout
         self.work_dir = Path(work_dir or settings.PREPROCESSING_WORK_DIR)
         self.work_dir.mkdir(parents=True, exist_ok=True)
@@ -69,8 +62,8 @@ class FilePreprocessor:
         )
 
     def _post_with_retries(self, url: str, payload: Dict[str, Any]) -> requests.Response:
-        retries = int(os.getenv("TOOL_CONNECT_RETRIES", "10"))
-        delay = float(os.getenv("TOOL_CONNECT_RETRY_DELAY", "0.5"))
+        retries = settings.TOOL_CONNECT_RETRIES
+        delay = settings.TOOL_CONNECT_RETRY_DELAY
         last_exc = None
         for _ in range(max(1, retries)):
             try:
@@ -252,7 +245,7 @@ class FilePreprocessor:
                 f"{self.ocr_url}/ocr",
                 {
                     "input_path": str(file_path.absolute()),
-                    "language": os.getenv("OCR_DEFAULT_LANGUAGE", "eng"),
+                    "language": settings.OCR_DEFAULT_LANGUAGE,
                     "output_format": "txt",
                 },
             )

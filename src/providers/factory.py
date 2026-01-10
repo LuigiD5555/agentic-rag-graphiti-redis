@@ -1,7 +1,7 @@
-import os
 from dataclasses import dataclass
 from typing import Optional, Any
 
+from src.conf import settings
 from src.rag.interfaces.embedding_interface import EmbeddingInterface
 from src.rag.interfaces.chat_interface import ChatInterface
 from src.rag.interfaces.provider_adapter_interface import ProviderAdapterInterface
@@ -28,7 +28,7 @@ class ProviderFactory:
     def _select_adapter(self) -> ProviderAdapterInterface:
         if self._adapter is None:
             ensure_apps_loaded(self.config)
-            provider = (os.getenv("PROVIDER") or getattr(self.config, "PROVIDER", None) or "").strip().lower()
+            provider = (getattr(self.config, "PROVIDER", None) or "").strip().lower()
             if not provider:
                 providers = getattr(self.config, "PROVIDERS", None) or {}
                 default_cfg = providers.get("default") if isinstance(providers, dict) else None

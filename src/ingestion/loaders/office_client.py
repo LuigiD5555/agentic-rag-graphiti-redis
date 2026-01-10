@@ -1,11 +1,12 @@
 """HTTP client for rag-tool-office service."""
-import os
 import tempfile
 from pathlib import Path
 from typing import Literal, Optional
 
 import requests
 from langchain_core.documents import Document
+
+from src.conf import settings
 
 
 class OfficeToolClient:
@@ -15,10 +16,10 @@ class OfficeToolClient:
         """Initialize the client.
 
         Args:
-            base_url: Base URL for rag-tool-office (default: http://127.0.0.1:9102)
+            base_url: Base URL for rag-tool-office (default: from settings)
         """
-        self.base_url = base_url or os.getenv("TOOL_OFFICE_URL", "http://127.0.0.1:9102")
-        self.timeout = int(os.getenv("TOOL_OFFICE_TIMEOUT", "120"))
+        self.base_url = base_url or settings.TOOL_OFFICE_URL
+        self.timeout = settings.TOOL_OFFICE_TIMEOUT
 
     def convert_to_text(self, input_path: str) -> str:
         """Convert Office document to plain text.

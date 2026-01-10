@@ -67,87 +67,94 @@ class AppConfig(BaseSettings):
     USER_SETTINGS_FILE: Path = Field(default_factory=lambda: settings.USER_SETTINGS_FILE)
 
     # ===== Vector Store (Weaviate) =====
-    VECTOR_BACKEND: str = "weaviate"
-    WEAVIATE_URL: str = "http://localhost:8080"
-    WEAVIATE_API_KEY: str = ""
-    WEAVIATE_CLASS: str = "RAGDocument"
-    WEAVIATE_TIMEOUT: int = 30
-    WEAVIATE_GRPC_PORT: int = 50051
-    WEAVIATE_CONNECT_RETRIES: int = 5
-    WEAVIATE_CONNECT_BACKOFF: float = 2.0
-    WEAVIATE_MULTI_TENANCY: bool = True
-    WEAVIATE_DEFAULT_TENANT: str = "tenant-default"
-    WEAVIATE_SKIP_INIT_CHECKS: bool = False
+    VECTOR_BACKEND: str = Field(default_factory=lambda: settings.VECTOR_BACKEND)
+    WEAVIATE_URL: str = Field(default_factory=lambda: settings.WEAVIATE_URL)
+    WEAVIATE_API_KEY: str = Field(default_factory=lambda: settings.WEAVIATE_API_KEY)
+    WEAVIATE_CLASS: str = Field(default_factory=lambda: settings.WEAVIATE_CLASS)
+    WEAVIATE_TIMEOUT: int = Field(default_factory=lambda: settings.WEAVIATE_TIMEOUT)
+    WEAVIATE_GRPC_PORT: int = Field(default_factory=lambda: settings.WEAVIATE_GRPC_PORT)
+    WEAVIATE_CONNECT_RETRIES: int = Field(default_factory=lambda: settings.WEAVIATE_CONNECT_RETRIES)
+    WEAVIATE_CONNECT_BACKOFF: float = Field(default_factory=lambda: settings.WEAVIATE_CONNECT_BACKOFF)
+    WEAVIATE_MULTI_TENANCY: bool = Field(default_factory=lambda: settings.WEAVIATE_MULTI_TENANCY)
+    WEAVIATE_DEFAULT_TENANT: str = Field(default_factory=lambda: settings.WEAVIATE_DEFAULT_TENANT)
+    WEAVIATE_SKIP_INIT_CHECKS: bool = Field(default_factory=lambda: settings.WEAVIATE_SKIP_INIT_CHECKS)
 
     # Vector stores configuration (Django-style)
     VECTOR_STORES: Dict[str, Dict[str, Any]] = Field(default_factory=lambda: settings.VECTOR_STORES)
 
     # ===== Graph Store (Neo4j) =====
-    NEO4J_URI: str = "bolt://neo4j:7687"
-    NEO4J_USER: str = "neo4j"
-    NEO4J_PASSWORD: str = ""
+    NEO4J_URI: str = Field(default_factory=lambda: settings.NEO4J_URI)
+    NEO4J_USER: str = Field(default_factory=lambda: settings.NEO4J_USER)
+    NEO4J_PASSWORD: str = Field(default_factory=lambda: settings.NEO4J_PASSWORD)
 
     # ===== Cache (Redis) =====
-    REDIS_HOST: str = "redis"
-    REDIS_PORT: int = 6379
+    REDIS_HOST: str = Field(default_factory=lambda: settings.REDIS_HOST)
+    REDIS_PORT: int = Field(default_factory=lambda: settings.REDIS_PORT)
+    REDIS_DB: int = Field(default_factory=lambda: settings.REDIS_DB)
     REDIS_PASSWORD: str = Field(default_factory=lambda: settings.REDIS_PASSWORD)
     CACHE_TTL: int = Field(default_factory=lambda: settings.CACHE_TTL)
 
     # ===== API Configuration =====
-    API_MODE: str = "openai"  # "openai" or "ollama"
-    OPENAI_API_BASE: str = "http://127.0.0.1:1234/v1"
-    OPENAI_API_KEY: str = "lm-studio"
+    API_MODE: str = Field(default_factory=lambda: settings.API_MODE)
+    API_PORT: int = Field(default_factory=lambda: settings.API_PORT)
+    SOCKET_PORT: int = Field(default_factory=lambda: settings.SOCKET_PORT)
+    OPENAI_API_BASE: str = Field(default_factory=lambda: settings.OPENAI_API_BASE)
+    OPENAI_API_KEY: str = Field(default_factory=lambda: settings.OPENAI_API_KEY)
 
     # ===== Provider (LM Studio) =====
-    PROVIDER: str = "lmstudio"
-    LMSTUDIO_HOST: str = "host.containers.internal"
-    LMSTUDIO_PORT: int = 1234
-    LMSTUDIO_EXTRA_HOSTS: List[str] = Field(default_factory=list)
-    LMSTUDIO_CHAT_MODEL: str = ""
-    LMSTUDIO_REQUIRE_SERVER: bool = False
-    LMSTUDIO_KEEPALIVE_CHAT: int = 60
-    LMSTUDIO_KEEPALIVE_EMBED: int = 30
-    LMSTUDIO_KEEPALIVE_RERANK: int = 30
-    LMSTUDIO_API_ROOTS: List[str] = Field(default_factory=list)
+    PROVIDER: str = Field(default_factory=lambda: settings.PROVIDER)
+    LMSTUDIO_HOST: str = Field(default_factory=lambda: settings.LMSTUDIO_HOST)
+    LMSTUDIO_PORT: int = Field(default_factory=lambda: settings.LMSTUDIO_PORT)
+    LMSTUDIO_EXTRA_HOSTS: List[str] = Field(default_factory=lambda: settings.LMSTUDIO_EXTRA_HOSTS)
+    LMSTUDIO_CHAT_MODEL: str = Field(default_factory=lambda: settings.LMSTUDIO_CHAT_MODEL)
+    LMSTUDIO_REQUIRE_SERVER: bool = Field(default_factory=lambda: settings.LMSTUDIO_REQUIRE_SERVER)
+    LMSTUDIO_KEEPALIVE_CHAT: int = Field(default_factory=lambda: settings.LMSTUDIO_KEEPALIVE_CHAT)
+    LMSTUDIO_KEEPALIVE_EMBED: int = Field(default_factory=lambda: settings.LMSTUDIO_KEEPALIVE_EMBED)
+    LMSTUDIO_KEEPALIVE_RERANK: int = Field(default_factory=lambda: settings.LMSTUDIO_KEEPALIVE_RERANK)
+    LMSTUDIO_API_ROOTS: List[str] = Field(default_factory=lambda: settings.LMSTUDIO_API_ROOTS)
 
     # ===== Embeddings =====
-    # Embeddings are provided by LM Studio with automatic dimension detection
-    EMBEDDING_MODEL: str = ""  # Explicit model name (required, e.g., text-embedding-nomic-embed-text-v2-moe)
+    EMBEDDING_MODEL: str = Field(default_factory=lambda: settings.EMBEDDING_MODEL)
     EMBEDDING_DIM: int = Field(default_factory=lambda: settings.EMBEDDING_DIM)
     EMBEDDING_MAX_TOKENS: int = Field(default_factory=lambda: settings.EMBEDDING_MAX_TOKENS)
 
     # Dual Embeddings System
-    ENABLE_DUAL_EMBEDDINGS: bool = False
-    SMALL_EMBEDDING_MODEL: str = ""
-    LARGE_EMBEDDING_MODEL: str = ""
-    SMALL_EMBEDDING_DIM: int = 384
-    LARGE_EMBEDDING_DIM: int = 768
-    DUAL_EMBEDDINGS_SMALL_COLLECTION: str = "RAGDocument384"
-    DUAL_EMBEDDINGS_LARGE_COLLECTION: str = "RAGDocument768"
+    ENABLE_DUAL_EMBEDDINGS: bool = Field(default_factory=lambda: settings.ENABLE_DUAL_EMBEDDINGS)
+    SMALL_EMBEDDING_MODEL: str = Field(default_factory=lambda: settings.SMALL_EMBEDDING_MODEL)
+    LARGE_EMBEDDING_MODEL: str = Field(default_factory=lambda: settings.LARGE_EMBEDDING_MODEL)
+    SMALL_EMBEDDING_DIM: int = Field(default_factory=lambda: settings.SMALL_EMBEDDING_DIM)
+    LARGE_EMBEDDING_DIM: int = Field(default_factory=lambda: settings.LARGE_EMBEDDING_DIM)
+    DUAL_EMBEDDINGS_SMALL_COLLECTION: str = Field(default_factory=lambda: settings.DUAL_EMBEDDINGS_SMALL_COLLECTION)
+    DUAL_EMBEDDINGS_LARGE_COLLECTION: str = Field(default_factory=lambda: settings.DUAL_EMBEDDINGS_LARGE_COLLECTION)
 
     # ===== RAG Configuration =====
-    ENABLE_RAG_GATING: bool = True
-    MIN_RELEVANCE_SCORE: float = 0.5
-    ENABLE_RERANKER: bool = False
+    ENABLE_RAG_GATING: bool = Field(default_factory=lambda: settings.ENABLE_RAG_GATING)
+    MIN_RELEVANCE_SCORE: float = Field(default_factory=lambda: settings.MIN_RELEVANCE_SCORE)
+    ENABLE_RERANKER: bool = Field(default_factory=lambda: settings.ENABLE_RERANKER)
 
     # RAG Profile System
-    RAG_PROFILE: str = "auto"
-    RAG_PERFORMANCE_PROFILE: str = "performance"
-    RESOURCE_MODE: str = "performance"
+    RAG_PROFILE: str = Field(default_factory=lambda: settings.RAG_PROFILE)
+    RAG_PERFORMANCE_PROFILE: str = Field(default_factory=lambda: settings.RAG_PERFORMANCE_PROFILE)
+    RESOURCE_MODE: str = Field(default_factory=lambda: settings.RESOURCE_MODE)
 
     # RAG Performance Optimizations
-    RAG_EMBED_BATCH_SIZE: int = 16
-    RAG_EMBED_LOG_EVERY_N_CHUNKS: int = 20
-    RAG_PARALLEL_WORKERS: int = 3
-    RAG_PIPELINE_WORKERS: int = 3
+    RAG_EMBED_BATCH_SIZE: int = Field(default_factory=lambda: settings.RAG_EMBED_BATCH_SIZE)
+    RAG_EMBED_LOG_EVERY_N_CHUNKS: int = Field(default_factory=lambda: settings.RAG_EMBED_LOG_EVERY_N_CHUNKS)
+    RAG_PARALLEL_WORKERS: int = Field(default_factory=lambda: settings.RAG_PARALLEL_WORKERS)
+    RAG_PIPELINE_WORKERS: int = Field(default_factory=lambda: settings.RAG_PIPELINE_WORKERS)
+
+    # RAG Document Splitting Optimizations
+    RAG_SPLIT_BATCH_SIZE: int = Field(default_factory=lambda: settings.RAG_SPLIT_BATCH_SIZE)
+    RAG_SPLIT_LOG_EVERY_SECONDS: int = Field(default_factory=lambda: settings.RAG_SPLIT_LOG_EVERY_SECONDS)
+    RAG_MAX_DOCS_PER_FILE: int = Field(default_factory=lambda: settings.RAG_MAX_DOCS_PER_FILE)
 
     # RAG Caching
-    RAG_EMBED_CACHE_ENABLED: bool = True
-    RAG_EMBED_CACHE_TTL: int = 21600
-    RAG_EMBED_CACHE_PREFIX: str = "embed:"
-    RAG_EMBED_CACHE_DB: int = 0
-    RAG_PDF_CACHE_ENABLED: bool = True
-    RAG_PDF_CACHE_TTL: int = 2592000
+    RAG_EMBED_CACHE_ENABLED: bool = Field(default_factory=lambda: settings.RAG_EMBED_CACHE_ENABLED)
+    RAG_EMBED_CACHE_TTL: int = Field(default_factory=lambda: settings.RAG_EMBED_CACHE_TTL)
+    RAG_EMBED_CACHE_PREFIX: str = Field(default_factory=lambda: settings.RAG_EMBED_CACHE_PREFIX)
+    RAG_EMBED_CACHE_DB: int = Field(default_factory=lambda: settings.RAG_EMBED_CACHE_DB)
+    RAG_PDF_CACHE_ENABLED: bool = Field(default_factory=lambda: settings.RAG_PDF_CACHE_ENABLED)
+    RAG_PDF_CACHE_TTL: int = Field(default_factory=lambda: settings.RAG_PDF_CACHE_TTL)
 
     # ===== Ingestion =====
     DOCS_PATHS: List[str] = Field(default_factory=lambda: settings.DOCS_PATHS)
@@ -168,62 +175,73 @@ class AppConfig(BaseSettings):
     AUTO_SCAN_MAX_FILES: int = Field(default_factory=lambda: settings.AUTO_SCAN_MAX_FILES)
 
     # ===== Memory System =====
-    MEMORY_TTL: int = 172800  # 48 hours
-    MEMORY_WINDOW_SIZE: int = 10
-    CHECKPOINT_NS: str = "memory"
-    COMPRESSION_MODEL_ENDPOINT: str = "http://127.0.0.1:1234/v1/chat/completions"
-    COMPRESSION_MODEL_NAME: str = "lfm2-2.6b"
-    COMPRESSION_MAX_TOKENS: int = 500
-    MAX_STATE_SIZE_KB: int = 100
-    COMPRESSION_THRESHOLD: float = 0.8
-    ARTIFACTS_BASE_DIR: str = "/tmp/artifacts"
-    ARTIFACTS_TTL_HOURS: int = 48
-    THREAD_SECRET: str = "change-this-secret-in-production-use-openssl-rand"
+    MEMORY_TTL: int = Field(default_factory=lambda: settings.MEMORY_TTL)
+    MEMORY_WINDOW_SIZE: int = Field(default_factory=lambda: settings.MEMORY_WINDOW_SIZE)
+    CHECKPOINT_NS: str = Field(default_factory=lambda: settings.CHECKPOINT_NS)
+    COMPRESSION_MODEL_ENDPOINT: str = Field(default_factory=lambda: settings.COMPRESSION_MODEL_ENDPOINT)
+    COMPRESSION_MODEL_NAME: str = Field(default_factory=lambda: settings.COMPRESSION_MODEL_NAME)
+    COMPRESSION_MAX_TOKENS: int = Field(default_factory=lambda: settings.COMPRESSION_MAX_TOKENS)
+    MAX_STATE_SIZE_KB: int = Field(default_factory=lambda: settings.MAX_STATE_SIZE_KB)
+    COMPRESSION_THRESHOLD: float = Field(default_factory=lambda: settings.COMPRESSION_THRESHOLD)
+    ARTIFACTS_BASE_DIR: str = Field(default_factory=lambda: settings.ARTIFACTS_BASE_DIR)
+    ARTIFACTS_TTL_HOURS: int = Field(default_factory=lambda: settings.ARTIFACTS_TTL_HOURS)
+    THREAD_SECRET: str = Field(default_factory=lambda: settings.THREAD_SECRET)
+
+    # ===== ChatMemory Settings =====
+    CHATMEMORY_TTL_DAYS: int = Field(default_factory=lambda: settings.CHATMEMORY_TTL_DAYS)
+    CHATMEMORY_VECTORIZER: str = Field(default_factory=lambda: settings.CHATMEMORY_VECTORIZER)
+    SNAPSHOT_TTL_DAYS: int = Field(default_factory=lambda: settings.SNAPSHOT_TTL_DAYS)
+    SNAPSHOT_ENABLED: bool = Field(default_factory=lambda: settings.SNAPSHOT_ENABLED)
+    SNAPSHOT_INTERVAL_HOURS: int = Field(default_factory=lambda: settings.SNAPSHOT_INTERVAL_HOURS)
+    CLEANUP_ENABLED: bool = Field(default_factory=lambda: settings.CLEANUP_ENABLED)
+    CLEANUP_INTERVAL_HOURS: int = Field(default_factory=lambda: settings.CLEANUP_INTERVAL_HOURS)
+    TEMPORAL_CLEANUP_ENABLED: bool = Field(default_factory=lambda: settings.TEMPORAL_CLEANUP_ENABLED)
+    TEMPORAL_CLEANUP_INTERVAL_HOURS: int = Field(default_factory=lambda: settings.TEMPORAL_CLEANUP_INTERVAL_HOURS)
 
     # ===== Temporal RAG =====
-    TEMPORAL_RAG_ENABLED: bool = True
-    TEMPORAL_TENANT_TTL: int = 86400  # 24 hours
-    TEMPORAL_FILE_MAX_SIZE_MB: int = 50
-    TEMPORAL_PROMOTION_THRESHOLD: int = 3
-    TEMPORAL_PARETO_MIN_QUERIES: int = 5
-    TEMPORAL_PARETO_TOP_PERCENT: int = 20
-    TEMPORAL_CLEANUP_INTERVAL: int = 3600
+    TEMPORAL_RAG_ENABLED: bool = Field(default_factory=lambda: settings.TEMPORAL_RAG_ENABLED)
+    TEMPORAL_TENANT_TTL: int = Field(default_factory=lambda: settings.TEMPORAL_TENANT_TTL)
+    TEMPORAL_FILE_MAX_SIZE_MB: int = Field(default_factory=lambda: settings.TEMPORAL_FILE_MAX_SIZE_MB)
+    TEMPORAL_PROMOTION_THRESHOLD: int = Field(default_factory=lambda: settings.TEMPORAL_PROMOTION_THRESHOLD)
+    TEMPORAL_PARETO_MIN_QUERIES: int = Field(default_factory=lambda: settings.TEMPORAL_PARETO_MIN_QUERIES)
+    TEMPORAL_PARETO_TOP_PERCENT: int = Field(default_factory=lambda: settings.TEMPORAL_PARETO_TOP_PERCENT)
+    TEMPORAL_CLEANUP_INTERVAL: int = Field(default_factory=lambda: settings.TEMPORAL_CLEANUP_INTERVAL)
 
     # ===== Web Search (SearXNG) =====
-    ENABLE_RAG_WEB_SEARCH: bool = False
-    RAG_WEB_SEARCH_ENGINE: str = "searxng"
-    SEARXNG_QUERY_URL: str = "http://127.0.0.1:19105/search?q=<query>"
-    SEARXNG_URL: str = "http://127.0.0.1:19105"
-    ENABLE_WEB_FALLBACK: bool = False
-    SEARXNG_TIMEOUT: float = 10.0
-    SEARXNG_MAX_RESULTS: int = 5
-    SEARXNG_LANGUAGE: str = "es"
+    ENABLE_RAG_WEB_SEARCH: bool = Field(default_factory=lambda: settings.ENABLE_RAG_WEB_SEARCH)
+    RAG_WEB_SEARCH_ENGINE: str = Field(default_factory=lambda: settings.RAG_WEB_SEARCH_ENGINE)
+    SEARXNG_QUERY_URL: str = Field(default_factory=lambda: settings.SEARXNG_QUERY_URL)
+    SEARXNG_URL: str = Field(default_factory=lambda: settings.SEARXNG_URL)
+    ENABLE_WEB_FALLBACK: bool = Field(default_factory=lambda: settings.ENABLE_WEB_FALLBACK)
+    SEARXNG_TIMEOUT: float = Field(default_factory=lambda: settings.SEARXNG_TIMEOUT)
+    SEARXNG_MAX_RESULTS: int = Field(default_factory=lambda: settings.SEARXNG_MAX_RESULTS)
+    SEARXNG_LANGUAGE: str = Field(default_factory=lambda: settings.SEARXNG_LANGUAGE)
 
     # ===== Processing Tools =====
-    ENABLE_OFFICE_CONVERSION: bool = True
-    ENABLE_EXTRACTOR_EXTRACTION: bool = True
-    ENABLE_OCR: bool = False
-    ENABLE_GPU_ACCELERATION: bool = False
-    TOOL_OFFICE_URL: str = "http://host.containers.internal:9106"
-    TOOL_FILEEXTRACTOR_URL: str = "http://host.containers.internal:9101"
-    TOOL_OCR_URL: str = "http://host.containers.internal:9106"
-    TOOL_GPU_URL: str = "http://host.containers.internal:9104"
-    TOOL_REQUEST_TIMEOUT: int = 120
-    TOOL_OFFICE_TIMEOUT: int = 60
-    TOOL_EXTRACTOR_TIMEOUT: int = 180
-    TOOL_OCR_TIMEOUT: int = 120
-    TOOL_GPU_TIMEOUT: int = 60
-    TOOL_IDLE_TIMEOUT_OFFICE: int = 600
-    TOOL_IDLE_TIMEOUT_EXTRACTOR: int = 600
-    TOOL_IDLE_TIMEOUT_OCR: int = 600
-    TOOL_IDLE_TIMEOUT_GPU: int = 600
-    OCR_DEFAULT_LANGUAGE: str = "eng"
-    OCR_DEFAULT_PSM: int = 3
-    ARCHIVE_MAX_SIZE_MB: int = 500
-    ARCHIVE_MAX_FILES: int = 10000
-    OFFICE_DEFAULT_OUTPUT_FORMAT: str = "txt"
-    PREPROCESSING_WORK_DIR: str = "/tmp/rag-preprocessing"
-    EXTERNAL_VOLUMES: str = "[]"
+    ENABLE_OFFICE_CONVERSION: bool = Field(default_factory=lambda: settings.ENABLE_OFFICE_CONVERSION)
+    ENABLE_EXTRACTOR_EXTRACTION: bool = Field(default_factory=lambda: settings.ENABLE_EXTRACTOR_EXTRACTION)
+    ENABLE_OCR: bool = Field(default_factory=lambda: settings.ENABLE_OCR)
+    ENABLE_GPU_ACCELERATION: bool = Field(default_factory=lambda: settings.ENABLE_GPU_ACCELERATION)
+    TOOL_OFFICE_URL: str = Field(default_factory=lambda: settings.TOOL_OFFICE_URL)
+    TOOL_FILEEXTRACTOR_URL: str = Field(default_factory=lambda: settings.TOOL_FILEEXTRACTOR_URL)
+    TOOL_OCR_URL: str = Field(default_factory=lambda: settings.TOOL_OCR_URL)
+    TOOL_GPU_URL: str = Field(default_factory=lambda: settings.TOOL_GPU_URL)
+    TOOL_REQUEST_TIMEOUT: int = Field(default_factory=lambda: settings.TOOL_REQUEST_TIMEOUT)
+    TOOL_OFFICE_TIMEOUT: int = Field(default_factory=lambda: settings.TOOL_OFFICE_TIMEOUT)
+    TOOL_EXTRACTOR_TIMEOUT: int = Field(default_factory=lambda: settings.TOOL_EXTRACTOR_TIMEOUT)
+    TOOL_OCR_TIMEOUT: int = Field(default_factory=lambda: settings.TOOL_OCR_TIMEOUT)
+    TOOL_GPU_TIMEOUT: int = Field(default_factory=lambda: settings.TOOL_GPU_TIMEOUT)
+    TOOL_IDLE_TIMEOUT_OFFICE: int = Field(default_factory=lambda: settings.TOOL_IDLE_TIMEOUT_OFFICE)
+    TOOL_IDLE_TIMEOUT_EXTRACTOR: int = Field(default_factory=lambda: settings.TOOL_IDLE_TIMEOUT_EXTRACTOR)
+    TOOL_IDLE_TIMEOUT_OCR: int = Field(default_factory=lambda: settings.TOOL_IDLE_TIMEOUT_OCR)
+    TOOL_IDLE_TIMEOUT_GPU: int = Field(default_factory=lambda: settings.TOOL_IDLE_TIMEOUT_GPU)
+    OCR_DEFAULT_LANGUAGE: str = Field(default_factory=lambda: settings.OCR_DEFAULT_LANGUAGE)
+    OCR_DEFAULT_PSM: int = Field(default_factory=lambda: settings.OCR_DEFAULT_PSM)
+    ARCHIVE_MAX_SIZE_MB: int = Field(default_factory=lambda: settings.ARCHIVE_MAX_SIZE_MB)
+    ARCHIVE_MAX_FILES: int = Field(default_factory=lambda: settings.ARCHIVE_MAX_FILES)
+    OFFICE_DEFAULT_OUTPUT_FORMAT: str = Field(default_factory=lambda: settings.OFFICE_DEFAULT_OUTPUT_FORMAT)
+    PREPROCESSING_WORK_DIR: str = Field(default_factory=lambda: settings.PREPROCESSING_WORK_DIR)
+    EXTERNAL_VOLUMES: str = Field(default_factory=lambda: settings.EXTERNAL_VOLUMES)
 
     # ===== Apps =====
     INSTALLED_APPS: List[str] = Field(default_factory=lambda: settings.INSTALLED_APPS)

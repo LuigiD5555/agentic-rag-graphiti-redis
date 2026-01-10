@@ -1,7 +1,6 @@
 """Module for the RAG socket server."""
-import os
 import socket
-import src.settings as settings
+from src.conf import settings
 from src.providers.factory import ProviderFactory
 from src.storage.graph import get_graph_store
 from src.storage.cache import get_cache
@@ -29,7 +28,7 @@ def main():
     )
     agent = Agent(rag_engine)
 
-    host, port = "0.0.0.0", int(os.getenv("SOCKET_PORT", "5555"))
+    host, port = "0.0.0.0", settings.SOCKET_PORT
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((host, port))
         s.listen()

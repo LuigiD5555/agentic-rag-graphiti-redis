@@ -1,12 +1,13 @@
 """
 Model auto-selection utilities for LM Studio (OpenAI-compatible).
-Uses only `requests` and environment variables already present.
+Uses centralized settings instead of environment variables.
 """
 
 import json
-import os
 import requests
 from typing import Optional, Dict, Any, List
+
+from src.conf import settings
 
 
 def list_models(base_url: str, timeout: float = 2.0) -> List[Dict[str, Any]]:
@@ -59,9 +60,9 @@ def resolve_models_from_env() -> Dict[str, Optional[str]]:
     If LMSTUDIO_CHAT_MODEL / LMSTUDIO_EMBED_MODEL are empty,
     auto-pick from /v1/models.
     """
-    base = os.getenv("OPENAI_API_BASE", "http://127.0.0.1:1234/v1")
-    chat_env = os.getenv("LMSTUDIO_CHAT_MODEL", "").strip()
-    emb_env  = os.getenv("LMSTUDIO_EMBED_MODEL", "").strip()
+    base = settings.OPENAI_API_BASE
+    chat_env = (settings.LMSTUDIO_CHAT_MODEL or "").strip()
+    emb_env = (settings.LMSTUDIO_EMBED_MODEL or "").strip()
 
     models = list_models(base)
     chat_model = chat_env or pick_first_active_model(models)
