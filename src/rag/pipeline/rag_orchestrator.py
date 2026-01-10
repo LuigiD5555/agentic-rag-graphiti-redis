@@ -5,7 +5,7 @@ from src.rag.chat import LMStudioChatService
 from src.rag.multilingual import LanguageDetector
 from src.rag.audit import get_logger
 from src.rag.temporal.retriever import MultiTenantRetriever
-from src.rag.web_search import SearXNGClient
+from src.apps.websearch import SearXNGClient
 from src.rag.intent import IntentClassifier
 from src.conf import settings
 

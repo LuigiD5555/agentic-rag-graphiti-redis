@@ -20,7 +20,7 @@ from src.rag.embeddings_factory import get_embedding_service
 from src.conf import settings as rag_config
 from src.ingestion.orchestrator import IngestionOrchestrator
 from src.providers.factory import ProviderFactory
-from src.rag.web_search import SearXNGClient
+from src.apps.websearch import SearXNGClient
 
 
 # Configure logging

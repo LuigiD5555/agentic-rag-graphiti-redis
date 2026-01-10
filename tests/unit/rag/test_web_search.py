@@ -2,7 +2,7 @@
 import pytest
 import httpx
 from unittest.mock import AsyncMock, Mock, patch
-from src.rag.web_search.searxng_client import SearXNGClient
+from src.apps.websearch.searxng_client import SearXNGClient
 
 
 @pytest.mark.asyncio
