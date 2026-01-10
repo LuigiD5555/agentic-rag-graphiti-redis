@@ -18,6 +18,9 @@ from .file_processor import process_candidate_file
 from .splitters import SplitterStrategy, build_text_splitter
 from .state_helpers import finalize_ingestion_run, record_directory_listing
 from src.utils.text import effective_limit
+from src.rag.conf import Config
+
+_config = Config()
 
 
 CATALOG_PATH = os.environ.get(

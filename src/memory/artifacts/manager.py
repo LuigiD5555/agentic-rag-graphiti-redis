@@ -5,6 +5,9 @@ import shutil
 import time
 from pathlib import Path
 from typing import Optional
+from src.rag.conf import Config
+
+_config = Config()
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +30,7 @@ class ArtifactManager:
             base_dir: Base directory for artifacts (default: /tmp/artifacts)
             ttl_hours: Time-to-live in hours (default: 48)
         """
-        self.base_dir = Path(base_dir or os.getenv(
-            "ARTIFACTS_BASE_DIR",
-            "/tmp/artifacts"
-        ))
+        self.base_dir = Path(base_dir or _config.ARTIFACTS_BASE_DIR)
         self.ttl_hours = ttl_hours
         self.ttl_seconds = ttl_hours * 3600
 

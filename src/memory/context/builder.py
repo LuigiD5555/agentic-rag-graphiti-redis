@@ -1,6 +1,9 @@
 """Context builder for assembling hierarchical LLM context."""
 import logging
 from typing import Optional
+from src.rag.conf import Config
+
+_config = Config()
 
 from src.memory.core.state import ConversationState
 from src.memory.layers.short_term import ShortTermMemory
@@ -264,7 +267,7 @@ def create_context_builder(
     import os
 
     if window_size is None:
-        window_size = int(os.getenv("MEMORY_WINDOW_SIZE", "10"))
+        window_size = _config.MEMORY_WINDOW_SIZE
 
     return ContextBuilder(
         system_prompt=system_prompt,

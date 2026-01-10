@@ -22,8 +22,12 @@ from src.rag.temporal.tenant_manager import (
     create_temporal_tenant_manager,
 )
 from src.ingestion.orchestrator import IngestionOrchestrator
+from src.rag.conf import Config
 
 logger = logging.getLogger(__name__)
+
+# Load config
+_config = Config()
 
 router = APIRouter(prefix="/v1/files", tags=["files"])
 
@@ -106,11 +110,11 @@ async def upload_file(
         content = await file.read()
         file_size = len(content)
 
-        max_size = int(os.getenv("TEMPORAL_FILE_MAX_SIZE_MB", "50")) * 1024 * 1024
+        max_size = _config.TEMPORAL_FILE_MAX_SIZE_MB * 1024 * 1024
         if file_size > max_size:
             raise HTTPException(
                 status_code=413,
-                detail=f"File too large. Maximum size: {max_size / 1024 / 1024:.1f}MB",
+                detail=f"File too large. Maximum size: {_config.TEMPORAL_FILE_MAX_SIZE_MB}MB",
             )
 
         file_hash = tracker.compute_file_hash(content)
@@ -124,7 +128,7 @@ async def upload_file(
         tenant_name = tenant_manager.get_or_create_temporal_tenant(thread_id)
 
         file_id = f"file_{uuid.uuid4().hex[:16]}"
-        temp_dir = os.getenv("PREPROCESSING_WORK_DIR", "/tmp/rag-preprocessing")
+        temp_dir = _config.PREPROCESSING_WORK_DIR
         os.makedirs(temp_dir, exist_ok=True)
 
         temp_file_path = os.path.join(temp_dir, f"{file_id}_{file.filename}")
@@ -348,28 +352,23 @@ def initialize_files_router(
     """
     global _file_tracker, _tenant_manager, _ingestion_orchestrator, _weaviate_client, _redis_client, _file_promoter, _pareto_analyzer
 
-    promotion_threshold = int(os.getenv("TEMPORAL_PROMOTION_THRESHOLD", "3"))
-    pareto_min_queries = int(os.getenv("TEMPORAL_PARETO_MIN_QUERIES", "5"))
-    pareto_top_percent = int(os.getenv("TEMPORAL_PARETO_TOP_PERCENT", "20"))
-    tenant_ttl = int(os.getenv("TEMPORAL_TENANT_TTL", "86400"))
-
     _file_tracker = create_file_tracker(
         redis_client=redis_client,
-        promotion_threshold=promotion_threshold,
-        pareto_min_queries=pareto_min_queries,
+        promotion_threshold=_config.TEMPORAL_PROMOTION_THRESHOLD,
+        pareto_min_queries=_config.TEMPORAL_PARETO_MIN_QUERIES,
     )
 
     _tenant_manager = create_temporal_tenant_manager(
         weaviate_client=weaviate_client,
         collection_name=collection_name,
-        ttl_seconds=tenant_ttl,
+        ttl_seconds=_config.TEMPORAL_TENANT_TTL,
     )
 
     from src.rag.temporal.pareto import create_pareto_analyzer
     _pareto_analyzer = create_pareto_analyzer(
         redis_client=redis_client,
-        top_percent=pareto_top_percent,
-        min_queries=pareto_min_queries,
+        top_percent=_config.TEMPORAL_PARETO_TOP_PERCENT,
+        min_queries=_config.TEMPORAL_PARETO_MIN_QUERIES,
     )
 
     from src.rag.temporal.promotion import create_file_promoter

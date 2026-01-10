@@ -259,6 +259,14 @@ services:
       # Unified RAG API port (consolidated from separate API proxy)
       API_PORT: "${HOST_RAG_API_PORT:-8000}"
       API_MODE: "${API_MODE:-ollama}"
+      
+      # Embeddings (make explicit; do not rely on env_file parsing)
+      EMBEDDING_MODEL: "${EMBEDDING_MODEL:-text-embedding-nomic-embed-text-v2-moe}"
+      ENABLE_DUAL_EMBEDDINGS: "${ENABLE_DUAL_EMBEDDINGS:-true}"
+      SMALL_EMBEDDING_MODEL: "${SMALL_EMBEDDING_MODEL:-text-embedding-bge-micro-v2}"
+      LARGE_EMBEDDING_MODEL: "${LARGE_EMBEDDING_MODEL:-text-embedding-nomic-embed-text-v2-moe}"
+      SMALL_EMBEDDING_DIM: "${SMALL_EMBEDDING_DIM:-384}"
+      LARGE_EMBEDDING_DIM: "${LARGE_EMBEDDING_DIM:-768}"
 
     volumes:
       # ============================================================================
@@ -374,7 +382,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    env_file: .env
+    env_file: 
+      - ./.env
 
     # Share host network to access all services
     network_mode: "host"

@@ -14,6 +14,9 @@ from langchain_community.document_loaders import PyPDFLoader as _Loader
 
 from src.ingestion.loaders.errors import LoaderInvalidFormatError, ensure_file_exists
 from src import logger
+from src.rag.conf import Config
+
+_config = Config()
 
 
 class PDFLoader:

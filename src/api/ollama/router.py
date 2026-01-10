@@ -16,6 +16,9 @@ from src.api.models_ollama import (
     OllamaTagModel,
     OllamaMessage,
 )
+from src.rag.conf import Config
+
+_config = Config()
 from src.api.middleware.thread_manager import get_thread_id, get_user_id
 from src.rag.models import list_models
 from src.rag.pipeline.rag_orchestrator import RAGOrchestrator
@@ -211,7 +214,7 @@ async def pull(_: OllamaPullRequest):
 
 @router.get("/tags", response_model=OllamaTagsResponse)
 async def tags() -> OllamaTagsResponse:
-    base_url = os.getenv("OPENAI_API_BASE", "http://127.0.0.1:1234/v1")
+    base_url = _config.OPENAI_API_BASE if hasattr(_config, "OPENAI_API_BASE") else "http://127.0.0.1:1234/v1"
     models = list_models(base_url)
     items: List[OllamaTagModel] = []
     for m in models:

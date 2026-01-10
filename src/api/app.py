@@ -97,8 +97,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if not base_url.endswith("/v1"):
             base_url = base_url.rstrip("/") + "/v1"
 
-        # Get keep_alive setting from environment (default: 60 seconds)
-        keep_alive = int(os.getenv("LMSTUDIO_KEEPALIVE_CHAT", "60"))
+        # Get keep_alive setting from config
+        keep_alive = rag_config.LMSTUDIO_KEEPALIVE_CHAT
 
         chat_service = LMStudioChatService(
             base_url=base_url,
@@ -139,16 +139,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         # Initialize Redis client (shared across features)
         from src.storage.cache.redis_connection import create_redis_client_with_retry
-        redis_host = os.getenv("REDIS_HOST", "127.0.0.1")
-        redis_port = int(os.getenv("REDIS_PORT", "6379"))
-        redis_password = (os.getenv("REDIS_PASSWORD") or "").strip() or None
         _redis_client = create_redis_client_with_retry(
-            host=redis_host,
-            port=redis_port,
-            password=redis_password,
+            host=rag_config.REDIS_HOST,
+            port=rag_config.REDIS_PORT,
+            password=rag_config.REDIS_PASSWORD or None,
             decode_responses=False,  # We handle encoding/decoding ourselves
         )
-        logger.info(f"Redis client initialized: {redis_host}:{redis_port}")
+        logger.info(f"Redis client initialized: {rag_config.REDIS_HOST}:{rag_config.REDIS_PORT}")
 
         # Migrate old Redis conversations to ChatMemory on startup
         from src.memory.core.checkpointer import create_checkpointer
@@ -156,10 +153,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         try:
             # Create checkpointer to access Redis conversations
             checkpointer = create_checkpointer(
-                redis_host=redis_host,
-                redis_port=redis_port,
-                redis_password=redis_password,
-                ttl_seconds=172800,  # 48 hours
+                redis_host=rag_config.REDIS_HOST,
+                redis_port=rag_config.REDIS_PORT,
+                redis_password=rag_config.REDIS_PASSWORD or None,
+                ttl_seconds=rag_config.MEMORY_TTL,
             )
 
             # Run migration (synchronous operation)
@@ -195,8 +192,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Create file tracker
         file_tracker = create_file_tracker(
             redis_client=_redis_client,
-            promotion_threshold=int(os.getenv("TEMPORAL_PROMOTION_THRESHOLD", "3")),
-            pareto_min_queries=int(os.getenv("TEMPORAL_PARETO_MIN_QUERIES", "5")),
+            promotion_threshold=rag_config.TEMPORAL_PROMOTION_THRESHOLD,
+            pareto_min_queries=rag_config.TEMPORAL_PARETO_MIN_QUERIES,
         )
 
         # Create multi-tenant retriever for temporal files
@@ -213,35 +210,32 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         tenant_manager = create_temporal_tenant_manager(
             weaviate_client=_weaviate_client,
             collection_name=config.WEAVIATE_CLASS,
-            ttl_seconds=int(os.getenv("TEMPORAL_TENANT_TTL", "86400")),
+            ttl_seconds=rag_config.TEMPORAL_TENANT_TTL,
         )
 
         # Create and start background cleanup scheduler
         _temporal_cleanup_scheduler = create_temporal_cleanup_scheduler(
             tenant_manager=tenant_manager,
             redis_client=_redis_client,
-            cleanup_interval=int(os.getenv("TEMPORAL_CLEANUP_INTERVAL", "3600")),
+            cleanup_interval=rag_config.TEMPORAL_CLEANUP_INTERVAL,
         )
         _temporal_cleanup_scheduler.start()
         logger.info("Temporal cleanup scheduler started")
 
         # Create web search client for fallback
-        searxng_url = os.getenv("SEARXNG_URL", "http://localhost:8080")
-        enable_web_fallback = os.getenv("ENABLE_WEB_FALLBACK", "true").lower() == "true"
-
-        if enable_web_fallback:
+        if rag_config.ENABLE_WEB_FALLBACK:
             try:
                 _web_search_client = SearXNGClient(
-                    base_url=searxng_url,
-                    timeout=float(os.getenv("SEARXNG_TIMEOUT", "10.0")),
-                    max_results=int(os.getenv("SEARXNG_MAX_RESULTS", "5")),
-                    language=os.getenv("SEARXNG_LANGUAGE", "es"),
+                    base_url=rag_config.SEARXNG_URL,
+                    timeout=rag_config.SEARXNG_TIMEOUT,
+                    max_results=rag_config.SEARXNG_MAX_RESULTS,
+                    language=rag_config.SEARXNG_LANGUAGE,
                 )
 
                 if await _web_search_client.is_available():
-                    logger.info("SearXNG client initialized and available at %s", searxng_url)
+                    logger.info("SearXNG client initialized and available at %s", rag_config.SEARXNG_URL)
                 else:
-                    logger.warning("SearXNG not available at %s, web fallback will be disabled", searxng_url)
+                    logger.warning("SearXNG not available at %s, web fallback will be disabled", rag_config.SEARXNG_URL)
                     try:
                         await _web_search_client.close()
                     except Exception as close_err:
@@ -253,9 +247,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         else:
             logger.info("Web search fallback disabled by configuration")
 
-        # RAG gating: intent-based routing to skip RAG for trivial queries
-        enable_rag_gating = os.getenv("ENABLE_RAG_GATING", "false").lower() == "true"
-
         # Create RAG orchestrator with ChatMemory + Temporal RAG + Web Search + RAG Gating
         _rag_orchestrator = RAGOrchestrator(
             retriever=retriever,
@@ -265,9 +256,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             multi_tenant_retriever=multi_tenant_retriever,
             file_tracker=file_tracker,
             web_search_client=_web_search_client,
-            enable_web_fallback=enable_web_fallback and _web_search_client is not None,
-            min_relevance_score=float(os.getenv("MIN_RELEVANCE_SCORE", "0.5")),
-            enable_rag_gating=enable_rag_gating,
+            enable_web_fallback=rag_config.ENABLE_WEB_FALLBACK and _web_search_client is not None,
+            min_relevance_score=rag_config.MIN_RELEVANCE_SCORE,
+            enable_rag_gating=rag_config.ENABLE_RAG_GATING,
         )
 
         # Initialize files router
@@ -325,8 +316,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 logger.error("Error closing Weaviate client: %s", e)
 
 
-# Determine API mode from environment variable
-API_MODE = os.getenv("API_MODE", "ollama").lower()  # "openai" or "ollama"
+# Determine API mode from config
+from src.rag.conf import Config
+_api_config = Config()
+API_MODE = _api_config.API_MODE if hasattr(_api_config, "API_MODE") else "ollama"
 logger.info(f"API mode: {API_MODE}")
 
 

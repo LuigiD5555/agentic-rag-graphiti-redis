@@ -1,6 +1,9 @@
 """Short-term memory layer managing recent message window."""
 import logging
 from typing import Optional
+from src.rag.conf import Config
+
+_config = Config()
 
 from src.memory.core.state import ConversationState
 
@@ -121,6 +124,6 @@ def create_short_term_memory(window_size: Optional[int] = None) -> ShortTermMemo
     import os
 
     if window_size is None:
-        window_size = int(os.getenv("MEMORY_WINDOW_SIZE", "10"))
+        window_size = _config.MEMORY_WINDOW_SIZE
 
     return ShortTermMemory(window_size=window_size)

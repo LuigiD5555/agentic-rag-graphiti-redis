@@ -7,6 +7,9 @@ import json
 import os
 import requests
 from typing import Optional, Dict, Any, List
+from src.rag.conf import Config
+
+_config = Config()
 
 
 def list_models(base_url: str, timeout: float = 2.0) -> List[Dict[str, Any]]:

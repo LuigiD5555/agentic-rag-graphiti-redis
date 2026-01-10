@@ -2,6 +2,9 @@
 import logging
 import os
 from typing import Optional
+from src.rag.conf import Config
+
+_config = Config()
 
 import requests
 

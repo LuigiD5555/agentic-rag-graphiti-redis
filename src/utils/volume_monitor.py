@@ -10,6 +10,9 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional
 from dataclasses import dataclass
+from src.rag.conf import Config
+
+_config = Config()
 
 logger = logging.getLogger(__name__)
 

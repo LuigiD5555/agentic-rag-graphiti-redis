@@ -97,6 +97,11 @@ class AppConfig(BaseSettings):
     REDIS_PASSWORD: str = ""
     CACHE_TTL: int = 3600
 
+    # ===== API Configuration =====
+    API_MODE: str = "openai"  # "openai" or "ollama"
+    OPENAI_API_BASE: str = "http://127.0.0.1:1234/v1"
+    OPENAI_API_KEY: str = "lm-studio"
+
     # ===== Provider (LM Studio) =====
     PROVIDER: str = "lmstudio"
     LMSTUDIO_HOST: str = "host.containers.internal"
@@ -104,11 +109,49 @@ class AppConfig(BaseSettings):
     LMSTUDIO_EXTRA_HOSTS: List[str] = Field(default_factory=list)
     LMSTUDIO_CHAT_MODEL: str = ""
     LMSTUDIO_REQUIRE_SERVER: bool = False
+    LMSTUDIO_KEEPALIVE_CHAT: int = 60
+    LMSTUDIO_KEEPALIVE_EMBED: int = 30
+    LMSTUDIO_KEEPALIVE_RERANK: int = 30
+    LMSTUDIO_API_ROOTS: List[str] = Field(default_factory=list)
 
     # ===== Embeddings =====
     # Embeddings are provided by LM Studio with automatic dimension detection
+    EMBEDDING_MODEL: str = ""  # Explicit model name (required, e.g., text-embedding-nomic-embed-text-v2-moe)
     EMBEDDING_DIM: int = 768  # Fallback value if auto-detection fails
     EMBEDDING_MAX_TOKENS: int = 512
+
+    # Dual Embeddings System
+    ENABLE_DUAL_EMBEDDINGS: bool = False
+    SMALL_EMBEDDING_MODEL: str = ""
+    LARGE_EMBEDDING_MODEL: str = ""
+    SMALL_EMBEDDING_DIM: int = 384
+    LARGE_EMBEDDING_DIM: int = 768
+    DUAL_EMBEDDINGS_SMALL_COLLECTION: str = "RAGDocument384"
+    DUAL_EMBEDDINGS_LARGE_COLLECTION: str = "RAGDocument768"
+
+    # ===== RAG Configuration =====
+    ENABLE_RAG_GATING: bool = True
+    MIN_RELEVANCE_SCORE: float = 0.5
+    ENABLE_RERANKER: bool = False
+
+    # RAG Profile System
+    RAG_PROFILE: str = "auto"
+    RAG_PERFORMANCE_PROFILE: str = "performance"
+    RESOURCE_MODE: str = "performance"
+
+    # RAG Performance Optimizations
+    RAG_EMBED_BATCH_SIZE: int = 16
+    RAG_EMBED_LOG_EVERY_N_CHUNKS: int = 20
+    RAG_PARALLEL_WORKERS: int = 3
+    RAG_PIPELINE_WORKERS: int = 3
+
+    # RAG Caching
+    RAG_EMBED_CACHE_ENABLED: bool = True
+    RAG_EMBED_CACHE_TTL: int = 21600
+    RAG_EMBED_CACHE_PREFIX: str = "embed:"
+    RAG_EMBED_CACHE_DB: int = 0
+    RAG_PDF_CACHE_ENABLED: bool = True
+    RAG_PDF_CACHE_TTL: int = 2592000
 
     # ===== Ingestion =====
     DOCS_PATHS: List[str] = Field(default_factory=lambda: [
@@ -129,6 +172,72 @@ class AppConfig(BaseSettings):
         ".pps", ".ppsx", ".odt", ".ods", ".odp", ".eml", ".msg",
         ".py", ".js", ".ts", ".tsx", ".java", ".go", ".rb", ".cs", ".php", ".c", ".cpp",
     )
+
+    # ===== Memory System =====
+    MEMORY_TTL: int = 172800  # 48 hours
+    MEMORY_WINDOW_SIZE: int = 10
+    CHECKPOINT_NS: str = "memory"
+    COMPRESSION_MODEL_ENDPOINT: str = "http://127.0.0.1:1234/v1/chat/completions"
+    COMPRESSION_MODEL_NAME: str = "lfm2-2.6b"
+    COMPRESSION_MAX_TOKENS: int = 500
+    MAX_STATE_SIZE_KB: int = 100
+    COMPRESSION_THRESHOLD: float = 0.8
+    ARTIFACTS_BASE_DIR: str = "/tmp/artifacts"
+    ARTIFACTS_TTL_HOURS: int = 48
+    THREAD_SECRET: str = "change-this-secret-in-production-use-openssl-rand"
+
+    # ===== Temporal RAG =====
+    TEMPORAL_RAG_ENABLED: bool = True
+    TEMPORAL_TENANT_TTL: int = 86400  # 24 hours
+    TEMPORAL_FILE_MAX_SIZE_MB: int = 50
+    TEMPORAL_PROMOTION_THRESHOLD: int = 3
+    TEMPORAL_PARETO_MIN_QUERIES: int = 5
+    TEMPORAL_PARETO_TOP_PERCENT: int = 20
+    TEMPORAL_CLEANUP_INTERVAL: int = 3600
+
+    # ===== Web Search (SearXNG) =====
+    ENABLE_RAG_WEB_SEARCH: bool = False
+    RAG_WEB_SEARCH_ENGINE: str = "searxng"
+    SEARXNG_QUERY_URL: str = "http://127.0.0.1:19105/search?q=<query>"
+    SEARXNG_URL: str = "http://127.0.0.1:19105"
+    ENABLE_WEB_FALLBACK: bool = False
+    SEARXNG_TIMEOUT: float = 10.0
+    SEARXNG_MAX_RESULTS: int = 5
+    SEARXNG_LANGUAGE: str = "es"
+
+    # ===== Processing Tools =====
+    ENABLE_OFFICE_CONVERSION: bool = True
+    ENABLE_EXTRACTOR_EXTRACTION: bool = True
+    ENABLE_OCR: bool = False
+    ENABLE_GPU_ACCELERATION: bool = False
+    TOOL_OFFICE_URL: str = "http://host.containers.internal:9106"
+    TOOL_FILEEXTRACTOR_URL: str = "http://host.containers.internal:9101"
+    TOOL_OCR_URL: str = "http://host.containers.internal:9106"
+    TOOL_GPU_URL: str = "http://host.containers.internal:9104"
+    TOOL_REQUEST_TIMEOUT: int = 120
+    TOOL_OFFICE_TIMEOUT: int = 60
+    TOOL_EXTRACTOR_TIMEOUT: int = 180
+    TOOL_OCR_TIMEOUT: int = 120
+    TOOL_GPU_TIMEOUT: int = 60
+    TOOL_IDLE_TIMEOUT_OFFICE: int = 600
+    TOOL_IDLE_TIMEOUT_EXTRACTOR: int = 600
+    TOOL_IDLE_TIMEOUT_OCR: int = 600
+    TOOL_IDLE_TIMEOUT_GPU: int = 600
+    OCR_DEFAULT_LANGUAGE: str = "eng"
+    OCR_DEFAULT_PSM: int = 3
+    ARCHIVE_MAX_SIZE_MB: int = 500
+    ARCHIVE_MAX_FILES: int = 10000
+    OFFICE_DEFAULT_OUTPUT_FORMAT: str = "txt"
+    PREPROCESSING_WORK_DIR: str = "/tmp/rag-preprocessing"
+    EXTERNAL_VOLUMES: str = "[]"
+
+    # ===== Auto-Scan Scheduler =====
+    AUTO_SCAN_ENABLED: bool = True
+    AUTO_SCAN_INTERVAL: int = 1800
+    AUTO_SCAN_MAX_FILES: int = 0
+    AUTO_SCAN_LOG_LEVEL: str = "INFO"
+    AUTO_SCAN_INITIAL: bool = True
+    AUTO_SCAN_INITIAL_WAIT: int = 30
 
     # ===== Apps =====
     INSTALLED_APPS: List[str] = Field(default_factory=lambda: [

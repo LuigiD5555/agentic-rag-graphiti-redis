@@ -3,6 +3,9 @@ import os
 import sys
 import multiprocessing
 from src.ingestion.auto_scan.scheduler import main as autoscan_main
+from src.rag.conf import Config
+
+_config = Config()
 
 
 def start_api():
@@ -25,7 +28,7 @@ def start_autoscan():
 
 if __name__ == "__main__":
     # Check if auto-scan is enabled
-    auto_scan_enabled = os.getenv("AUTO_SCAN_ENABLED", "true").lower() == "true"
+    auto_scan_enabled = _config.AUTO_SCAN_ENABLED
 
     if auto_scan_enabled:
         print("Starting auto-scan scheduler in background process...")

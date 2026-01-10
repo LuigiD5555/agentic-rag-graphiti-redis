@@ -239,10 +239,10 @@ def create_scheduler_from_env() -> AutoIngestionScheduler:
     config = Config()
 
     # Get configuration from environment
-    scan_interval = int(os.environ.get("AUTO_SCAN_INTERVAL", "300"))
-    initial_scan = os.environ.get("AUTO_SCAN_INITIAL", "true").lower() == "true"
-    initial_wait = int(os.environ.get("AUTO_SCAN_INITIAL_WAIT", "30"))
-    max_files = int(os.environ.get("AUTO_SCAN_MAX_FILES", "0"))
+    scan_interval = _config.AUTO_SCAN_INTERVAL
+    initial_scan = _config.AUTO_SCAN_INITIAL
+    initial_wait = _config.AUTO_SCAN_INITIAL_WAIT
+    max_files = _config.AUTO_SCAN_MAX_FILES
 
     logger.info(f"Scheduler configuration:")
     logger.info(f"  Scan interval: {scan_interval}s ({scan_interval // 60} minutes)")

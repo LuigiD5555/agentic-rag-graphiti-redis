@@ -16,6 +16,9 @@ from urllib.parse import urlparse
 from src.rag.interfaces.cache_interface import CacheServiceProtocol
 
 from .redis_cache import CacheService as RedisCacheService
+from src.rag.conf import Config
+
+_config = Config()
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,7 +118,7 @@ class CacheFactory:
 
         redis_host = (os.getenv("REDIS_HOST") or "").strip()
         redis_port_text = (os.getenv("REDIS_PORT") or "").strip()
-        redis_password = (os.getenv("REDIS_PASSWORD") or "").strip() or None
+        redis_password = _config.REDIS_PASSWORD or None
 
         if not redis_host and not redis_port_text:
             return None

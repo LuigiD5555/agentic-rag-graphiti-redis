@@ -13,6 +13,9 @@ from src.memory.core.identifiers import (
     generate_thread_id,
     validate_thread_id,
 )
+from src.rag.conf import Config
+
+_config = Config()
 
 logger = logging.getLogger(__name__)
 

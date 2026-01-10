@@ -13,8 +13,12 @@ from src.memory.compression.pareto import compress_conversation
 from src.memory.compression.summarizer import create_summarizer
 from src.memory.layers.short_term import create_short_term_memory
 from src.memory.context.builder import create_context_builder
+from src.rag.conf import Config
 
 logger = logging.getLogger(__name__)
+
+# Load config
+_config = Config()
 
 
 # Global checkpointer instance
@@ -30,16 +34,11 @@ def get_checkpointer():
     global _checkpointer
 
     if _checkpointer is None:
-        redis_host = os.getenv("REDIS_HOST", "127.0.0.1")
-        redis_port = int(os.getenv("REDIS_PORT", "6379"))
-        redis_password = (os.getenv("REDIS_PASSWORD") or "").strip() or None
-        ttl_seconds = int(os.getenv("MEMORY_TTL", "172800"))
-
         _checkpointer = create_checkpointer(
-            redis_host=redis_host,
-            redis_port=redis_port,
-            redis_password=redis_password,
-            ttl_seconds=ttl_seconds
+            redis_host=_config.REDIS_HOST,
+            redis_port=_config.REDIS_PORT,
+            redis_password=_config.REDIS_PASSWORD or None,
+            ttl_seconds=_config.MEMORY_TTL
         )
         logger.info("Checkpointer initialized")
 
@@ -48,8 +47,7 @@ def get_checkpointer():
 
 def _build_checkpoint_config(thread_id: str) -> dict:
     """Build LangGraph checkpoint config with a stable namespace."""
-    checkpoint_ns = os.getenv("CHECKPOINT_NS", "memory")
-    return {"configurable": {"thread_id": thread_id, "checkpoint_ns": checkpoint_ns}}
+    return {"configurable": {"thread_id": thread_id, "checkpoint_ns": _config.CHECKPOINT_NS}}
 
 
 def load_or_create_state(
@@ -155,9 +153,9 @@ def should_compress_state(state: ConversationState) -> bool:
     Returns:
         True if compression recommended
     """
-    window_size = int(os.getenv("MEMORY_WINDOW_SIZE", "10"))
-    max_state_size_kb = int(os.getenv("MAX_STATE_SIZE_KB", "100"))  # 100KB default
-    compression_threshold = float(os.getenv("COMPRESSION_THRESHOLD", "0.8"))  # Compress at 80%
+    window_size = _config.MEMORY_WINDOW_SIZE
+    max_state_size_kb = _config.MAX_STATE_SIZE_KB
+    compression_threshold = _config.COMPRESSION_THRESHOLD
 
     messages = state.get("messages", [])
 

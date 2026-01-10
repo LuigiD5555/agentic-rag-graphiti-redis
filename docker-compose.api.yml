@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # RAG API Service (Personal/Local use)
   app:
