@@ -50,9 +50,15 @@ class AutoScanScheduler:
         """
         self.config = config
         self.orchestrator = IngestionOrchestrator(config)
-        self.cache_manager = IngestionCacheManager.from_settings(
-            {k: getattr(config, k) for k in dir(config) if not k.startswith("_")}
-        )
+        if hasattr(config, "model_dump"):
+            settings_dict = config.model_dump()
+        else:
+            settings_dict = {
+                k: getattr(config, k)
+                for k in dir(config)
+                if not k.startswith("_")
+            }
+        self.cache_manager = IngestionCacheManager.from_settings(settings_dict)
 
         # Scheduler configuration
         self.scan_interval = getattr(config, "AUTO_SCAN_INTERVAL", 300)
