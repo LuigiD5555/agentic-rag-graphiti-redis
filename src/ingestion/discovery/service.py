@@ -22,11 +22,12 @@ class FileDiscoveryService:
     def __init__(
         self,
         cache_file: Optional[str] = None,
-        cache_manager: Optional[IngestionCacheManager] = None
+        cache_manager: Optional[IngestionCacheManager] = None,
+        scan_checkpointer=None
     ):
         self.cache_mgr = DiscoveryCacheManager(cache_file, cache_manager)
         self.pattern_matcher = PatternMatcher()
-        self.scanner = DirectoryScanner(self.cache_mgr, self.pattern_matcher)
+        self.scanner = DirectoryScanner(self.cache_mgr, self.pattern_matcher, scan_checkpointer)
         self._last_visited_dirs = 0
 
     @logged("Starting file discovery")

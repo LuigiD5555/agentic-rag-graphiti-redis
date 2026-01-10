@@ -35,6 +35,8 @@ class IngestionPipeline:
         vector_store: VectorInterface,
         options: PipelineOptions,
         cache_manager: Optional[IngestionCacheManager] = None,
+        ingest_queue=None,
+        chunk_registry=None,
     ):
         self.embedding_service = embedding_service
         self.vector_store = vector_store
@@ -42,6 +44,10 @@ class IngestionPipeline:
 
         # Redis-based cache for incremental ingestion
         self.cache_manager = cache_manager
+
+        # Checkpoint components for resumable ingestion
+        self.ingest_queue = ingest_queue
+        self.chunk_registry = chunk_registry
 
         self.owner_id = options.owner_id
         self.visibility = options.visibility
@@ -118,12 +124,16 @@ class IngestionPipeline:
         vector_store: VectorInterface,
         options: PipelineOptions,
         cache_manager: Optional[IngestionCacheManager] = None,
+        ingest_queue=None,
+        chunk_registry=None,
     ) -> "IngestionPipeline":
         return cls(
             embedding_service=embedding_service,
             vector_store=vector_store,
             options=options,
             cache_manager=cache_manager,
+            ingest_queue=ingest_queue,
+            chunk_registry=chunk_registry,
         )
 
     def hash_exists(self, content_hash: str) -> bool:
@@ -235,6 +245,186 @@ class IngestionPipeline:
                 bar.finish(message="done")
 
         return ingested, failed
+
+    def ingest_files_resumable(
+        self,
+        file_paths: List[str],
+        run_id: str,
+        scan_run_id: Optional[str] = None,
+        consumer_name: Optional[str] = None,
+    ) -> tuple[int, int, int]:
+        """Ingest files using persistent queue for resumability.
+
+        This method uses IngestQueue for persistent job tracking and enables:
+        - Resuming after crashes or interruptions
+        - Retry logic with exponential backoff
+        - Dead letter queue for permanently failed jobs
+
+        Args:
+            file_paths: List of file paths to ingest
+            run_id: Ingestion run identifier
+            scan_run_id: Optional scan run that discovered these files
+            consumer_name: Optional consumer name (defaults to hostname+pid)
+
+        Returns:
+            Tuple of (ingested_count, failed_count, enqueued_count)
+        """
+        if not self.ingest_queue:
+            raise RuntimeError("IngestQueue not configured. Use ingest_files() instead.")
+
+        if not file_paths:
+            return 0, 0, 0
+
+        # Generate consumer name if not provided
+        if not consumer_name:
+            import socket
+            hostname = socket.gethostname()
+            pid = os.getpid()
+            consumer_name = f"{hostname}_{pid}"
+
+        # Enqueue all files for processing
+        logger.info(
+            "Enqueueing %d file(s) for resumable ingestion (run_id=%s)",
+            len(file_paths),
+            run_id
+        )
+
+        job_ids = self.ingest_queue.enqueue_batch(
+            file_paths=file_paths,
+            run_id=run_id,
+            scan_run_id=scan_run_id,
+        )
+
+        logger.info("Enqueued %d job(s), starting processing", len(job_ids))
+
+        # Process jobs from queue
+        ingested = 0
+        failed = 0
+        total_processed = 0
+
+        # Create progress bar
+        bar: ProgressBar | None = None
+        if len(file_paths) > 0:
+            bar = ProgressBar(
+                total=len(file_paths),
+                stream=sys.stdout,
+                prefix="Ingest",
+                rewrite=None,
+                min_interval_seconds=1.0,
+            )
+
+        try:
+            # Process until queue is empty
+            while True:
+                # Dequeue jobs (blocking with 1 second timeout)
+                jobs = self.ingest_queue.dequeue(
+                    consumer_name=consumer_name,
+                    count=self._max_workers,
+                    block=1000,  # 1 second timeout
+                )
+
+                if not jobs:
+                    # Check if there are abandoned jobs to claim
+                    abandoned = self.ingest_queue.claim_abandoned(
+                        consumer_name=consumer_name,
+                        count=self._max_workers,
+                    )
+
+                    if not abandoned:
+                        # No more jobs, we're done
+                        break
+
+                    jobs = abandoned
+
+                # Process jobs (in parallel if max_workers > 1)
+                if self._max_workers <= 1:
+                    # Sequential processing
+                    for job_id, job in jobs:
+                        success, error = self._process_job(job)
+                        total_processed += 1
+
+                        if success:
+                            ingested += 1
+                            self.ingest_queue.acknowledge(job_id, success=True)
+                        else:
+                            failed += 1
+                            self.ingest_queue.acknowledge(job_id, success=False, error=error)
+
+                        if bar:
+                            bar.update(
+                                total_processed,
+                                message=os.path.basename(job.file_path) or job.file_path,
+                            )
+                else:
+                    # Parallel processing
+                    with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+                        future_to_job = {
+                            executor.submit(self._process_job, job): (job_id, job)
+                            for job_id, job in jobs
+                        }
+
+                        for future in as_completed(future_to_job):
+                            job_id, job = future_to_job[future]
+                            success, error = future.result()
+                            total_processed += 1
+
+                            if success:
+                                ingested += 1
+                                self.ingest_queue.acknowledge(job_id, success=True)
+                            else:
+                                failed += 1
+                                self.ingest_queue.acknowledge(job_id, success=False, error=error)
+
+                            if bar:
+                                bar.update(
+                                    total_processed,
+                                    message=os.path.basename(job.file_path) or job.file_path,
+                                )
+
+            logger.info(
+                "Resumable ingestion completed: %d ingested, %d failed (run_id=%s)",
+                ingested,
+                failed,
+                run_id,
+            )
+
+        finally:
+            if bar:
+                bar.finish(message="done")
+
+        return ingested, failed, len(job_ids)
+
+    def _process_job(self, job) -> tuple[bool, Optional[str]]:
+        """Process a single ingestion job.
+
+        Args:
+            job: IngestJob instance
+
+        Returns:
+            Tuple of (success, error_message)
+        """
+        from src.ingestion.checkpoint.ingest_queue import IngestJob
+
+        try:
+            # Process the file
+            _, success, error = self._process_single_file_safe(
+                full_path=job.file_path,
+                file_index=1,  # Not meaningful in queue context
+                total_files=1,  # Not meaningful in queue context
+                directory_path=os.path.dirname(job.file_path),
+            )
+
+            if success:
+                logger.debug("Successfully processed job: %s", job.file_path)
+                return True, None
+            else:
+                logger.warning("Failed to process job: %s (error=%s)", job.file_path, error)
+                return False, error
+
+        except Exception as e:
+            error_msg = f"Error processing job {job.file_path}: {e}"
+            logger.error(error_msg)
+            return False, str(e)
 
     @logged("Ingesting candidate paths")
     @timed()
