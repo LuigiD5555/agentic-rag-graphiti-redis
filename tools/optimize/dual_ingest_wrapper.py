@@ -35,7 +35,7 @@ def get_dual_config() -> Dict[str, Any]:
         "small_collection": os.getenv("DUAL_EMBEDDINGS_SMALL_COLLECTION", "RAGDocument384"),
         "large_collection": os.getenv("DUAL_EMBEDDINGS_LARGE_COLLECTION", "RAGDocument768"),
         "small_model": os.getenv("SMALL_EMBEDDING_MODEL", "text-embedding-bge-micro-v2"),
-        "large_model": os.getenv("LARGE_EMBEDDING_MODEL", "text-embedding-nomic-embed-text-v1.5"),
+        "large_model": os.getenv("LARGE_EMBEDDING_MODEL", "text-embedding-nomic-embed-text-v2-moe"),
     }
 
 

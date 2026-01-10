@@ -46,6 +46,9 @@ services:
     restart: unless-stopped
     logging:
       driver: journald
+    # Only start when explicitly requested via profile (optional plugin)
+    profiles:
+      - neo4j
     # Bind ONLY to localhost so it's not exposed to LAN
     network_mode: "host"
     environment:
@@ -211,8 +214,6 @@ services:
     depends_on:
       weaviate:
         condition: service_healthy
-      neo4j:
-        condition: service_healthy
       redis:
         condition: service_healthy
     env_file: .env
@@ -322,8 +323,6 @@ services:
     depends_on:
       weaviate:
         condition: service_healthy
-      neo4j:
-        condition: service_healthy
       redis:
         condition: service_healthy
     env_file: .env
@@ -372,8 +371,6 @@ services:
       app:
         condition: service_healthy
       weaviate:
-        condition: service_healthy
-      neo4j:
         condition: service_healthy
       redis:
         condition: service_healthy

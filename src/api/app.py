@@ -97,9 +97,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if not base_url.endswith("/v1"):
             base_url = base_url.rstrip("/") + "/v1"
 
+        # Get keep_alive setting from environment (default: 60 seconds)
+        keep_alive = int(os.getenv("LMSTUDIO_KEEPALIVE_CHAT", "60"))
+
         chat_service = LMStudioChatService(
             base_url=base_url,
             api_key="not-needed",  # LM Studio doesn't require API key
+            keep_alive=keep_alive,
         )
 
         # Create ChatMemory manager BEFORE RAG orchestrator

@@ -95,7 +95,11 @@ class ModelManager:
                 response.raise_for_status()
                 models = response.json().get("data", [])
 
-                self.embedding_models = [m["id"] for m in models if "embed" in m["id"].lower()]
+                # Filter out reranker models from embeddings (they have "rerank" in the name)
+                self.embedding_models = [
+                    m["id"] for m in models
+                    if "embed" in m["id"].lower() and "rerank" not in m["id"].lower()
+                ]
                 self.language_models = [m["id"] for m in models if "embed" not in m["id"].lower()]
 
                 self.api_root = root

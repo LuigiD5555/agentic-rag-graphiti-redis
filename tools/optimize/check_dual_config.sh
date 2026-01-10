@@ -18,7 +18,7 @@ echo "  ├─ LARGE_EMBEDDING_DIM: ${LARGE_EMBEDDING_DIM:-768}"
 echo "  ├─ SMALL_COLLECTION: ${DUAL_EMBEDDINGS_SMALL_COLLECTION:-RAGDocument384}"
 echo "  ├─ LARGE_COLLECTION: ${DUAL_EMBEDDINGS_LARGE_COLLECTION:-RAGDocument768}"
 echo "  ├─ SMALL_MODEL: ${SMALL_EMBEDDING_MODEL:-text-embedding-bge-micro-v2}"
-echo "  └─ LARGE_MODEL: ${LARGE_EMBEDDING_MODEL:-text-embedding-nomic-embed-text-v1.5}"
+echo "  └─ LARGE_MODEL: ${LARGE_EMBEDDING_MODEL:-text-embedding-nomic-embed-text-v2-moe}"
 echo ""
 
 echo "🧪 Testing LM Studio models..."

@@ -34,6 +34,7 @@ class LMStudioChatService:
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 2048,
+        keep_alive: Optional[int] = None,
     ):
         """Initialize LM Studio chat service.
 
@@ -43,20 +44,22 @@ class LMStudioChatService:
             model: Specific model to use, or None to use first available.
             temperature: Sampling temperature (0.0-1.0).
             max_tokens: Maximum tokens in response.
+            keep_alive: Seconds to keep model loaded (0=unload immediately, None=server default).
         """
         log.info("Creating OpenAI client with base_url=%s", base_url)
         self.client = OpenAI(base_url=base_url, api_key=api_key)
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.keep_alive = keep_alive
 
         # Auto-detect model if not specified
         if not self.model:
             self.model = self._get_first_available_model()
 
         log.info(
-            "Initialized LMStudioChatService: model=%s, temp=%.2f, max_tokens=%d",
-            self.model, temperature, max_tokens
+            "Initialized LMStudioChatService: model=%s, temp=%.2f, max_tokens=%d, keep_alive=%s",
+            self.model, temperature, max_tokens, keep_alive
         )
 
     def _get_first_available_model(self) -> str:
@@ -97,11 +100,13 @@ class LMStudioChatService:
         try:
             log.info("Checking if model %s is loaded...", model_name)
             # Send a minimal warmup request to load the model
+            # Use keep_alive=0 to unload immediately after test
             response = self.client.chat.completions.create(
                 model=model_name,
                 messages=[{"role": "user", "content": "test"}],
                 max_tokens=1,  # Minimal tokens to speed up warmup
                 temperature=0.1,
+                extra_body={"keep_alive": 0},  # Unload immediately after test
             )
 
             if response and response.choices:
@@ -176,13 +181,21 @@ class LMStudioChatService:
             )
             log.info("Messages to send: %s", cleaned_messages)
 
-            log.info("Calling LM Studio with model=%s", normalized_model)
-            response = self.client.chat.completions.create(
-                model=normalized_model,
-                messages=cleaned_messages,
-                temperature=temp,
-                max_tokens=tokens,
-            )
+            log.info("Calling LM Studio with model=%s, keep_alive=%s", normalized_model, self.keep_alive)
+
+            # Build request parameters
+            request_params = {
+                "model": normalized_model,
+                "messages": cleaned_messages,
+                "temperature": temp,
+                "max_tokens": tokens,
+            }
+
+            # Add keep_alive if specified (LM Studio extension)
+            if self.keep_alive is not None:
+                request_params["extra_body"] = {"keep_alive": self.keep_alive}
+
+            response = self.client.chat.completions.create(**request_params)
             log.info("Received response type: %s, has choices: %s, choices length: %s",
                     type(response),
                     hasattr(response, 'choices'),
