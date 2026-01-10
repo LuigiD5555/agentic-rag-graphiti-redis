@@ -339,6 +339,24 @@ class WeaviateRetriever:
             log.error("Failed to get collection stats: %s", e)
             return {"error": str(e)}
 
+    def close(self):
+        """Close the Weaviate client connection properly."""
+        try:
+            if self.client is not None:
+                self.client.close()
+                log.debug("Weaviate client closed successfully")
+        except Exception as e:
+            log.warning("Failed to close Weaviate client: %s", e)
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensure client is closed."""
+        self.close()
+        return False
+
     @staticmethod
     def _build_filters(filters: Optional[Dict[str, Any]]):
         if not filters:

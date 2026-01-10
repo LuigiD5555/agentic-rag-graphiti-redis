@@ -513,6 +513,8 @@ class MonitoringDaemon:
                     logger.warning("Vulture findings detected (see report)")
                 else:
                     logger.info("Vulture scan completed with no findings")
+            elif result.returncode == 3:
+                logger.warning("Vulture scan detected dead code (see report)")
             else:
                 logger.warning("Vulture scan finished with errors (see report)")
 

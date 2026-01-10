@@ -300,6 +300,7 @@ Examples:
         sys.exit(1)
 
     # Initialize RAG system
+    rag = None
     try:
         rag = create_rag_system(config)
     except Exception as e:
@@ -307,16 +308,24 @@ Examples:
         log.error("RAG initialization failed", exc_info=True)
         sys.exit(1)
 
-    # Run in appropriate mode
-    if args.question and args.query:
-        print("Provide either a positional query or --question, not both.")
-        sys.exit(2)
+    # Run in appropriate mode with proper cleanup
+    try:
+        if args.question and args.query:
+            print("Provide either a positional query or --question, not both.")
+            sys.exit(2)
 
-    question = args.question or (" ".join(args.query).strip() if args.query else None)
-    if question:
-        single_query_mode(rag, question, args.top_k)
-    else:
-        interactive_mode(rag)
+        question = args.question or (" ".join(args.query).strip() if args.query else None)
+        if question:
+            single_query_mode(rag, question, args.top_k)
+        else:
+            interactive_mode(rag)
+    finally:
+        # Always close Weaviate connection on exit
+        if rag is not None:
+            try:
+                rag.retriever.weaviate_retriever.close()
+            except Exception as e:
+                log.warning("Failed to close Weaviate connection: %s", e)
 
 
 if __name__ == "__main__":
