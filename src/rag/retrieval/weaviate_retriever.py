@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional, Tuple
 import weaviate
 from weaviate.classes.query import MetadataQuery
 from src.rag.audit import get_logger
+from src.conf import settings
 
 log = get_logger(__name__)
 
@@ -31,7 +32,7 @@ class WeaviateRetriever:
         client: weaviate.WeaviateClient,
         collection_name: str,
         tenant: Optional[str] = None,
-        top_k: int = 3,  # Reduced from 5 to 3 for memory optimization
+        top_k: Optional[int] = None,
         alpha: float = 0.7,
         embedding_service: Optional[Any] = None,
         max_retries: int = 3,
@@ -44,7 +45,7 @@ class WeaviateRetriever:
             client: Weaviate client instance.
             collection_name: Name of the Weaviate collection/class.
             tenant: Optional tenant ID for multi-tenancy.
-            top_k: Number of top results to return (default: 3).
+            top_k: Number of top results to return (uses RAG_DEFAULT_TOP_K if None).
             alpha: Hybrid search weight (1.0=vector only, 0.0=keyword only, 0.7=balanced).
             embedding_service: Optional embedding service for query vectorization.
             max_retries: Maximum number of retry attempts for failed requests.
@@ -54,7 +55,7 @@ class WeaviateRetriever:
         self.client = client
         self.collection_name = collection_name
         self.tenant = tenant
-        self.top_k = top_k
+        self.top_k = top_k if top_k is not None else settings.RAG_DEFAULT_TOP_K
         self.alpha = alpha
         self.embedding_service = embedding_service
         self.max_retries = max_retries
@@ -70,7 +71,7 @@ class WeaviateRetriever:
         log.info(
             "Initialized WeaviateRetriever: collection=%s, tenant=%s, top_k=%d, "
             "has_embedder=%s, max_retries=%d, min_score=%.2f",
-            collection_name, tenant, top_k, embedding_service is not None,
+            collection_name, tenant, self.top_k, embedding_service is not None,
             max_retries, min_relevance_score
         )
 

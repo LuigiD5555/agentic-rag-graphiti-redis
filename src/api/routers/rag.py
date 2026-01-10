@@ -13,6 +13,7 @@ from src.api.models_ollama import (
     RagFileLocationResponse,
     RagFileMetadataResponse,
 )
+from src.conf import settings
 from src.ingestion.orchestrator import IngestionOrchestrator
 from src.ingestion.options import IngestionOptions
 from src.ingestion.preprocessor import get_preprocessor
@@ -40,8 +41,8 @@ async def rag_query(
         question=request.query,
         top_k=request.top_k,
         filters=request.filters,
-        temperature=request.temperature if request.temperature is not None else 0.7,
-        max_tokens=request.max_tokens if request.max_tokens is not None else 1024,
+        temperature=request.temperature if request.temperature is not None else settings.RAG_DEFAULT_TEMPERATURE,
+        max_tokens=request.max_tokens if request.max_tokens is not None else settings.RAG_DEFAULT_MAX_TOKENS,
         system_prompt=request.system,
     )
     sources = result.get("sources", []) if request.include_sources else []

@@ -7,6 +7,7 @@ from src.rag.audit import get_logger
 from src.rag.temporal.retriever import MultiTenantRetriever
 from src.rag.web_search import SearXNGClient
 from src.rag.intent import IntentClassifier
+from src.conf import settings
 
 log = get_logger(__name__)
 
@@ -98,8 +99,8 @@ class RAGOrchestrator:
         question: str,
         top_k: Optional[int] = None,
         filters: Optional[Dict[str, Any]] = None,
-        temperature: float = 0.7,
-        max_tokens: int = 1024,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
         system_prompt: Optional[str] = None,
         model: Optional[str] = None,
         user_id: Optional[str] = None,
@@ -112,8 +113,8 @@ class RAGOrchestrator:
             question: User's question.
             top_k: Number of documents to retrieve (uses retriever default if None).
             filters: Optional metadata filters for retrieval.
-            temperature: LLM temperature (0.0-1.0).
-            max_tokens: Maximum response tokens.
+            temperature: LLM temperature (uses settings default if None).
+            max_tokens: Maximum response tokens (uses settings default if None).
             system_prompt: Override the default system prompt if provided.
             model: Override the default LLM model (allows per-request model selection).
             user_id: Optional user ID for cross-chat memory retrieval.
@@ -123,6 +124,10 @@ class RAGOrchestrator:
         Returns:
             Dictionary with 'answer', 'sources', and 'metadata'.
         """
+        # Apply default values from settings if not provided
+        temperature = temperature if temperature is not None else settings.RAG_DEFAULT_TEMPERATURE
+        max_tokens = max_tokens if max_tokens is not None else settings.RAG_DEFAULT_MAX_TOKENS
+
         log.info("Processing RAG query with model=%s, thread_id=%s: %s",
                  model or "default", thread_id or "none", question[:100])
 
@@ -176,7 +181,7 @@ class RAGOrchestrator:
             retrieval_result = self.multi_tenant_retriever.retrieve_with_temporal(
                 query=question,
                 thread_id=thread_id,
-                top_k_total=top_k or 6,  # Reduced from 10 to 6 for memory optimization
+                top_k_total=top_k or settings.RAG_DEFAULT_TOP_K,
             )
 
             retrieved_docs = retrieval_result["combined_results"]

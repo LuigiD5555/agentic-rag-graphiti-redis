@@ -46,11 +46,15 @@ async def get_snapshot_scheduler():
 
 def _resolve_generation_params(options) -> Dict[str, Any]:
     if options is None:
-        return {"temperature": 0.7, "top_k": None, "max_tokens": 1024}
+        return {
+            "temperature": settings.RAG_DEFAULT_TEMPERATURE,
+            "top_k": None,
+            "max_tokens": settings.RAG_DEFAULT_MAX_TOKENS
+        }
 
-    max_tokens = options.max_tokens or options.num_predict or 1024
+    max_tokens = options.max_tokens or options.num_predict or settings.RAG_DEFAULT_MAX_TOKENS
     return {
-        "temperature": options.temperature if options.temperature is not None else 0.7,
+        "temperature": options.temperature if options.temperature is not None else settings.RAG_DEFAULT_TEMPERATURE,
         "top_k": options.top_k,
         "max_tokens": max_tokens,
     }

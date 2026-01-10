@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union, Literal
 
 from pydantic import BaseModel, Field
+from src.conf import settings
 
 
 def _utc_now() -> str:
@@ -96,8 +97,8 @@ class RagQueryRequest(BaseModel):
     top_k: Optional[int] = Field(default=None, ge=1)
     filters: Optional[Dict[str, Any]] = None
     include_sources: Optional[bool] = True
-    temperature: Optional[float] = Field(default=0.7, ge=0.0, le=2.0)
-    max_tokens: Optional[int] = Field(default=1024, ge=1)
+    temperature: Optional[float] = Field(default_factory=lambda: settings.RAG_DEFAULT_TEMPERATURE, ge=0.0, le=2.0)
+    max_tokens: Optional[int] = Field(default_factory=lambda: settings.RAG_DEFAULT_MAX_TOKENS, ge=1)
     system: Optional[str] = None
 
 

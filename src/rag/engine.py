@@ -132,6 +132,16 @@ class AppConfig(BaseSettings):
     MIN_RELEVANCE_SCORE: float = Field(default_factory=lambda: settings.MIN_RELEVANCE_SCORE)
     ENABLE_RERANKER: bool = Field(default_factory=lambda: settings.ENABLE_RERANKER)
 
+    # RAG Generation Parameters
+    RAG_DEFAULT_TEMPERATURE: float = Field(default_factory=lambda: settings.RAG_DEFAULT_TEMPERATURE)
+    RAG_DEFAULT_MAX_TOKENS: int = Field(default_factory=lambda: settings.RAG_DEFAULT_MAX_TOKENS)
+    RAG_DEFAULT_TOP_P: float = Field(default_factory=lambda: settings.RAG_DEFAULT_TOP_P)
+    RAG_DEFAULT_FREQUENCY_PENALTY: float = Field(default_factory=lambda: settings.RAG_DEFAULT_FREQUENCY_PENALTY)
+    RAG_DEFAULT_PRESENCE_PENALTY: float = Field(default_factory=lambda: settings.RAG_DEFAULT_PRESENCE_PENALTY)
+
+    # RAG Retrieval Parameters
+    RAG_DEFAULT_TOP_K: int = Field(default_factory=lambda: settings.RAG_DEFAULT_TOP_K)
+
     # RAG Profile System
     RAG_PROFILE: str = Field(default_factory=lambda: settings.RAG_PROFILE)
     RAG_PERFORMANCE_PROFILE: str = Field(default_factory=lambda: settings.RAG_PERFORMANCE_PROFILE)

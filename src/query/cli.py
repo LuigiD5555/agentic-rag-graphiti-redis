@@ -133,7 +133,7 @@ def create_rag_system(config: AppConfig) -> RAGOrchestrator:
         client=weaviate_client,
         collection_name=config.WEAVIATE_CLASS,
         tenant=config.WEAVIATE_DEFAULT_TENANT if config.WEAVIATE_MULTI_TENANCY else None,
-        top_k=5,  # Default number of results
+        top_k=None,  # Use RAG_DEFAULT_TOP_K from settings
     )
 
     # Wrap with EmbeddingWeaviateRetriever to handle query embedding

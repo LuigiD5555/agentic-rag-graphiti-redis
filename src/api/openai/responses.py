@@ -9,6 +9,7 @@ from src.api.models import (
     Usage,
     Source,
 )
+from src.conf import settings
 from src.rag.pipeline.rag_orchestrator import RAGOrchestrator
 from src.api.middleware.thread_manager import get_thread_id
 
@@ -95,8 +96,8 @@ async def create_response(
         retrieved_count=result["metadata"]["retrieved_count"],
         sources=sources,
         query=question,
-        temperature=request.temperature or 0.7,
-        max_tokens=request.max_tokens or 1024,
+        temperature=request.temperature or settings.RAG_DEFAULT_TEMPERATURE,
+        max_tokens=request.max_tokens or settings.RAG_DEFAULT_MAX_TOKENS,
     )
 
     # Build response

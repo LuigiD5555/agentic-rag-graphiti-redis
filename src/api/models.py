@@ -2,6 +2,7 @@
 from typing import List, Optional, Dict, Any, Literal, Union
 from pydantic import BaseModel, Field
 from datetime import datetime
+from src.conf import settings
 
 
 # ===== Common Models =====
@@ -43,14 +44,14 @@ class ChatCompletionRequest(BaseModel):
     """Request for chat completion."""
     model: str
     messages: List[ChatMessage]
-    temperature: Optional[float] = Field(default=0.7, ge=0.0, le=2.0)
-    top_p: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
+    temperature: Optional[float] = Field(default_factory=lambda: settings.RAG_DEFAULT_TEMPERATURE, ge=0.0, le=2.0)
+    top_p: Optional[float] = Field(default_factory=lambda: settings.RAG_DEFAULT_TOP_P, ge=0.0, le=1.0)
     n: Optional[int] = Field(default=1, ge=1)
     stream: Optional[bool] = False
     stop: Optional[Union[str, List[str]]] = None
-    max_tokens: Optional[int] = Field(default=1024, ge=1)
-    presence_penalty: Optional[float] = Field(default=0.0, ge=-2.0, le=2.0)
-    frequency_penalty: Optional[float] = Field(default=0.0, ge=-2.0, le=2.0)
+    max_tokens: Optional[int] = Field(default_factory=lambda: settings.RAG_DEFAULT_MAX_TOKENS, ge=1)
+    presence_penalty: Optional[float] = Field(default_factory=lambda: settings.RAG_DEFAULT_PRESENCE_PENALTY, ge=-2.0, le=2.0)
+    frequency_penalty: Optional[float] = Field(default_factory=lambda: settings.RAG_DEFAULT_FREQUENCY_PENALTY, ge=-2.0, le=2.0)
     logit_bias: Optional[Dict[str, float]] = None
     user: Optional[str] = None
     top_k: Optional[int] = Field(default=5, ge=1)  # RAG-specific: number of documents to retrieve
@@ -86,8 +87,8 @@ class ResponseRequest(BaseModel):
     """Request for response creation (modern endpoint)."""
     model: str
     input: Union[str, List[ResponseInput]]
-    temperature: Optional[float] = Field(default=0.7, ge=0.0, le=2.0)
-    max_tokens: Optional[int] = Field(default=1024, ge=1)
+    temperature: Optional[float] = Field(default_factory=lambda: settings.RAG_DEFAULT_TEMPERATURE, ge=0.0, le=2.0)
+    max_tokens: Optional[int] = Field(default_factory=lambda: settings.RAG_DEFAULT_MAX_TOKENS, ge=1)
     metadata: Optional[Dict[str, Any]] = None
     top_k: Optional[int] = Field(default=5, ge=1)  # RAG-specific
 
