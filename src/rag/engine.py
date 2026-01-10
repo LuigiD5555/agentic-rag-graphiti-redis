@@ -251,7 +251,7 @@ class AppConfig(BaseSettings):
     ARCHIVE_MAX_FILES: int = Field(default_factory=lambda: settings.ARCHIVE_MAX_FILES)
     OFFICE_DEFAULT_OUTPUT_FORMAT: str = Field(default_factory=lambda: settings.OFFICE_DEFAULT_OUTPUT_FORMAT)
     PREPROCESSING_WORK_DIR: str = Field(default_factory=lambda: settings.PREPROCESSING_WORK_DIR)
-    EXTERNAL_VOLUMES: str = Field(default_factory=lambda: settings.EXTERNAL_VOLUMES)
+    EXTERNAL_VOLUMES: List[Dict[str, str]] = Field(default_factory=lambda: settings.EXTERNAL_VOLUMES)
 
     # ===== Apps =====
     INSTALLED_APPS: List[str] = Field(default_factory=lambda: settings.INSTALLED_APPS)
@@ -301,6 +301,52 @@ class AppConfig(BaseSettings):
             if ext:
                 normalized.add(ext if ext.startswith('.') else f'.{ext}')
         return tuple(sorted(normalized))
+
+    @field_validator('EXTERNAL_VOLUMES', mode='before')
+    @classmethod
+    def parse_external_volumes(cls, v):
+        """Ensure external volumes configuration is a list of dicts."""
+        def normalize_entry(entry: object) -> dict[str, str] | None:
+            if not isinstance(entry, dict):
+                return None
+            name = str(entry.get("name", "")).strip()
+            primary = str(entry.get("primary", "")).strip()
+            fallback = str(entry.get("fallback", "")).strip()
+            mount = str(entry.get("mount", "")).strip()
+            if not all((name, primary, fallback, mount)):
+                return None
+            return {"name": name, "primary": primary, "fallback": fallback, "mount": mount}
+
+        def normalize_list(raw):
+            items: list[dict[str, str]] = []
+            for raw_item in raw:
+                if not isinstance(raw_item, dict):
+                    continue
+                normalized = normalize_entry(raw_item)
+                if normalized:
+                    items.append(normalized)
+            return items
+
+        if isinstance(v, str):
+            raw = v.strip()
+            if not raw:
+                return []
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                logger.warning("EXTERNAL_VOLUMES string is not valid JSON: %s", exc)
+                return []
+            if isinstance(parsed, (list, tuple)):
+                return normalize_list(parsed)
+            logger.warning(
+                "EXTERNAL_VOLUMES string did not decode into a list (got %s); ignoring",
+                type(parsed),
+            )
+            return []
+
+        if isinstance(v, (list, tuple)):
+            return normalize_list(v)
+        return []
 
     @classmethod
     def settings_customise_sources(
