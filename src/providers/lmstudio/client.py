@@ -1,5 +1,6 @@
 """Module with services that communicate RAG requests to LM Studio API."""
 import requests
+from typing import List, Dict, Optional
 from src import logger
 
 
@@ -79,6 +80,72 @@ class LLMService:
         if self._require_live:
             raise RuntimeError(
                 "LM Studio chat completions required but no endpoint responded. "
+                f"Tried: {self._candidate_roots}"
+            )
+        return ""
+
+    def chat(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        model: Optional[str] = None,
+    ) -> str:
+        """
+        Send chat completion request with message history.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content'.
+            temperature: Override default temperature.
+            max_tokens: Override default max_tokens.
+            model: Override default model.
+
+        Returns:
+            Generated response text.
+        """
+        temp = temperature if temperature is not None else self.temperature
+        tokens = max_tokens if max_tokens is not None else 256
+        selected_model = model if model is not None else self.model
+
+        payload = {
+            "model": selected_model,
+            "messages": messages,
+            "temperature": temp,
+            "max_tokens": tokens,
+        }
+
+        for root in self._candidate_roots:
+            url = f"{root}/v1/chat/completions"
+            try:
+                logger.info(
+                    "Sending chat request to LM Studio (model=%s, host=%s, %d messages, max_tokens=%d)...",
+                    selected_model,
+                    root,
+                    len(messages),
+                    tokens,
+                )
+                response = requests.post(url, json=payload, timeout=30)
+                response.raise_for_status()
+
+                data = response.json()
+                text = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+
+                if not text:
+                    logger.warning("LM Studio returned an empty chat response.")
+                else:
+                    logger.info("Received chat response (%d chars).", len(text))
+
+                self.api_root = root
+                self.url = url
+                return text
+
+            except requests.exceptions.RequestException as e:
+                logger.error("Failed to connect to LM Studio for chat (%s): %s", root, e)
+
+        logger.error("All LM Studio chat endpoints failed: %s", self._candidate_roots)
+        if self._require_live:
+            raise RuntimeError(
+                "LM Studio chat required but no endpoint responded. "
                 f"Tried: {self._candidate_roots}"
             )
         return ""

@@ -14,7 +14,6 @@ from src.api.routers.rag import get_rag_orchestrator as rag_get_rag
 from src.api.routers.rag import get_ingestion_orchestrator
 from src.middleware.thread_manager import ThreadManagerMiddleware
 from src.rag.retrieval import WeaviateRetriever
-from src.rag.chat import LMStudioChatService
 from src.rag.pipeline.rag_orchestrator import RAGOrchestrator
 from src.rag.embeddings_factory import get_embedding_service
 from src.conf import settings as rag_config
@@ -112,23 +111,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             embedding_service=_embedding_service,
         )
 
-        # Create chat service (using LM Studio)
-        # Note: The chat service expects OPENAI_API_BASE which should end in /v1
-        # config.LM_LLM_URL is typically "http://127.0.0.1:1234/v1" or "http://127.0.0.1:1234/v1/completions"
-        base_url = config.LM_LLM_URL
-        if base_url.endswith("/completions"):
-            base_url = base_url.rsplit("/completions", 1)[0]
-        if not base_url.endswith("/v1"):
-            base_url = base_url.rstrip("/") + "/v1"
-
-        # Get keep_alive setting from config
-        keep_alive = config.LMSTUDIO_KEEPALIVE_CHAT
-
-        chat_service = LMStudioChatService(
-            base_url=base_url,
-            api_key="not-needed",  # LM Studio doesn't require API key
-            keep_alive=keep_alive,
-        )
+        # Create chat service using ProviderFactory (centralized provider management)
+        chat_service = provider.chat()
 
         # Create RAG orchestrator
         _rag_orchestrator = RAGOrchestrator(

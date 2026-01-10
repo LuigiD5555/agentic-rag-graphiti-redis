@@ -1,7 +1,7 @@
 """RAG pipeline orchestrator - combines retrieval and generation."""
 from typing import List, Dict, Any, Optional
 from src.rag.retrieval import WeaviateRetriever
-from src.rag.chat import LMStudioChatService
+from src.rag.interfaces.chat_interface import ChatInterface
 from src.rag.multilingual import LanguageDetector
 from src.rag.audit import get_logger
 from src.rag.temporal.retriever import MultiTenantRetriever
@@ -38,7 +38,7 @@ class RAGOrchestrator:
     def __init__(
         self,
         retriever: WeaviateRetriever,
-        chat_service: LMStudioChatService,
+        chat_service: ChatInterface,
         system_prompt: Optional[str] = None,
         include_sources: bool = True,
         enable_multilingual: bool = True,

@@ -4,11 +4,11 @@ import sys
 import weaviate
 from src.rag.engine import AppConfig
 from src.rag.retrieval import WeaviateRetriever
-from src.rag.chat import LMStudioChatService
 from src.rag.pipeline.rag_orchestrator import RAGOrchestrator
 from src.rag.audit import get_logger
 from src.providers.lmstudio.embeddings import EmbeddingService
 from src.providers.lmstudio.model_manager import ModelManager
+from src.providers.factory import ProviderFactory
 
 log = get_logger(__name__)
 
@@ -142,14 +142,9 @@ def create_rag_system(config: AppConfig) -> RAGOrchestrator:
         embedding_service=embedding_service,
     )
 
-    # Create chat service
-    # Use the first language model (not embedding model)
-    language_model = model_manager.get_first_language_model() if not config.LMSTUDIO_CHAT_MODEL else config.LMSTUDIO_CHAT_MODEL
-    chat_service = LMStudioChatService(
-        base_url=f"http://{config.LMSTUDIO_HOST}:{config.LMSTUDIO_PORT}/v1",
-        api_key="lm-studio",
-        model=language_model,
-    )
+    # Create chat service using ProviderFactory (centralized provider management)
+    provider = ProviderFactory(config)
+    chat_service = provider.chat()
 
     # Create RAG orchestrator
     # Note: Disable RAG gating in CLI mode to ensure RAG always runs
