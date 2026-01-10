@@ -74,14 +74,12 @@ def check_embedding_config():
     print("="*60)
 
     try:
-        from src.rag.conf import Config
+        import src.settings as settings
 
-        config = Config()
-
-        embedding_backend = getattr(config, "EMBEDDING_BACKEND", None)
-        embedding_dim = getattr(config, "EMBEDDING_DIM", None)
-        embedding_model = getattr(config, "EMBEDDING_MODEL", None)
-        embedding_max_tokens = getattr(config, "EMBEDDING_MAX_TOKENS", None)
+        embedding_backend = getattr(settings, "EMBEDDING_BACKEND", None)
+        embedding_dim = getattr(settings, "EMBEDDING_DIM", None)
+        embedding_model = getattr(settings, "EMBEDDING_MODEL", None)
+        embedding_max_tokens = getattr(settings, "EMBEDDING_MAX_TOKENS", None)
 
         print(f"Configuration loaded:")
         print(f"   - EMBEDDING_BACKEND: {embedding_backend}")

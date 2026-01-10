@@ -11,9 +11,7 @@ from typing import Optional, Dict, Any
 import requests
 
 from src.rag.audit import get_logger
-from src.rag.conf import Config
-
-_config = Config()
+import src.settings as settings
 
 log = get_logger(__name__)
 
@@ -57,7 +55,7 @@ class FilePreprocessor:
         ).lower() == "true"
         self.enable_ocr = enable_ocr or os.getenv("ENABLE_OCR", "false").lower() == "true"
         self.timeout = timeout
-        self.work_dir = Path(work_dir or _config.PREPROCESSING_WORK_DIR)
+        self.work_dir = Path(work_dir or settings.PREPROCESSING_WORK_DIR)
         self.work_dir.mkdir(parents=True, exist_ok=True)
 
         # Extensions that need preprocessing
@@ -203,7 +201,7 @@ class FilePreprocessor:
                 f"{self.archive_url}/extract",
                 {
                     "archive_path": str(file_path.absolute()),
-                    "max_size_mb": _config.ARCHIVE_MAX_SIZE_MB,
+                    "max_size_mb": settings.ARCHIVE_MAX_SIZE_MB,
                 },
             )
             response.raise_for_status()

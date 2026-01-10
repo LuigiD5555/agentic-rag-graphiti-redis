@@ -10,7 +10,7 @@ from src.ingestion.pipeline import IngestionPipeline
 from src.ingestion.pipeline.state_helpers import record_directory_listing
 from src.providers.factory import ProviderFactory
 from src.rag.audit import get_logger
-from src.rag.conf import Config
+import src.settings as settings
 from src.rag.embeddings_factory import get_embedding_service
 from src.storage.vector import get_vector_store
 from src.utils.file_operations import sort_paths_by_size_desc  # Now sorts ascending (small->large)
@@ -21,13 +21,10 @@ log = get_logger(__name__)
 class IngestionOrchestrator:
     """Wires services (LM Studio, embeddings, vector store, pipeline) and executes ingestion."""
 
-    def __init__(self, config: Config) -> None:
-        self._config = config
-
+    def __init__(self) -> None:
         # Initialize Redis cache manager
-        # Use Config class attributes instead of instance to avoid Pydantic v2.11 deprecation
-        config_class = type(config)
-        settings_dict = {k: getattr(config, k) for k in dir(config_class) if not k.startswith('_')}
+        # Use settings object attributes
+        settings_dict = {k: getattr(settings, k) for k in dir(settings) if not k.startswith('_')}
         self._cache_manager = IngestionCacheManager.from_settings(settings_dict)
 
         # Initialize discovery service with cache manager
@@ -200,15 +197,15 @@ class IngestionOrchestrator:
 
     def _build_pipeline(self) -> IngestionPipeline:
         log.info("Initializing services (LM Studio, EmbeddingService, VectorStore, Pipeline)...")
-        provider = ProviderFactory(self._config)
-        embedding_service = get_embedding_service(self._config, provider)
-        vector_store = get_vector_store(self._config)
+        provider = ProviderFactory(settings)
+        embedding_service = get_embedding_service(settings, provider)
+        vector_store = get_vector_store(settings)
         pipeline_options = PipelineOptions(
-            chunk_size=self._config.CHUNK_SIZE,
-            chunk_overlap=self._config.CHUNK_OVERLAP,
-            embedding_token_limit=self._config.EMBEDDING_MAX_TOKENS,
-            tenant_id=(self._config.WEAVIATE_DEFAULT_TENANT or None),
-            include_duplicates_patterns=getattr(self._config, 'DUPLICATES_DOC_EXCEPTIONS', ()),
+            chunk_size=settings.CHUNK_SIZE,
+            chunk_overlap=settings.CHUNK_OVERLAP,
+            embedding_token_limit=settings.EMBEDDING_MAX_TOKENS,
+            tenant_id=(settings.WEAVIATE_DEFAULT_TENANT or None),
+            include_duplicates_patterns=getattr(settings, 'DUPLICATES_DOC_EXCEPTIONS', ()),
         )
 
         # Log cache manager status

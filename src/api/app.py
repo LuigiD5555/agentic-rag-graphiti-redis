@@ -19,7 +19,7 @@ from src.rag.retrieval import WeaviateRetriever
 from src.rag.chat import LMStudioChatService
 from src.rag.pipeline.rag_orchestrator import RAGOrchestrator
 from src.rag.embeddings_factory import get_embedding_service as create_embedding_service
-from src.rag.conf import Config
+import src.settings as settings
 from src.ingestion.orchestrator import IngestionOrchestrator
 from src.rag.web_search import SearXNGClient
 
@@ -59,7 +59,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         # Load configuration
         config = AppConfig()
-        rag_config = Config()
         logger.info("Configuration loaded")
 
         # Initialize Weaviate client
@@ -73,11 +72,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Ensure Weaviate schema exists BEFORE any operations
         from src.storage.vector import get_vector_store
         logger.info("Ensuring Weaviate schema exists...")
-        get_vector_store(rag_config)  # This creates the schema if missing
+        get_vector_store(settings)  # This creates the schema if missing
         logger.info("Weaviate schema ready")
 
         # Create embedding service FIRST (needed by retriever for query vectorization)
-        _embedding_service = create_embedding_service(rag_config)
+        _embedding_service = create_embedding_service(settings)
 
         # Create retriever with embedding service for query vectorization
         retriever = WeaviateRetriever(
@@ -317,9 +316,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 # Determine API mode from config
-from src.rag.conf import Config
-_api_config = Config()
-API_MODE = _api_config.API_MODE if hasattr(_api_config, "API_MODE") else "ollama"
+import src.settings as settings
+API_MODE = settings.API_MODE if hasattr(settings, "API_MODE") else "ollama"
 logger.info(f"API mode: {API_MODE}")
 
 

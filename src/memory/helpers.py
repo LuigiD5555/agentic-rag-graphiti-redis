@@ -13,12 +13,9 @@ from src.memory.compression.pareto import compress_conversation
 from src.memory.compression.summarizer import create_summarizer
 from src.memory.layers.short_term import create_short_term_memory
 from src.memory.context.builder import create_context_builder
-from src.rag.conf import Config
+import src.settings as settings
 
 logger = logging.getLogger(__name__)
-
-# Load config
-_config = Config()
 
 
 # Global checkpointer instance
@@ -35,10 +32,10 @@ def get_checkpointer():
 
     if _checkpointer is None:
         _checkpointer = create_checkpointer(
-            redis_host=_config.REDIS_HOST,
-            redis_port=_config.REDIS_PORT,
-            redis_password=_config.REDIS_PASSWORD or None,
-            ttl_seconds=_config.MEMORY_TTL
+            redis_host=settings.REDIS_HOST,
+            redis_port=settings.REDIS_PORT,
+            redis_password=settings.REDIS_PASSWORD or None,
+            ttl_seconds=settings.MEMORY_TTL
         )
         logger.info("Checkpointer initialized")
 
@@ -47,7 +44,7 @@ def get_checkpointer():
 
 def _build_checkpoint_config(thread_id: str) -> dict:
     """Build LangGraph checkpoint config with a stable namespace."""
-    return {"configurable": {"thread_id": thread_id, "checkpoint_ns": _config.CHECKPOINT_NS}}
+    return {"configurable": {"thread_id": thread_id, "checkpoint_ns": settings.CHECKPOINT_NS}}
 
 
 def load_or_create_state(

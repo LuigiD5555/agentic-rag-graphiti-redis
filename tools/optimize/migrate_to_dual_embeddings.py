@@ -19,8 +19,8 @@ from tqdm import tqdm
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.rag.conf import Config
-from src.storage.vector import get_weaviate_client
+import weaviate
+import src.settings as settings
 from src.storage.vector.dual_store import DualCollectionVectorStore
 from src.rag.importance import DocumentImportanceClassifier, ImportanceLevel
 from src.rag.embeddings_factory import get_embedding_service
@@ -35,7 +35,6 @@ class DualEmbeddingMigrator:
 
     def __init__(
         self,
-        config: Config,
         source_collection: str,
         batch_size: int = 50,
         dry_run: bool = False,
@@ -43,18 +42,22 @@ class DualEmbeddingMigrator:
         """Initialize migrator.
 
         Args:
-            config: RAG configuration
             source_collection: Name of existing collection to migrate from
             batch_size: Number of documents to process in each batch
             dry_run: If True, only analyze without migrating
         """
-        self.config = config
         self.source_collection = source_collection
         self.batch_size = batch_size
         self.dry_run = dry_run
 
         # Initialize Weaviate client
-        self.client = get_weaviate_client(config)
+        host = settings.WEAVIATE_URL.replace("http://", "").replace("https://", "").split(":")[0]
+        port = int(settings.WEAVIATE_URL.split(":")[-1]) if ":" in settings.WEAVIATE_URL else 8080
+        self.client = weaviate.connect_to_local(
+            host=host,
+            port=port,
+            grpc_port=settings.WEAVIATE_GRPC_PORT,
+        )
 
         # Initialize classifier
         self.classifier = DocumentImportanceClassifier()
@@ -70,11 +73,8 @@ class DualEmbeddingMigrator:
             small_embedding_dim=int(os.getenv("SMALL_EMBEDDING_DIM", "384")),
             large_embedding_dim=int(os.getenv("LARGE_EMBEDDING_DIM", "768")),
             importance_classifier=self.classifier,
-            enable_multi_tenancy=config.WEAVIATE_MULTI_TENANCY,
+            enable_multi_tenancy=settings.WEAVIATE_MULTI_TENANCY,
         )
-
-        # Initialize embedding services (will need both 384 and 768)
-        provider = ProviderFactory(config)
 
         # CRITICAL: We need both 384 and 768 embedding services for re-embedding
         # The current implementation tries to copy vectors without re-embedding,
@@ -86,7 +86,7 @@ class DualEmbeddingMigrator:
         #   (Recommended: Nomic Embed v2 MoE - best open-source embedding model)
         # - LMSTUDIO_EMBEDDING_MODEL_384: e.g., "sentence-transformers/all-MiniLM-L6-v2"
 
-        model_768 = os.getenv("LMSTUDIO_EMBEDDING_MODEL_768", config.LMSTUDIO_EMBEDDING_MODEL)
+        model_768 = os.getenv("LMSTUDIO_EMBEDDING_MODEL_768", settings.EMBEDDING_MODEL)
         model_384 = os.getenv("LMSTUDIO_EMBEDDING_MODEL_384")
 
         if not model_384:
@@ -101,18 +101,22 @@ class DualEmbeddingMigrator:
             )
 
         # Initialize 768-dim service with modified config if custom model specified
-        from copy import deepcopy
-        config_768 = deepcopy(config)
-        config_768.LMSTUDIO_EMBEDDING_MODEL = model_768
-        provider_768 = ProviderFactory(config_768)
-        self.embedding_service_768 = get_embedding_service(config_768, provider_768)
+        # For dual embeddings, we need to temporarily override the embedding model setting
+        # Save original value to restore later
+        original_model = settings.EMBEDDING_MODEL
 
-        # Initialize 384-dim service with modified config
-        # Create a temporary config copy with 384-dim model
-        config_384 = deepcopy(config)
-        config_384.LMSTUDIO_EMBEDDING_MODEL = model_384
-        provider_384 = ProviderFactory(config_384)
-        self.embedding_service_384 = get_embedding_service(config_384, provider_384)
+        # Initialize 768-dim service
+        settings.EMBEDDING_MODEL = model_768
+        provider_768 = ProviderFactory(settings)
+        self.embedding_service_768 = get_embedding_service(settings, provider_768)
+
+        # Initialize 384-dim service
+        settings.EMBEDDING_MODEL = model_384
+        provider_384 = ProviderFactory(settings)
+        self.embedding_service_384 = get_embedding_service(settings, provider_384)
+
+        # Restore original model setting
+        settings.EMBEDDING_MODEL = original_model
 
         log.info(
             "Dual embedding services initialized: 768-dim=%s, 384-dim=%s",
@@ -349,12 +353,8 @@ def main():
 
     args = parser.parse_args()
 
-    # Load config
-    config = Config()
-
     # Create migrator
     migrator = DualEmbeddingMigrator(
-        config=config,
         source_collection=args.source,
         batch_size=args.batch_size,
         dry_run=args.dry_run,

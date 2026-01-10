@@ -1,7 +1,7 @@
 """Module for the RAG socket server."""
 import os
 import socket
-from src.rag.conf import Config
+import src.settings as settings
 from src.providers.factory import ProviderFactory
 from src.storage.graph import get_graph_store
 from src.storage.cache import get_cache
@@ -12,14 +12,12 @@ from src.rag.embeddings_factory import get_embedding_service
 
 
 def main():
-    cfg = Config()
-
-    provider = ProviderFactory(cfg)
-    embed = get_embedding_service(cfg, provider)
+    provider = ProviderFactory(settings)
+    embed = get_embedding_service(settings, provider)
     chat = provider.chat()
-    vector = get_vector_store(cfg)
-    graph = get_graph_store(cfg)
-    cache = get_cache(cfg)
+    vector = get_vector_store(settings)
+    graph = get_graph_store(settings)
+    cache = get_cache(settings)
 
     rag_engine = RAGEngine(
         embed,
@@ -27,7 +25,7 @@ def main():
         graph,
         cache,
         chat,
-        default_tenant=(cfg.WEAVIATE_DEFAULT_TENANT or None),
+        default_tenant=(settings.WEAVIATE_DEFAULT_TENANT or None),
     )
     agent = Agent(rag_engine)
 

@@ -26,7 +26,8 @@ from typing import Optional
 from datetime import datetime
 
 from src.rag.audit import get_logger, configure_logging, resolve_level
-from src.rag.conf import Config, sync_settings_json
+import src.settings as settings
+from src.rag.conf import sync_settings_json
 from src.ingestion.orchestrator import IngestionOrchestrator
 from src.ingestion.helpers import build_ingestion_options_from_args
 
@@ -42,7 +43,6 @@ class AutoIngestionScheduler:
 
     def __init__(
         self,
-        config: Config,
         scan_interval: int = 300,  # 5 minutes default
         initial_scan: bool = True,
         initial_wait: int = 30,
@@ -52,17 +52,15 @@ class AutoIngestionScheduler:
         Initialize the auto-ingestion scheduler.
 
         Args:
-            config: Configuration object
             scan_interval: Seconds between scans (default: 300 = 5 minutes)
             initial_scan: Whether to run full scan on startup
             initial_wait: Seconds to wait before initial scan (for services to be ready)
         """
-        self.config = config
         self.scan_interval = scan_interval
         self.initial_scan = initial_scan
         self.initial_wait = initial_wait
         self.max_files = max_files
-        self.orchestrator = IngestionOrchestrator(config)
+        self.orchestrator = IngestionOrchestrator()
 
         # Shutdown flag
         self._running = False
@@ -116,7 +114,7 @@ class AutoIngestionScheduler:
                 log_level=None
             )
 
-            options = build_ingestion_options_from_args(args, self.config)
+            options = build_ingestion_options_from_args(args, settings)
             result = self.orchestrator.run_with_report(options)
 
             # Update statistics
@@ -236,20 +234,18 @@ def create_scheduler_from_env() -> AutoIngestionScheduler:
     """
     # Sync settings
     sync_settings_json()
-    config = Config()
 
     logger.info(f"Scheduler configuration:")
-    logger.info(f"  Scan interval: {config.AUTO_SCAN_INTERVAL}s ({config.AUTO_SCAN_INTERVAL // 60} minutes)")
-    logger.info(f"  Initial scan: {config.AUTO_SCAN_INITIAL}")
-    logger.info(f"  Initial wait: {config.AUTO_SCAN_INITIAL_WAIT}s")
-    logger.info(f"  Max files per scan: {config.AUTO_SCAN_MAX_FILES if config.AUTO_SCAN_MAX_FILES else 'unlimited'}")
+    logger.info(f"  Scan interval: {settings.AUTO_SCAN_INTERVAL}s ({settings.AUTO_SCAN_INTERVAL // 60} minutes)")
+    logger.info(f"  Initial scan: {settings.AUTO_SCAN_INITIAL}")
+    logger.info(f"  Initial wait: {settings.AUTO_SCAN_INITIAL_WAIT}s")
+    logger.info(f"  Max files per scan: {settings.AUTO_SCAN_MAX_FILES if settings.AUTO_SCAN_MAX_FILES else 'unlimited'}")
 
     return AutoIngestionScheduler(
-        config=config,
-        scan_interval=config.AUTO_SCAN_INTERVAL,
-        initial_scan=config.AUTO_SCAN_INITIAL,
-        initial_wait=config.AUTO_SCAN_INITIAL_WAIT,
-        max_files=config.AUTO_SCAN_MAX_FILES,
+        scan_interval=settings.AUTO_SCAN_INTERVAL,
+        initial_scan=settings.AUTO_SCAN_INITIAL,
+        initial_wait=settings.AUTO_SCAN_INITIAL_WAIT,
+        max_files=settings.AUTO_SCAN_MAX_FILES,
     )
 
 

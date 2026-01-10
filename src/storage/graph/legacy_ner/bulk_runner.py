@@ -10,7 +10,7 @@ from json import JSONDecodeError
 from neo4j.exceptions import Neo4jError
 from requests import RequestException
 from src import logger
-from src.rag.conf import Config
+import src.settings as settings
 from src.providers.factory import ProviderFactory
 from src.storage.graph import get_graph_store
 from src.storage.graph.legacy_ner.extractor import NERExtractor
@@ -33,11 +33,10 @@ class NERBulkProcessor:
         self.only_text = only_text
         self.only_code = only_code
 
-        cfg = Config()
-        provider = ProviderFactory(cfg)
+        provider = ProviderFactory(settings)
         self.llm = provider.chat()
-        self.vector = get_vector_store(cfg)
-        self.ner_repo = get_graph_store(cfg)
+        self.vector = get_vector_store(settings)
+        self.ner_repo = get_graph_store(settings)
         self.extractor = NERExtractor(self.llm, self.ner_repo)
 
     def _iter_payloads(self):

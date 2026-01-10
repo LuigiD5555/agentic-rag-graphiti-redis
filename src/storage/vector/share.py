@@ -7,14 +7,14 @@ Usage:
 """
 
 import argparse
+from typing import Any
 import weaviate
 from weaviate.classes.init import AdditionalConfig, Timeout
 from weaviate.classes.query import Filter
-from src.rag.conf import Config
 from src.rag.audit.log_registry import audit  # keep your existing audit hook
 
 
-def _get_client(cfg: Config) -> weaviate.WeaviateClient:
+def _get_client(cfg: Any) -> weaviate.WeaviateClient:
     additional = AdditionalConfig(timeout=Timeout(init=cfg.WEAVIATE_TIMEOUT, query=cfg.WEAVIATE_TIMEOUT))
     if cfg.WEAVIATE_API_KEY:
         return weaviate.WeaviateClient(
@@ -33,7 +33,8 @@ def main():
     ap.add_argument("--tenant", help="Tenant/namespace (if multitenancy enabled)")
     args = ap.parse_args()
 
-    cfg = Config()
+    import src.settings as settings
+    cfg = settings
     client = _get_client(cfg)
     coll = client.collections.get(cfg.WEAVIATE_CLASS)
     if cfg.WEAVIATE_MULTI_TENANCY and args.tenant:

@@ -22,12 +22,8 @@ from src.rag.temporal.tenant_manager import (
     create_temporal_tenant_manager,
 )
 from src.ingestion.orchestrator import IngestionOrchestrator
-from src.rag.conf import Config
 
 logger = logging.getLogger(__name__)
-
-# Load config
-_config = Config()
 
 router = APIRouter(prefix="/v1/files", tags=["files"])
 

@@ -3,9 +3,7 @@ import logging
 from typing import Dict, Any, List
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from src.rag.conf import Config
-
-_config = Config()
+import src.settings as settings
 
 logger = logging.getLogger(__name__)
 
@@ -145,9 +143,9 @@ async def get_graph_stats() -> GraphStats:
         from neo4j import GraphDatabase
 
         # Get Neo4j connection details
-        uri = _config.NEO4J_URI
-        user = _config.NEO4J_USER
-        password = _config.NEO4J_PASSWORD
+        uri = settings.NEO4J_URI
+        user = settings.NEO4J_USER
+        password = settings.NEO4J_PASSWORD
 
         driver = GraphDatabase.driver(uri, auth=(user, password))
 

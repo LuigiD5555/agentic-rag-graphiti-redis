@@ -1,12 +1,11 @@
-from typing import Optional
+from typing import Optional, Any
 
 from src.providers.factory import ProviderFactory
-from src.rag.conf import Config
 from src.rag.interfaces.embedding_interface import EmbeddingInterface
 
 
 def get_embedding_service(
-    config: Config,
+    config: Any,
     provider: Optional[ProviderFactory] = None,
 ) -> EmbeddingInterface:
     """

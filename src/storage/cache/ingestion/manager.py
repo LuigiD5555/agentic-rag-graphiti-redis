@@ -2,9 +2,6 @@
 from typing import TYPE_CHECKING, Dict, Any
 import os
 import time
-from src.rag.conf import Config
-
-_config = Config()
 
 if TYPE_CHECKING:
     import redis

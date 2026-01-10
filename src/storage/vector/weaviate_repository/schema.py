@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-from typing import Callable, List, Optional
+from typing import Any, Callable, List, Optional
 
 from weaviate.classes.config import Configure, Property
 
-from src.rag.conf import Config
 from src import logger
 
 
@@ -16,7 +15,7 @@ class SchemaManager:
     def __init__(
         self,
         client,
-        cfg: Config,
+        cfg: Any,
         class_name: str,
         multitenant_enabled: bool,
         default_tenant: Optional[str],

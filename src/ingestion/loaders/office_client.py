@@ -6,9 +6,6 @@ from typing import Literal, Optional
 
 import requests
 from langchain_core.documents import Document
-from src.rag.conf import Config
-
-_config = Config()
 
 
 class OfficeToolClient:

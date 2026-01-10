@@ -15,10 +15,10 @@ from urllib.parse import urlparse
 from src.rag.interfaces.vector_interface import VectorInterface
 
 if TYPE_CHECKING:  # pragma: no cover
-    from src.rag.conf import Config
+    from typing import Any as Config
 
 
-def _vector_store_settings(config: "Config", alias: str) -> Mapping[str, Any]:
+def _vector_store_settings(config: Config, alias: str) -> Mapping[str, Any]:
     stores = getattr(config, "VECTOR_STORES", None) or {}
     if not isinstance(stores, dict):
         raise TypeError("Config.VECTOR_STORES must be a dict mapping aliases to dict settings")

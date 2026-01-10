@@ -1,9 +1,6 @@
 """Short-term memory layer managing recent message window."""
 import logging
 from typing import Optional
-from src.rag.conf import Config
-
-_config = Config()
 
 from src.memory.core.state import ConversationState
 

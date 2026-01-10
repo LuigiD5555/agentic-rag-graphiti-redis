@@ -27,6 +27,8 @@ COPY tools/monitoring/config/ ./config/
 
 # Copy shared utilities from main project
 COPY src/utils/ ./src/utils/
+COPY src/settings.py ./src/settings.py
+COPY src/__init__.py ./src/__init__.py
 COPY src/rag/__init__.py ./src/rag/__init__.py
 COPY src/rag/audit/ ./src/rag/audit/
 COPY src/rag/interfaces/ ./src/rag/interfaces/

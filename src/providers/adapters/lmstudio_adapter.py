@@ -1,4 +1,5 @@
 import os
+from typing import Any
 from src.providers.adapters.base import ProviderAdapterBase
 from src.rag.interfaces.embedding_interface import EmbeddingInterface
 from src.rag.interfaces.chat_interface import ChatInterface
@@ -6,7 +7,6 @@ from src.providers.lmstudio.model_manager import ModelManager
 from src.providers.lmstudio.embeddings import EmbeddingService
 from src.providers.lmstudio.cached_embeddings import CachedEmbeddingService
 from src.providers.lmstudio.client import LLMService
-from src.rag.conf import Config
 from src import logger
 
 
@@ -15,7 +15,7 @@ class LMStudioAdapter(ProviderAdapterBase):
     Adapter for LM Studio provider (local HTTP server). Reuses existing client modules.
     """
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Any):
         mm = ModelManager(
             config._lmstudio_api_roots,
             require_live=config.LMSTUDIO_REQUIRE_SERVER,
@@ -55,7 +55,7 @@ class LMStudioAdapter(ProviderAdapterBase):
         chat: ChatInterface = LLMService(config, mm)
         super().__init__(embedding, chat)
 
-    def _get_redis_client(self, config: Config):
+    def _get_redis_client(self, config: Any):
         """
         Get Redis client if available, return None otherwise.
         """

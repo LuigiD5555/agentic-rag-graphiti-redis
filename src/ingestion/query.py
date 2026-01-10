@@ -4,7 +4,7 @@ import argparse
 from src.ingestion.options import PipelineOptions
 from src.ingestion.pipeline import IngestionPipeline
 from src.providers.factory import ProviderFactory
-from src.rag.conf import Config
+import src.settings as settings
 from src.rag.embeddings_factory import get_embedding_service
 from src.storage.vector import get_vector_store
 
@@ -17,16 +17,15 @@ def main():
     ap.add_argument("--paths", nargs="+", required=True)
     args = ap.parse_args()
 
-    cfg = Config()
-    provider = ProviderFactory(cfg)
-    embed = get_embedding_service(cfg, provider)
-    vector = get_vector_store(cfg)
+    provider = ProviderFactory(settings)
+    embed = get_embedding_service(settings, provider)
+    vector = get_vector_store(settings)
 
     pipeline_options = PipelineOptions(
-        chunk_size=cfg.CHUNK_SIZE,
-        chunk_overlap=cfg.CHUNK_OVERLAP,
-        embedding_token_limit=cfg.EMBEDDING_MAX_TOKENS,
-        tenant_id=(cfg.WEAVIATE_DEFAULT_TENANT or None),
+        chunk_size=settings.CHUNK_SIZE,
+        chunk_overlap=settings.CHUNK_OVERLAP,
+        embedding_token_limit=settings.EMBEDDING_MAX_TOKENS,
+        tenant_id=(settings.WEAVIATE_DEFAULT_TENANT or None),
     )
     pipeline = IngestionPipeline.from_options(
         embedding_service=embed,

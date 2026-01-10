@@ -17,10 +17,10 @@ from typing import List, Dict, Any
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.rag.conf import Config
+import weaviate
+import src.settings as settings
 from src.rag.importance import DocumentImportanceClassifier, ImportanceLevel
 from src.storage.vector.dual_store import DualCollectionVectorStore
-from src.storage.vector import get_weaviate_client
 from src.rag.audit import get_logger
 
 log = get_logger(__name__)
@@ -39,7 +39,7 @@ def get_dual_config() -> Dict[str, Any]:
     }
 
 
-def setup_dual_collections(config: Config) -> bool:
+def setup_dual_collections() -> bool:
     """Setup dual collections in Weaviate if enabled.
 
     Returns:
@@ -54,7 +54,15 @@ def setup_dual_collections(config: Config) -> bool:
     log.info("Dual embeddings ENABLED, setting up collections...")
 
     try:
-        client = get_weaviate_client(config)
+        # Create Weaviate client
+        host = settings.WEAVIATE_URL.replace("http://", "").replace("https://", "").split(":")[0]
+        port = int(settings.WEAVIATE_URL.split(":")[-1]) if ":" in settings.WEAVIATE_URL else 8080
+        client = weaviate.connect_to_local(
+            host=host,
+            port=port,
+            grpc_port=settings.WEAVIATE_GRPC_PORT,
+        )
+
         classifier = DocumentImportanceClassifier()
 
         dual_store = DualCollectionVectorStore(
@@ -64,7 +72,7 @@ def setup_dual_collections(config: Config) -> bool:
             small_embedding_dim=dual_config["small_dim"],
             large_embedding_dim=dual_config["large_dim"],
             importance_classifier=classifier,
-            enable_multi_tenancy=config.WEAVIATE_MULTI_TENANCY,
+            enable_multi_tenancy=settings.WEAVIATE_MULTI_TENANCY,
         )
 
         # Get stats to verify setup
@@ -134,7 +142,6 @@ def main():
 
     args = parser.parse_args()
 
-    config = Config()
     dual_config = get_dual_config()
 
     # Print config
@@ -153,7 +160,7 @@ def main():
     # Verify setup
     if args.verify or not args.analyze_path:
         print("\n🔧 Verifying dual collections setup...")
-        is_ready = setup_dual_collections(config)
+        is_ready = setup_dual_collections()
 
         if is_ready:
             print("✅ Dual embeddings system is ready!")

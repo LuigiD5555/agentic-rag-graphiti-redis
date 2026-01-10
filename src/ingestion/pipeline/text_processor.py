@@ -29,9 +29,6 @@ from src.utils.text import (
     sanitize_text,
     truncate_to_token_limit_presanitized,
 )
-from src.rag.conf import Config
-
-_config = Config()
 
 
 def _resolve_file_context(pipeline: Any) -> IngestionFileContext:

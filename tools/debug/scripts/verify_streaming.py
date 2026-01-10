@@ -9,7 +9,7 @@ import weaviate
 
 from src.ingestion.helpers import build_ingestion_options_from_args
 from src.ingestion.orchestrator import IngestionOrchestrator
-from src.rag.conf import Config
+import src.settings as settings
 from src.rag.engine import AppConfig
 from src.rag.retrieval import WeaviateRetriever
 
@@ -80,12 +80,11 @@ def main() -> None:
     parser.add_argument("--log-level", default=None, help="Python log level for ingestion.")
     args = parser.parse_args()
 
-    rag_cfg = Config()
     app_cfg = AppConfig()
 
-    options = build_ingestion_options_from_args(args, rag_cfg)
+    options = build_ingestion_options_from_args(args, settings)
 
-    orchestrator = IngestionOrchestrator(rag_cfg)
+    orchestrator = IngestionOrchestrator()
     ingest_thread = threading.Thread(target=_run_ingestion, args=(orchestrator, options), daemon=True)
     ingest_thread.start()
 

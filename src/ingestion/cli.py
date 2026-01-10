@@ -10,7 +10,8 @@ import atexit
 from .helpers import build_ingestion_options_from_args
 from src.ingestion.orchestrator import IngestionOrchestrator
 from src.rag.audit import configure_logging, get_logger, resolve_level
-from src.rag.conf import Config, sync_settings_json
+from src.rag.conf import sync_settings_json
+import src.settings as settings
 from src.utils.volume_watcher import setup_default_watchers
 
 
@@ -19,7 +20,6 @@ class IngestionCLI:
 
     def __init__(self) -> None:
         sync_settings_json()
-        self._config = Config()
         self._parser = self._build_parser()
         self._log = get_logger(__name__)
 
@@ -27,8 +27,8 @@ class IngestionCLI:
         """Parse CLI args, configure logging, build options, and run ingestion."""
         args = self._parser.parse_args()
         self._configure_logging(args.log_level)
-        options = build_ingestion_options_from_args(args, self._config)
-        IngestionOrchestrator(self._config).run(options)
+        options = build_ingestion_options_from_args(args, settings)
+        IngestionOrchestrator().run(options)
 
     def _build_parser(self) -> argparse.ArgumentParser:
         """Create and return the ArgumentParser configured for this CLI."""
