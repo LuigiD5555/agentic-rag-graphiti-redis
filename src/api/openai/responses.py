@@ -11,7 +11,7 @@ from src.api.models import (
 )
 from src.conf import settings
 from src.rag.pipeline.rag_orchestrator import RAGOrchestrator
-from src.api.middleware.thread_manager import get_thread_id
+from src.middleware.thread_manager import get_thread_id
 
 router = APIRouter(prefix="/v1", tags=["responses"])
 

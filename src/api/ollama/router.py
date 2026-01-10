@@ -17,7 +17,7 @@ from src.api.models_ollama import (
     OllamaMessage,
 )
 import src.settings as settings
-from src.api.middleware.thread_manager import get_thread_id, get_user_id
+from src.middleware.thread_manager import get_thread_id, get_user_id
 from src.rag.models import list_models
 from src.rag.pipeline.rag_orchestrator import RAGOrchestrator
 

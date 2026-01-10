@@ -12,7 +12,7 @@ import weaviate
 from src.api.routers import rag
 from src.api.routers.rag import get_rag_orchestrator as rag_get_rag
 from src.api.routers.rag import get_ingestion_orchestrator
-from src.api.middleware.thread_manager import ThreadManagerMiddleware
+from src.middleware.thread_manager import ThreadManagerMiddleware
 from src.rag.retrieval import WeaviateRetriever
 from src.rag.chat import LMStudioChatService
 from src.rag.pipeline.rag_orchestrator import RAGOrchestrator

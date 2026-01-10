@@ -20,7 +20,7 @@ from src.memory.helpers import (
     should_compress_state,
     compress_and_update_state,
 )
-from src.api.middleware.thread_manager import get_user_id, get_thread_id
+from src.middleware.thread_manager import get_user_id, get_thread_id
 
 logger = logging.getLogger(__name__)
 
