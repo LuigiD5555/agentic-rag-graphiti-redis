@@ -28,12 +28,12 @@ class EmbeddingService:
         Expected Config attributes:
             -   LM_EMBED_URL: str -> base URL or full /v1/embeddings endpoint.
             -   EMBEDDING_DIM: int -> expected dimensionality for embeddings.
-            -   (optional) EMBEDDING_MODEL: str -> explicit model name (if you prefer to override).
+            -   EMBEDDING_MODEL: str -> REQUIRED explicit model name (e.g., text-embedding-nomic-embed-text-v2-moe).
 
         Model selection:
-            -   If EMBEDDING_MODEL is not set, uses model_manager.get_first_embedding_model().
-            -   If no model is available, the service falls back to a zero vector (dummy)
-                and logs a warning.
+            -   EMBEDDING_MODEL must be explicitly configured in .env
+            -   Automatic model selection has been removed to prevent configuration errors
+            -   System will raise RuntimeError if EMBEDDING_MODEL is not set
         """
         api_roots = getattr(
             config,
@@ -51,12 +51,14 @@ class EmbeddingService:
         self._embed_url: str = f"{self._api_root}/v1/embeddings"
         self._require_live = bool(getattr(config, "LMSTUDIO_REQUIRE_SERVER", False))
 
-        # Model selection (explicit override or first available)
-        explicit_model: Optional[str] = getattr(config, "EMBEDDING_MODEL", None)
-        if explicit_model:
-            self._model_name = explicit_model
-        else:
-            self._model_name = model_manager.get_first_embedding_model()
+        # Model selection - MUST be explicitly configured
+        self._model_name: Optional[str] = getattr(config, "EMBEDDING_MODEL", None)
+        if not self._model_name:
+            raise RuntimeError(
+                "EMBEDDING_MODEL must be explicitly configured in .env. "
+                "Automatic model selection has been removed. "
+                "Set EMBEDDING_MODEL to your preferred model (e.g., text-embedding-nomic-embed-text-v2-moe)"
+            )
 
         self._use_dummy: bool = not bool(self._model_name)
 
@@ -113,7 +115,7 @@ class EmbeddingService:
         for root in self._candidate_roots:
             url = f"{root}/v1/embeddings"
             try:
-                resp = self._post_json(url, payload, timeout=15)
+                resp = self._post_json(url, payload, timeout=60)  # Max 1 minute
                 data = self._to_json(resp)
                 raw_vector = self._extract_vector(data)
                 vector = self._normalize_and_validate_vector(raw_vector)
@@ -169,7 +171,7 @@ class EmbeddingService:
         for root in self._candidate_roots:
             url = f"{root}/v1/embeddings"
             try:
-                resp = self._post_json(url, payload, timeout=30)  # Longer timeout for batch
+                resp = self._post_json(url, payload, timeout=60)  # Max 1 minute for batch
                 data = self._to_json(resp)
 
                 # Extract all embeddings from batch response

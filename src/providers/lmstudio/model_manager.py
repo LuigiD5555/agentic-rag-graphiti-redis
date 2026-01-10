@@ -122,10 +122,6 @@ class ModelManager:
                 f"(tried: {self.api_roots})."
             )
 
-    def get_first_embedding_model(self):
-        """Return the first embedding model or None."""
-        return self.embedding_models[0] if self.embedding_models else None
-
     def get_first_language_model(self):
         """Return the first non-embedding model or None."""
         return self.language_models[0] if self.language_models else None

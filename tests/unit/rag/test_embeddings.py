@@ -23,8 +23,9 @@ class ModelManagerStub:
         self._model_name = model_name
         self.api_root = api_root
 
-    def get_first_embedding_model(self) -> Optional[str]:
-        return self._model_name
+    def get_model_dimensions(self, model_name: str) -> Optional[int]:
+        """Return dimension size for model."""
+        return None  # Let config handle dimensions
 
 
 class ResponseStub:
@@ -35,18 +36,17 @@ class ResponseStub:
         return self._payload
 
 
-def test_embeddings_fallback_to_dummy_when_no_model():
+def test_embeddings_requires_explicit_model():
+    """Test that EMBEDDING_MODEL must be explicitly configured."""
     config = ConfigStub(embed_model=None, dim=6)
     manager = ModelManagerStub(model_name=None)
 
-    service = EmbeddingService(config, manager)
-    embedding = service.generate("hello rag")
-
-    assert embedding == [0.0] * 6
+    with pytest.raises(RuntimeError, match="EMBEDDING_MODEL must be explicitly configured"):
+        EmbeddingService(config, manager)
 
 
 def test_embeddings_parse_valid_response(monkeypatch):
-    config = ConfigStub(embed_model=None, dim=4)
+    config = ConfigStub(embed_model="test-embed", dim=4)
     manager = ModelManagerStub(model_name="test-embed")
 
     service = EmbeddingService(config, manager)
@@ -61,7 +61,7 @@ def test_embeddings_parse_valid_response(monkeypatch):
 
 
 def test_embeddings_invalid_dimension_returns_dummy(monkeypatch):
-    config = ConfigStub(embed_model=None, dim=5)
+    config = ConfigStub(embed_model="test-embed", dim=5)
     manager = ModelManagerStub(model_name="test-embed")
 
     service = EmbeddingService(config, manager)
@@ -76,7 +76,7 @@ def test_embeddings_invalid_dimension_returns_dummy(monkeypatch):
 
 
 def test_embeddings_attempts_fallback_hosts(monkeypatch):
-    config = ConfigStub(embed_model=None, dim=4)
+    config = ConfigStub(embed_model="test-embed", dim=4)
     manager = ModelManagerStub(model_name="test-embed", api_root=config.LMSTUDIO_API_ROOTS[0])
 
     service = EmbeddingService(config, manager)
@@ -98,11 +98,12 @@ def test_embeddings_attempts_fallback_hosts(monkeypatch):
 
 
 def test_embeddings_require_live_without_model_raises():
+    """Test that missing EMBEDDING_MODEL raises RuntimeError."""
     config = ConfigStub(embed_model=None, dim=4)
     config.LMSTUDIO_REQUIRE_SERVER = True
     manager = ModelManagerStub(model_name=None)
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="EMBEDDING_MODEL must be explicitly configured"):
         EmbeddingService(config, manager)
 
 
