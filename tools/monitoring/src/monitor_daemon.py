@@ -46,6 +46,7 @@ class MonitoringDaemon:
         self.enable_health_checks = os.environ.get("ENABLE_HEALTH_CHECKS", "true").lower() == "true"
         self.enable_memory_monitoring = os.environ.get("ENABLE_MEMORY_MONITORING", "true").lower() == "true"
         self.enable_vulture_monitoring = os.environ.get("ENABLE_VULTURE_MONITORING", "false").lower() == "true"
+        self.enable_neo4j = os.environ.get("ENABLE_NEO4J", "false").lower() == "true"
         self.memory_monitor_mode = os.environ.get("MEMORY_MONITOR_MODE", "auto").lower()
         self.memory_monitor_interval = int(os.environ.get("MEMORY_MONITOR_INTERVAL", "10"))
         self.memory_warning_threshold = float(os.environ.get("MEMORY_WARNING_THRESHOLD", "70"))
@@ -72,6 +73,7 @@ class MonitoringDaemon:
         logger.info(f"Health checks: {self.enable_health_checks}")
         logger.info(f"Memory monitoring: {self.enable_memory_monitoring}")
         logger.info(f"Vulture monitoring: {self.enable_vulture_monitoring}")
+        logger.info(f"Neo4j monitoring: {self.enable_neo4j}")
         if self.enable_memory_monitoring:
             logger.info(
                 "Memory monitor: mode=%s interval=%ss warning=%s%% critical=%s%% target=%s",
@@ -382,7 +384,10 @@ class MonitoringDaemon:
         if self.enable_health_checks:
             results["services"]["redis"] = self.check_redis_health()
             results["services"]["weaviate"] = self.check_weaviate_health()
-            results["services"]["neo4j"] = self.check_neo4j_health()
+
+            # Only check Neo4j if explicitly enabled
+            if self.enable_neo4j:
+                results["services"]["neo4j"] = self.check_neo4j_health()
 
         # Log results
         for service, status in results["services"].items():

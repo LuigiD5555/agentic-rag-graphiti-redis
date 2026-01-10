@@ -1,0 +1,174 @@
+# Monitoring Configuration
+# Centralized configuration for monitoring daemon
+
+# Global settings
+monitoring:
+  interval: 300  # Check interval in seconds (5 minutes)
+  log_level: INFO
+
+  # Enable/disable features
+  features:
+    log_analysis: true
+    volume_monitoring: true
+    health_checks: true
+    memory_monitoring: true
+    vulture_monitoring: true  # Dead code detection
+    neo4j_monitoring: false   # Optional Neo4j health checks
+
+# Vulture (Dead Code Detection)
+vulture:
+  enabled: true
+  interval: 7200  # Scan every 2 hours (7200 seconds)
+  min_confidence: 70  # 60=aggressive, 80=balanced, 100=conservative
+
+  # Targets to scan (paths relative to /workspace in container)
+  targets:
+    - /workspace/src
+    - /workspace/tools
+
+  # Directories/patterns to exclude
+  exclude:
+    - .git
+    - .venv
+    - venv
+    - env
+    - dist
+    - build
+    - __pycache__
+    - node_modules
+    - .mypy_cache
+    - .pytest_cache
+    - .tox
+    - __pypackages__
+    - site-packages
+    - .eggs
+    - "*.egg-info"
+
+  # Report settings
+  reports:
+    directory: /app/reports
+    retention_days: 90
+    format: txt
+
+# Memory monitoring
+memory:
+  enabled: true
+  mode: auto  # auto, container, host
+  interval: 10  # Check every 10 seconds
+  warning_threshold: 70  # Percentage
+  critical_threshold: 85  # Percentage
+  container_name: ""  # Auto-detect if empty
+
+# Health checks
+health_checks:
+  enabled: true
+
+  # Services to monitor
+  services:
+    redis:
+      enabled: true
+      host: "127.0.0.1"
+      port: 6379
+      timeout: 5
+      critical: true
+
+    weaviate:
+      enabled: true
+      url: "http://127.0.0.1:8080"
+      timeout: 10
+      critical: true
+
+    neo4j:
+      enabled: false  # Optional - only enabled if ENABLE_NEO4J=true
+      uri: "bolt://127.0.0.1:7687"
+      user: "neo4j"
+      timeout: 10
+      critical: false
+
+  # Report settings
+  reports:
+    directory: /app/reports
+    retention_days: 30
+
+# Log analysis
+log_analysis:
+  enabled: true
+  default_window: "1 hour ago"
+
+  # Error patterns to detect
+  error_patterns:
+    - pattern: "(?i)error"
+      severity: medium
+      category: "Generic Error"
+
+    - pattern: "(?i)exception"
+      severity: high
+      category: "Exception"
+
+    - pattern: "(?i)traceback"
+      severity: high
+      category: "Python Traceback"
+
+    - pattern: "HTTP/1\\.1\" 5\\d\\d"
+      severity: high
+      category: "HTTP 5xx Error"
+
+    - pattern: "(?i)out of memory|oom"
+      severity: critical
+      category: "Out of Memory"
+
+    - pattern: "(?i)connection refused|connection timeout"
+      severity: medium
+      category: "Connection Error"
+
+  # Anomaly detection
+  anomaly_detection:
+    error_count_threshold: 100
+    http_error_rate_threshold: 0.1  # 10%
+
+  # Report settings
+  reports:
+    retention_days: 30
+    format: json
+
+# Volume monitoring
+volume_monitoring:
+  enabled: true
+
+  # Volumes to watch
+  volumes:
+    - name: "Libros"
+      primary_path: "/mnt/resources/Libros"
+      fallback_path: "/app/data/libros-fallback"
+      check_marker: ".volume-available"
+
+    - name: "Documents"
+      primary_path: "/mnt/Documents/Documents"
+      fallback_path: "/app/data/documents-fallback"
+      check_marker: ".volume-available"
+
+  # Reconnection settings
+  reconnection:
+    check_interval: 300  # 5 minutes
+    max_retries: 3
+    retry_delay: 60  # seconds
+
+# Dashboard (optional - future feature)
+dashboard:
+  enabled: false
+  port: 8888
+  host: "0.0.0.0"
+
+# Data retention
+retention:
+  logs:
+    days: 30
+    max_size_mb: 1024
+
+  reports:
+    days: 90
+    max_count: 1000
+
+  metrics:
+    days: 7
+    max_size_mb: 512

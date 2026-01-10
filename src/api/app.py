@@ -1,7 +1,6 @@
 """FastAPI application for RAG API (supports both OpenAI and Ollama formats)."""
 import asyncio
 import logging
-import os
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -14,13 +13,13 @@ from src.api.routers import rag
 from src.api.routers.rag import get_rag_orchestrator as rag_get_rag
 from src.api.routers.rag import get_ingestion_orchestrator
 from src.api.middleware.thread_manager import ThreadManagerMiddleware
-from src.rag.engine import AppConfig
 from src.rag.retrieval import WeaviateRetriever
 from src.rag.chat import LMStudioChatService
 from src.rag.pipeline.rag_orchestrator import RAGOrchestrator
-from src.rag.embeddings_factory import get_embedding_service as create_embedding_service
-import src.settings as settings
+from src.rag.embeddings_factory import get_embedding_service
+from src.conf import settings as rag_config
 from src.ingestion.orchestrator import IngestionOrchestrator
+from src.providers.factory import ProviderFactory
 from src.rag.web_search import SearXNGClient
 
 
@@ -42,13 +41,25 @@ _snapshot_scheduler = None
 _cleanup_scheduler = None
 _temporal_cleanup_scheduler = None
 _redis_client = None
+_web_search_client = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Lifespan context manager for FastAPI app.
+    """
+    Lifespan context manager for initializing and cleaning up resources.
 
-    Handles initialization and cleanup of RAG components.
+    This function initializes:
+    - Weaviate client
+    - RAG orchestrator
+    - Embedding service
+    - Chat memory manager
+    - Snapshot scheduler (if enabled)
+    - Cleanup scheduler (if enabled)
+    - Redis client (if enabled)
+
+    Yields:
+        None
     """
     global _rag_orchestrator, _embedding_service, _weaviate_client, _ingestion_orchestrator, _chat_memory_manager, _snapshot_scheduler, _cleanup_scheduler, _temporal_cleanup_scheduler, _redis_client, _web_search_client
 
@@ -57,8 +68,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _web_search_client = None
 
     try:
-        # Load configuration
-        config = AppConfig()
+        # Load runtime configuration
+        config = rag_config
         logger.info("Configuration loaded")
 
         # Initialize Weaviate client
@@ -72,11 +83,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Ensure Weaviate schema exists BEFORE any operations
         from src.storage.vector import get_vector_store
         logger.info("Ensuring Weaviate schema exists...")
-        get_vector_store(settings)  # This creates the schema if missing
+        get_vector_store(config)  # This creates the schema if missing
         logger.info("Weaviate schema ready")
 
+        # Ensure ChatMemory collection exists
+        from src.memory.storage.chat_memory_schema import create_chat_memory_collection
+        logger.info("Ensuring ChatMemory collection exists...")
+        chat_memory_created = create_chat_memory_collection(
+            _weaviate_client,
+            config=config,
+            force_recreate=False
+        )
+        if chat_memory_created:
+            logger.info("ChatMemory collection ready")
+        else:
+            logger.warning("ChatMemory collection creation failed - memory features may not work")
+
         # Create embedding service FIRST (needed by retriever for query vectorization)
-        _embedding_service = create_embedding_service(settings)
+        provider = ProviderFactory(config)
+        _embedding_service = get_embedding_service(config, provider)
 
         # Create retriever with embedding service for query vectorization
         retriever = WeaviateRetriever(
@@ -97,7 +122,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             base_url = base_url.rstrip("/") + "/v1"
 
         # Get keep_alive setting from config
-        keep_alive = rag_config.LMSTUDIO_KEEPALIVE_CHAT
+        keep_alive = config.LMSTUDIO_KEEPALIVE_CHAT
 
         chat_service = LMStudioChatService(
             base_url=base_url,
@@ -105,208 +130,129 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             keep_alive=keep_alive,
         )
 
-        # Create ChatMemory manager BEFORE RAG orchestrator
-        from src.memory.integration import create_chat_memory_manager
-        _chat_memory_manager = create_chat_memory_manager(
-            weaviate_client=_weaviate_client,
-            embedding_service=_embedding_service,
-            snapshot_ttl_days=30,
-            enable_cross_chat=True,
-            enable_rrf=True,
-            enable_mmr=True,
-            mmr_lambda=0.5,
-        )
-        logger.info("ChatMemory manager initialized")
-
-        # Create snapshot scheduler for automatic 24h snapshots
-        from src.memory.snapshot_scheduler import create_snapshot_scheduler
-        _snapshot_scheduler = create_snapshot_scheduler(
-            snapshot_interval=86400  # 24 hours in seconds
-        )
-        logger.info("Snapshot scheduler initialized (24h interval)")
-
-        # Create cleanup scheduler for expired snapshots (runs every hour)
-        from src.memory.cleanup_scheduler import create_cleanup_scheduler
-        _cleanup_scheduler = create_cleanup_scheduler(
-            chat_memory_manager=_chat_memory_manager,
-            snapshot_scheduler=_snapshot_scheduler,
-            cleanup_interval=3600,  # 1 hour in seconds
-        )
-        # Start background cleanup loop
-        await _cleanup_scheduler.start()
-        logger.info("Cleanup scheduler started (1h interval)")
-
-        # Initialize Redis client (shared across features)
-        from src.storage.cache.redis_connection import create_redis_client_with_retry
-        _redis_client = create_redis_client_with_retry(
-            host=rag_config.REDIS_HOST,
-            port=rag_config.REDIS_PORT,
-            password=rag_config.REDIS_PASSWORD or None,
-            decode_responses=False,  # We handle encoding/decoding ourselves
-        )
-        logger.info(f"Redis client initialized: {rag_config.REDIS_HOST}:{rag_config.REDIS_PORT}")
-
-        # Migrate old Redis conversations to ChatMemory on startup
-        from src.memory.core.checkpointer import create_checkpointer
-        from src.memory.startup_migrator import migrate_redis_conversations_on_startup
-        try:
-            # Create checkpointer to access Redis conversations
-            checkpointer = create_checkpointer(
-                redis_host=rag_config.REDIS_HOST,
-                redis_port=rag_config.REDIS_PORT,
-                redis_password=rag_config.REDIS_PASSWORD or None,
-                ttl_seconds=rag_config.MEMORY_TTL,
-            )
-
-            # Run migration (synchronous operation)
-            migration_stats = await asyncio.to_thread(
-                migrate_redis_conversations_on_startup,
-                checkpointer=checkpointer,
-                chat_memory_manager=_chat_memory_manager,
-                snapshot_scheduler=_snapshot_scheduler,
-                age_threshold=86400,  # 24 hours
-            )
-
-            logger.info(
-                "Startup migration completed: scanned=%d, migrated=%d, skipped=%d, errors=%d",
-                migration_stats["scanned"],
-                migration_stats["migrated"],
-                migration_stats["skipped"],
-                migration_stats["errors"]
-            )
-        except Exception as e:
-            # Don't fail startup if migration fails
-            logger.warning("Startup migration failed (continuing anyway): %s", e)
-
-        # Create ingestion orchestrator
-        _ingestion_orchestrator = IngestionOrchestrator(rag_config)
-
-        # Initialize files router for temporal RAG
-        from src.api.files.router import initialize_files_router
-        from src.api.files.tracking import create_file_tracker
-        from src.rag.temporal.retriever import create_multi_tenant_retriever
-        from src.rag.temporal.tenant_manager import create_temporal_tenant_manager
-        from src.rag.temporal.cleanup_scheduler import create_temporal_cleanup_scheduler
-
-        # Create file tracker
-        file_tracker = create_file_tracker(
-            redis_client=_redis_client,
-            promotion_threshold=rag_config.TEMPORAL_PROMOTION_THRESHOLD,
-            pareto_min_queries=rag_config.TEMPORAL_PARETO_MIN_QUERIES,
-        )
-
-        # Create multi-tenant retriever for temporal files
-        multi_tenant_retriever = create_multi_tenant_retriever(
-            weaviate_client=_weaviate_client,
-            collection_name=config.WEAVIATE_CLASS,
-            default_tenant=config.WEAVIATE_DEFAULT_TENANT if config.WEAVIATE_MULTI_TENANCY else None,
-            top_k_per_tenant=5,
-            embedding_service=_embedding_service,
-        )
-        logger.info("Multi-tenant retriever created for temporal RAG")
-
-        # Create temporal tenant manager for cleanup
-        tenant_manager = create_temporal_tenant_manager(
-            weaviate_client=_weaviate_client,
-            collection_name=config.WEAVIATE_CLASS,
-            ttl_seconds=rag_config.TEMPORAL_TENANT_TTL,
-        )
-
-        # Create and start background cleanup scheduler
-        _temporal_cleanup_scheduler = create_temporal_cleanup_scheduler(
-            tenant_manager=tenant_manager,
-            redis_client=_redis_client,
-            cleanup_interval=rag_config.TEMPORAL_CLEANUP_INTERVAL,
-        )
-        _temporal_cleanup_scheduler.start()
-        logger.info("Temporal cleanup scheduler started")
-
-        # Create web search client for fallback
-        if rag_config.ENABLE_WEB_FALLBACK:
-            try:
-                _web_search_client = SearXNGClient(
-                    base_url=rag_config.SEARXNG_URL,
-                    timeout=rag_config.SEARXNG_TIMEOUT,
-                    max_results=rag_config.SEARXNG_MAX_RESULTS,
-                    language=rag_config.SEARXNG_LANGUAGE,
-                )
-
-                if await _web_search_client.is_available():
-                    logger.info("SearXNG client initialized and available at %s", rag_config.SEARXNG_URL)
-                else:
-                    logger.warning("SearXNG not available at %s, web fallback will be disabled", rag_config.SEARXNG_URL)
-                    try:
-                        await _web_search_client.close()
-                    except Exception as close_err:
-                        logger.error("Error closing web search client: %s", close_err)
-                    _web_search_client = None
-            except Exception as e:
-                logger.error("Failed to initialize SearXNG client: %s", e)
-                _web_search_client = None
-        else:
-            logger.info("Web search fallback disabled by configuration")
-
-        # Create RAG orchestrator with ChatMemory + Temporal RAG + Web Search + RAG Gating
+        # Create RAG orchestrator
         _rag_orchestrator = RAGOrchestrator(
             retriever=retriever,
             chat_service=chat_service,
-            include_sources=True,
-            chat_memory_manager=_chat_memory_manager,
-            multi_tenant_retriever=multi_tenant_retriever,
-            file_tracker=file_tracker,
-            web_search_client=_web_search_client,
-            enable_web_fallback=rag_config.ENABLE_WEB_FALLBACK and _web_search_client is not None,
-            min_relevance_score=rag_config.MIN_RELEVANCE_SCORE,
-            enable_rag_gating=rag_config.ENABLE_RAG_GATING,
         )
+        logger.info("RAG orchestrator initialized")
 
-        # Initialize files router
-        initialize_files_router(
-            weaviate_client=_weaviate_client,
-            redis_client=_redis_client,
-            ingestion_orchestrator=_ingestion_orchestrator,
-            collection_name=config.WEAVIATE_CLASS,
-            default_tenant=config.WEAVIATE_DEFAULT_TENANT if config.WEAVIATE_MULTI_TENANCY else None,
-        )
-        logger.info("Temporal RAG files router initialized (with Pareto and promotion)")
+        # Create ingestion orchestrator
+        _ingestion_orchestrator = IngestionOrchestrator(rag_config)
+        logger.info("Ingestion orchestrator initialized")
 
-        logger.info("RAG API initialized successfully")
-        logger.info("API is ready to serve requests")
+        # Initialize Chat Memory manager
+        try:
+            from src.memory.integration import ChatMemoryManager
+            _chat_memory_manager = ChatMemoryManager(
+                weaviate_client=_weaviate_client,
+                embedding_service=_embedding_service,
+                snapshot_ttl_days=config.SNAPSHOT_TTL_DAYS,
+            )
+            logger.info("Chat memory manager initialized")
+        except Exception as e:
+            logger.error("Failed to initialize chat memory manager: %s", e)
+            _chat_memory_manager = None
+
+        # Initialize snapshot scheduler if enabled
+        try:
+            if config.SNAPSHOT_ENABLED:
+                from src.memory.snapshot_scheduler import SnapshotScheduler
+                _snapshot_scheduler = SnapshotScheduler(
+                    memory_manager=_chat_memory_manager,
+                    interval_hours=config.SNAPSHOT_INTERVAL_HOURS,
+                )
+                _snapshot_scheduler.start()
+                logger.info("Snapshot scheduler started")
+        except Exception as e:
+            logger.error("Failed to initialize snapshot scheduler: %s", e)
+            _snapshot_scheduler = None
+
+        # Initialize cleanup scheduler if enabled
+        try:
+            if config.CLEANUP_ENABLED:
+                from src.memory.cleanup_scheduler import CleanupScheduler
+                _cleanup_scheduler = CleanupScheduler(
+                    memory_manager=_chat_memory_manager,
+                    interval_hours=config.CLEANUP_INTERVAL_HOURS,
+                )
+                _cleanup_scheduler.start()
+                logger.info("Cleanup scheduler started")
+        except Exception as e:
+            logger.error("Failed to initialize cleanup scheduler: %s", e)
+            _cleanup_scheduler = None
+
+        # Initialize temporal cleanup scheduler if enabled
+        try:
+            if config.TEMPORAL_CLEANUP_ENABLED:
+                from src.rag.temporal_cleanup_scheduler import TemporalCleanupScheduler
+                _temporal_cleanup_scheduler = TemporalCleanupScheduler(
+                    interval_hours=config.TEMPORAL_CLEANUP_INTERVAL_HOURS,
+                )
+                _temporal_cleanup_scheduler.start()
+                logger.info("Temporal cleanup scheduler started")
+        except Exception as e:
+            logger.error("Failed to initialize temporal cleanup scheduler: %s", e)
+            _temporal_cleanup_scheduler = None
+
+        # Initialize Redis client if enabled
+        try:
+            if getattr(config, "REDIS_ENABLED", True):
+                import redis
+
+                # Get Redis configuration from settings (centralized like Django)
+                _redis_client = redis.Redis(
+                    host=config.REDIS_HOST,
+                    port=config.REDIS_PORT,
+                    db=config.REDIS_DB,
+                    password=config.REDIS_PASSWORD if config.REDIS_PASSWORD else None,
+                    decode_responses=True,
+                )
+                # Test connection
+                _redis_client.ping()
+                logger.info("Redis client initialized at %s:%s (db=%s)",
+                           config.REDIS_HOST, config.REDIS_PORT, config.REDIS_DB)
+        except Exception as e:
+            logger.error("Failed to initialize Redis client: %s", e)
+            _redis_client = None
+
+        # Initialize web search client if enabled
+        try:
+            if getattr(config, "WEB_SEARCH_ENABLED", False):
+                _web_search_client = SearXNGClient(
+                    base_url=getattr(config, "SEARXNG_URL", "http://localhost:8080"),
+                    timeout=getattr(config, "SEARXNG_TIMEOUT", 10),
+                )
+                logger.info("Web search client initialized")
+        except Exception as e:
+            logger.error("Failed to initialize web search client: %s", e)
+            _web_search_client = None
+
+        logger.info("RAG API initialization complete")
 
         yield
 
     except Exception as e:
         logger.error("Failed to initialize RAG API: %s", e, exc_info=True)
         raise
-
     finally:
-        # Cleanup
+        # Cleanup resources
         logger.info("Shutting down RAG API...")
 
-        # Stop cleanup scheduler (memory)
-        if _cleanup_scheduler:
-            try:
-                await _cleanup_scheduler.stop()
-                logger.info("Memory cleanup scheduler stopped")
-            except Exception as e:
-                logger.error("Error stopping memory cleanup scheduler: %s", e)
+        # Stop schedulers
+        for scheduler, name in [
+            (_snapshot_scheduler, "snapshot"),
+            (_cleanup_scheduler, "cleanup"),
+            (_temporal_cleanup_scheduler, "temporal cleanup"),
+        ]:
+            if scheduler:
+                try:
+                    scheduler.stop()
+                    logger.info("%s scheduler stopped", name)
+                except Exception as e:
+                    logger.error("Error stopping %s scheduler: %s", name, e)
 
-        # Stop temporal cleanup scheduler
-        if _temporal_cleanup_scheduler:
-            try:
-                _temporal_cleanup_scheduler.stop()
-                logger.info("Temporal cleanup scheduler stopped")
-            except Exception as e:
-                logger.error("Error stopping temporal cleanup scheduler: %s", e)
-
-        # Close web search client
-        if _web_search_client:
-            try:
-                await _web_search_client.close()
-                logger.info("Web search client closed")
-            except Exception as e:
-                logger.error("Error closing web search client: %s", e)
-
+        # Close Weaviate client
         if _weaviate_client:
             try:
                 _weaviate_client.close()
@@ -315,10 +261,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 logger.error("Error closing Weaviate client: %s", e)
 
 
-# Determine API mode from config
-import src.settings as settings
-API_MODE = settings.API_MODE if hasattr(settings, "API_MODE") else "ollama"
-logger.info(f"API mode: {API_MODE}")
+# Determine API mode from runtime configuration
+API_MODE = rag_config.API_MODE
+logger.info("API mode: %s", API_MODE)
 
 
 # Create FastAPI app
@@ -432,6 +377,7 @@ else:
 
     logger.info("Loaded Ollama-compatible routers")
 
+
 # Always include RAG router (for ingestion)
 app.dependency_overrides[rag_get_rag] = get_rag_instance
 app.dependency_overrides[get_ingestion_orchestrator] = get_ingestion_instance
@@ -519,15 +465,3 @@ async def root():
                 "health": "GET /health",
             },
         }
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(
-        "src.api.app:app",
-        host="127.0.0.1",  # SECURITY: Localhost only
-        port=8000,
-        reload=True,
-        log_level="info",
-    )

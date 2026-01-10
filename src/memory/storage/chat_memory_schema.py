@@ -7,7 +7,7 @@ Schema design aligned with Plan Maestro Fase 4.
 """
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Any
 import weaviate
 from weaviate.classes.config import Configure, Property, DataType
 
@@ -19,21 +19,24 @@ CHAT_MEMORY_COLLECTION = "ChatMemory"
 
 def create_chat_memory_collection(
     client: weaviate.WeaviateClient,
-    vectorizer_model: str = "none",  # We provide embeddings externally
-    ttl_days: int = 30,  # Default: 30 days retention
+    config: Any = None,
     force_recreate: bool = False,
 ) -> bool:
     """Create ChatMemory collection in Weaviate.
 
     Args:
         client: Weaviate client instance
-        vectorizer_model: Vectorizer module (default: "none" for external embeddings)
-        ttl_days: Default TTL in days for snapshots
+        config: Settings object (from src.conf.settings or src.settings module)
         force_recreate: If True, delete and recreate collection
 
     Returns:
         True if created successfully, False otherwise
     """
+    # Get configuration from settings (Django-style single source of truth)
+    if config is None:
+        from src.conf import settings as config
+
+    ttl_days = getattr(config, "CHATMEMORY_TTL_DAYS", 30)
     try:
         # Check if collection exists
         exists = client.collections.exists(CHAT_MEMORY_COLLECTION)
@@ -176,7 +179,9 @@ def get_chat_memory_collection(
         Collection instance or None if failed
     """
     try:
+        logger.debug(f"Checking if {CHAT_MEMORY_COLLECTION} exists...")
         exists = client.collections.exists(CHAT_MEMORY_COLLECTION)
+        logger.debug(f"{CHAT_MEMORY_COLLECTION} exists: {exists}")
 
         if not exists:
             if auto_create:
@@ -185,6 +190,9 @@ def get_chat_memory_collection(
                 )
                 created = create_chat_memory_collection(client)
                 if not created:
+                    logger.error(
+                        f"Failed to create {CHAT_MEMORY_COLLECTION} collection"
+                    )
                     return None
             else:
                 logger.error(
@@ -192,22 +200,32 @@ def get_chat_memory_collection(
                 )
                 return None
 
-        return client.collections.get(CHAT_MEMORY_COLLECTION)
+        logger.debug(f"Getting {CHAT_MEMORY_COLLECTION} collection reference...")
+        collection = client.collections.get(CHAT_MEMORY_COLLECTION)
+        logger.debug(f"Collection reference obtained successfully")
+        return collection
 
     except Exception as e:
-        logger.error(f"Failed to get {CHAT_MEMORY_COLLECTION}: {e}")
+        logger.error(f"Failed to get {CHAT_MEMORY_COLLECTION}: {e}", exc_info=True)
         return None
 
 
-def calculate_ttl_timestamp(ttl_days: int = 30) -> str:
+def calculate_ttl_timestamp(ttl_days: Optional[int] = None, config: Any = None) -> str:
     """Calculate TTL expiration timestamp.
 
     Args:
-        ttl_days: Days until expiration
+        ttl_days: Days until expiration (if None, uses config)
+        config: Settings object (from src.conf.settings)
 
     Returns:
         RFC-3339 formatted timestamp
     """
+    # Get configuration from settings (Django-style single source of truth)
+    if ttl_days is None:
+        if config is None:
+            from src.conf import settings as config
+        ttl_days = getattr(config, "CHATMEMORY_TTL_DAYS", 30)
+
     expiration = datetime.utcnow() + timedelta(days=ttl_days)
     # Weaviate expects RFC-3339 with 'Z' suffix
     return expiration.strftime("%Y-%m-%dT%H:%M:%S.%fZ")

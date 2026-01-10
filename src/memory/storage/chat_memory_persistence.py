@@ -37,10 +37,31 @@ class ChatMemoryPersistence:
         """
         self.client = client
         self.embedding_service = embedding_service
-        self.collection = get_chat_memory_collection(client, auto_create=True)
 
-        if not self.collection:
-            logger.error("Failed to initialize ChatMemory collection")
+        logger.info("Initializing ChatMemory collection reference...")
+        try:
+            self.collection = get_chat_memory_collection(client, auto_create=True)
+
+            if self.collection is None:
+                logger.error(
+                    "Failed to initialize ChatMemory collection - "
+                    "collection is None after get_chat_memory_collection() call. "
+                    "Attempting direct collection.get() as fallback..."
+                )
+                # Try direct access as fallback
+                try:
+                    self.collection = client.collections.get(CHAT_MEMORY_COLLECTION)
+                    if self.collection is not None:
+                        logger.info("Successfully obtained ChatMemory collection via direct access")
+                    else:
+                        logger.error("Direct collection access also returned None")
+                except Exception as fallback_e:
+                    logger.error(f"Fallback collection access failed: {fallback_e}", exc_info=True)
+            else:
+                logger.info("ChatMemory collection reference initialized successfully")
+        except Exception as e:
+            logger.error(f"Exception during ChatMemory collection initialization: {e}", exc_info=True)
+            self.collection = None
 
     def save_snapshot(self, snapshot: ChatMemorySnapshot) -> bool:
         """Save snapshot to Weaviate with embedding.
@@ -51,7 +72,7 @@ class ChatMemoryPersistence:
         Returns:
             True if saved successfully
         """
-        if not self.collection:
+        if self.collection is None:
             logger.error("ChatMemory collection not available")
             return False
 
@@ -117,7 +138,7 @@ class ChatMemoryPersistence:
         Returns:
             List of snapshot dictionaries
         """
-        if not self.collection:
+        if self.collection is None:
             logger.error("ChatMemory collection not available")
             return []
 
@@ -178,7 +199,7 @@ class ChatMemoryPersistence:
         Returns:
             List of matching snapshots with scores
         """
-        if not self.collection:
+        if self.collection is None:
             logger.error("ChatMemory collection not available")
             return []
 
@@ -251,7 +272,7 @@ class ChatMemoryPersistence:
         Returns:
             Number of snapshots deleted
         """
-        if not self.collection:
+        if self.collection is None:
             logger.error("ChatMemory collection not available")
             return 0
 
@@ -293,7 +314,7 @@ class ChatMemoryPersistence:
         Returns:
             True if updated successfully
         """
-        if not self.collection:
+        if self.collection is None:
             return False
 
         try:
