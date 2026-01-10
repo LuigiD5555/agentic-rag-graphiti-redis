@@ -238,24 +238,18 @@ def create_scheduler_from_env() -> AutoIngestionScheduler:
     sync_settings_json()
     config = Config()
 
-    # Get configuration from environment
-    scan_interval = _config.AUTO_SCAN_INTERVAL
-    initial_scan = _config.AUTO_SCAN_INITIAL
-    initial_wait = _config.AUTO_SCAN_INITIAL_WAIT
-    max_files = _config.AUTO_SCAN_MAX_FILES
-
     logger.info(f"Scheduler configuration:")
-    logger.info(f"  Scan interval: {scan_interval}s ({scan_interval // 60} minutes)")
-    logger.info(f"  Initial scan: {initial_scan}")
-    logger.info(f"  Initial wait: {initial_wait}s")
-    logger.info(f"  Max files per scan: {max_files if max_files else 'unlimited'}")
+    logger.info(f"  Scan interval: {config.AUTO_SCAN_INTERVAL}s ({config.AUTO_SCAN_INTERVAL // 60} minutes)")
+    logger.info(f"  Initial scan: {config.AUTO_SCAN_INITIAL}")
+    logger.info(f"  Initial wait: {config.AUTO_SCAN_INITIAL_WAIT}s")
+    logger.info(f"  Max files per scan: {config.AUTO_SCAN_MAX_FILES if config.AUTO_SCAN_MAX_FILES else 'unlimited'}")
 
     return AutoIngestionScheduler(
         config=config,
-        scan_interval=scan_interval,
-        initial_scan=initial_scan,
-        initial_wait=initial_wait,
-        max_files=max_files,
+        scan_interval=config.AUTO_SCAN_INTERVAL,
+        initial_scan=config.AUTO_SCAN_INITIAL,
+        initial_wait=config.AUTO_SCAN_INITIAL_WAIT,
+        max_files=config.AUTO_SCAN_MAX_FILES,
     )
 
 

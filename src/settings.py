@@ -197,6 +197,12 @@ DOCS_FILE_EXTS = (
 # Default cache TTL for application-level caching (seconds).
 CACHE_TTL = 3600
 
+# Auto-scan scheduler settings (for periodic ingestion).
+AUTO_SCAN_INTERVAL = 300  # Seconds between scans (default: 5 minutes)
+AUTO_SCAN_INITIAL = True  # Whether to run initial scan on startup
+AUTO_SCAN_INITIAL_WAIT = 30  # Seconds to wait before initial scan
+AUTO_SCAN_MAX_FILES = 0  # Max files per scan (0 = unlimited)
+
 # If provided (via user settings JSON), this list REPLACES _DEFAULT_EXCLUDED_FILES.
 # GUI can manage this list to fully control fast-prune directory basenames.
 DOCS_EXCLUDE_DIRS_BUILTINS_OVERRIDE = None

@@ -10,7 +10,7 @@ from src.rag.interfaces.vector_interface import VectorInterface, ScoredItem
 from src.rag.interfaces.graph_interface import GraphInterface
 from src.rag.interfaces.cache_interface import CacheServiceProtocol
 from src.rag.interfaces.chat_interface import ChatInterface
-from src import logger
+from src import logger, settings
 from src.storage.graph.null_repository import NullGraphRepository
 from src.utils.path_discovery import (
     classify_exclude_entries,
@@ -63,8 +63,8 @@ class AppConfig(BaseSettings):
     )
 
     # ===== Paths =====
-    BASE_DIR: Path = Field(default_factory=lambda: Path(__file__).resolve().parent.parent.parent)
-    USER_SETTINGS_FILE: Path = Field(default="data/settings.json")
+    BASE_DIR: Path = Field(default_factory=lambda: settings.BASE_DIR)
+    USER_SETTINGS_FILE: Path = Field(default_factory=lambda: settings.USER_SETTINGS_FILE)
 
     # ===== Vector Store (Weaviate) =====
     VECTOR_BACKEND: str = "weaviate"
@@ -80,11 +80,7 @@ class AppConfig(BaseSettings):
     WEAVIATE_SKIP_INIT_CHECKS: bool = False
 
     # Vector stores configuration (Django-style)
-    VECTOR_STORES: Dict[str, Dict[str, Any]] = Field(default_factory=lambda: {
-        "default": {
-            "ENGINE": "weaviate",
-        }
-    })
+    VECTOR_STORES: Dict[str, Dict[str, Any]] = Field(default_factory=lambda: settings.VECTOR_STORES)
 
     # ===== Graph Store (Neo4j) =====
     NEO4J_URI: str = "bolt://neo4j:7687"
@@ -94,8 +90,8 @@ class AppConfig(BaseSettings):
     # ===== Cache (Redis) =====
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
-    REDIS_PASSWORD: str = ""
-    CACHE_TTL: int = 3600
+    REDIS_PASSWORD: str = Field(default_factory=lambda: settings.REDIS_PASSWORD)
+    CACHE_TTL: int = Field(default_factory=lambda: settings.CACHE_TTL)
 
     # ===== API Configuration =====
     API_MODE: str = "openai"  # "openai" or "ollama"
@@ -117,8 +113,8 @@ class AppConfig(BaseSettings):
     # ===== Embeddings =====
     # Embeddings are provided by LM Studio with automatic dimension detection
     EMBEDDING_MODEL: str = ""  # Explicit model name (required, e.g., text-embedding-nomic-embed-text-v2-moe)
-    EMBEDDING_DIM: int = 768  # Fallback value if auto-detection fails
-    EMBEDDING_MAX_TOKENS: int = 512
+    EMBEDDING_DIM: int = Field(default_factory=lambda: settings.EMBEDDING_DIM)
+    EMBEDDING_MAX_TOKENS: int = Field(default_factory=lambda: settings.EMBEDDING_MAX_TOKENS)
 
     # Dual Embeddings System
     ENABLE_DUAL_EMBEDDINGS: bool = False
@@ -154,24 +150,22 @@ class AppConfig(BaseSettings):
     RAG_PDF_CACHE_TTL: int = 2592000
 
     # ===== Ingestion =====
-    DOCS_PATHS: List[str] = Field(default_factory=lambda: [
-        "/mnt/Documents/Documents",
-        "/mnt/resources/Libros/Aprendizaje",
-    ])
-    CHUNK_SIZE: int = 500
-    CHUNK_OVERLAP: int = 50
-    INGEST_STREAMING: bool = True
-    DOCS_ENABLED_PATHS: tuple = ()
-    DUPLICATES_DOC_EXCEPTIONS: tuple = ("__init__.py",)
-    DOCS_EXCLUDE_FILE: str = ""
-    DOCS_EXCLUDE_DIRS: tuple = ()
-    DOCS_EXCLUDE_GLOBS: tuple = ()
-    DOCS_FILE_EXTS: tuple = (
-        ".pdf", ".docx", ".doc", ".docm", ".rtf", ".txt", ".md", ".csv",
-        ".xlsx", ".xls", ".xlsm", ".xlsb", ".xlt", ".ppt", ".pptx", ".pptm",
-        ".pps", ".ppsx", ".odt", ".ods", ".odp", ".eml", ".msg",
-        ".py", ".js", ".ts", ".tsx", ".java", ".go", ".rb", ".cs", ".php", ".c", ".cpp",
-    )
+    DOCS_PATHS: List[str] = Field(default_factory=lambda: settings.DOCS_PATHS)
+    CHUNK_SIZE: int = Field(default_factory=lambda: settings.CHUNK_SIZE)
+    CHUNK_OVERLAP: int = Field(default_factory=lambda: settings.CHUNK_OVERLAP)
+    INGEST_STREAMING: bool = Field(default_factory=lambda: settings.INGEST_STREAMING)
+    DOCS_ENABLED_PATHS: tuple = Field(default_factory=lambda: settings.DOCS_ENABLED_PATHS)
+    DUPLICATES_DOC_EXCEPTIONS: tuple = Field(default_factory=lambda: settings.DUPLICATES_DOC_EXCEPTIONS)
+    DOCS_EXCLUDE_FILE: str = Field(default_factory=lambda: settings.DOCS_EXCLUDE_FILE)
+    DOCS_EXCLUDE_DIRS: tuple = Field(default_factory=lambda: settings.DOCS_EXCLUDE_DIRS)
+    DOCS_EXCLUDE_GLOBS: tuple = Field(default_factory=lambda: settings.DOCS_EXCLUDE_GLOBS)
+    DOCS_FILE_EXTS: tuple = Field(default_factory=lambda: settings.DOCS_FILE_EXTS)
+
+    # Auto-scan scheduler settings
+    AUTO_SCAN_INTERVAL: int = Field(default_factory=lambda: settings.AUTO_SCAN_INTERVAL)
+    AUTO_SCAN_INITIAL: bool = Field(default_factory=lambda: settings.AUTO_SCAN_INITIAL)
+    AUTO_SCAN_INITIAL_WAIT: int = Field(default_factory=lambda: settings.AUTO_SCAN_INITIAL_WAIT)
+    AUTO_SCAN_MAX_FILES: int = Field(default_factory=lambda: settings.AUTO_SCAN_MAX_FILES)
 
     # ===== Memory System =====
     MEMORY_TTL: int = 172800  # 48 hours
@@ -231,34 +225,12 @@ class AppConfig(BaseSettings):
     PREPROCESSING_WORK_DIR: str = "/tmp/rag-preprocessing"
     EXTERNAL_VOLUMES: str = "[]"
 
-    # ===== Auto-Scan Scheduler =====
-    AUTO_SCAN_ENABLED: bool = True
-    AUTO_SCAN_INTERVAL: int = 1800
-    AUTO_SCAN_MAX_FILES: int = 0
-    AUTO_SCAN_LOG_LEVEL: str = "INFO"
-    AUTO_SCAN_INITIAL: bool = True
-    AUTO_SCAN_INITIAL_WAIT: int = 30
-
     # ===== Apps =====
-    INSTALLED_APPS: List[str] = Field(default_factory=lambda: [
-        "src.providers.lmstudio.apps.LMStudioProviderAppConfig",
-        "src.providers.openai.apps.OpenAIProviderAppConfig",
-        "src.providers.huggingface.apps.HuggingFaceProviderAppConfig",
-        "src.providers.anythingllm.apps.AnythingLLMProviderAppConfig",
-        "src.providers.litellm_gateway.apps.LiteLLMGatewayAppConfig",
-    ])
-    AUTOLOAD_APP_ENTRYPOINTS: bool = False
+    INSTALLED_APPS: List[str] = Field(default_factory=lambda: settings.INSTALLED_APPS)
+    AUTOLOAD_APP_ENTRYPOINTS: bool = Field(default_factory=lambda: settings.AUTOLOAD_APP_ENTRYPOINTS)
 
     # Internal defaults (excluded directories/files)
-    DEFAULT_EXCLUDED_FILES: set = Field(default_factory=lambda: {
-        ".git", ".hg", ".svn", ".idea", ".vscode", ".vs",
-        "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", ".nox",
-        ".hypothesis", ".ipynb_checkpoints", ".venv", "venv", "env", "__pypackages__",
-        "site-packages", "node_modules", ".next", ".nuxt", ".svelte-kit", ".parcel-cache",
-        "build", "dist", "target", "out", "coverage", ".cache", ".gradle", ".terraform",
-        ".DS_Store", "*.egg-info", ".eggs", ".coverage", "__MACOSX",
-        "*.zip", "*.tar", "*.tar.gz", "*.rar", "*.7z", "*.gz", "*.tar.xz",
-    })
+    DEFAULT_EXCLUDED_FILES: set = Field(default_factory=lambda: settings._DEFAULT_EXCLUDED_FILES)
 
     @field_validator('LMSTUDIO_EXTRA_HOSTS', mode='before')
     @classmethod
