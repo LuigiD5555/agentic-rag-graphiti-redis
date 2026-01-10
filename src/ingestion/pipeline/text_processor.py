@@ -12,10 +12,10 @@ It logs stage-level progress so long-running loaders/splitters do not appear
 
 from datetime import datetime, timezone
 from typing import Any, Dict
-import os
 import time
 
 from src import logger
+from src.conf import settings
 
 from src.ingestion.loaders.helpers import call_loader, resolve_loader_source
 from .splitters import split_documents
@@ -49,27 +49,6 @@ def _log_with_file_prefix(file_context: IngestionFileContext, message: str, *arg
     logger.info(message, *args)
 
 
-def _read_int_env(variable_name: str, default_value: int) -> int:
-    """Read an integer from environment variables.
-
-    Args:
-        variable_name: Environment variable name.
-        default_value: Value used when variable is missing.
-
-    Returns:
-        Parsed integer value.
-
-    Raises:
-        ValueError: If present but invalid.
-    """
-    raw = os.getenv(variable_name)
-    if raw is None or not raw.strip():
-        return int(default_value)
-
-    try:
-        return int(raw.strip())
-    except ValueError as exc:
-        raise ValueError(f"{variable_name} must be an integer, got: {raw!r}") from exc
 
 
 def _format_eta_seconds(seconds: float | None) -> str:
@@ -114,11 +93,11 @@ def _split_documents_with_progress(
     if total_docs == 0:
         return []
 
-    batch_size = _read_int_env("RAG_SPLIT_BATCH_SIZE", 128)
+    batch_size = settings.RAG_SPLIT_BATCH_SIZE
     if batch_size <= 0:
         raise ValueError("RAG_SPLIT_BATCH_SIZE must be a positive integer")
 
-    log_every_seconds = _read_int_env("RAG_SPLIT_LOG_EVERY_SECONDS", 15)
+    log_every_seconds = settings.RAG_SPLIT_LOG_EVERY_SECONDS
     if log_every_seconds <= 0:
         raise ValueError("RAG_SPLIT_LOG_EVERY_SECONDS must be a positive integer")
 
@@ -202,7 +181,7 @@ def process_text_document(pipeline: Any, loader: object) -> None:
     # Guardrail: prevent pathological loaders (e.g., CSV row-per-document) from
     # bringing ingestion to a halt. In LangChain CSV loaders, one row can become
     # one Document. :contentReference[oaicite:2]{index=2}
-    max_docs_per_file = _read_int_env("RAG_MAX_DOCS_PER_FILE", 200_000)
+    max_docs_per_file = settings.RAG_MAX_DOCS_PER_FILE
     if max_docs_per_file > 0 and document_count > max_docs_per_file:
         logger.warning(
             "%s Skipping %s; loader returned %d documents which exceeds RAG_MAX_DOCS_PER_FILE=%d.",
@@ -265,8 +244,8 @@ def process_text_document(pipeline: Any, loader: object) -> None:
     ingested_at = datetime.now(timezone.utc).isoformat()
 
     # Configure batching and logging
-    batch_size = int(os.getenv("RAG_EMBED_BATCH_SIZE", "16"))
-    log_every_n_chunks = int(os.getenv("RAG_EMBED_LOG_EVERY_N_CHUNKS", "10"))
+    batch_size = settings.RAG_EMBED_BATCH_SIZE
+    log_every_n_chunks = settings.RAG_EMBED_LOG_EVERY_N_CHUNKS
     supports_batch = hasattr(pipeline.embedding_service, "generate_batch")
 
     with IngestionStageReporter(
