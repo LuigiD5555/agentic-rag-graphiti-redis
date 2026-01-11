@@ -4,12 +4,15 @@ This module handles automatic preprocessing of files that need conversion
 before ingestion (Office docs, archives, images needing OCR, etc.).
 """
 
-import time
 from pathlib import Path
-from typing import Optional, Dict, Any
-import requests
+from typing import Dict, Any, Optional
 
 from src.conf import settings
+from src.ingestion.tool_adapters import (
+    ToolAdapter,
+    ToolAdapterConfig,
+    ToolAdapterFactory,
+)
 from src.rag.audit import get_logger
 
 log = get_logger(__name__)
@@ -28,6 +31,7 @@ class FilePreprocessor:
         enable_ocr: bool = False,  # Disabled by default (slower)
         timeout: int = 120,
         work_dir: Optional[str] = None,
+        tool_adapters: Optional[Dict[str, ToolAdapter]] = None,
     ):
         """Initialize preprocessor.
 
@@ -40,6 +44,7 @@ class FilePreprocessor:
             enable_ocr: Enable OCR for images/scanned PDFs
             timeout: Request timeout in seconds
             work_dir: Working directory for processed files
+            tool_adapters: Optional injected adapters (for testing/custom tooling)
         """
         self.office_url = office_url or settings.TOOL_OFFICE_URL
         self.archive_url = archive_url or settings.TOOL_FILEEXTRACTOR_URL
@@ -51,6 +56,23 @@ class FilePreprocessor:
         self.work_dir = Path(work_dir or settings.PREPROCESSING_WORK_DIR)
         self.work_dir.mkdir(parents=True, exist_ok=True)
 
+        config = ToolAdapterConfig(
+            office_url=self.office_url,
+            archive_url=self.archive_url,
+            ocr_url=self.ocr_url,
+            timeout=self.timeout,
+            retry_delay=settings.TOOL_CONNECT_RETRY_DELAY,
+            retries=settings.TOOL_CONNECT_RETRIES,
+            enable_office=self.enable_office,
+            enable_archive=self.enable_archive,
+            enable_ocr=self.enable_ocr,
+            archive_max_size_mb=settings.ARCHIVE_MAX_SIZE_MB,
+        )
+        self.tool_adapters = tool_adapters or ToolAdapterFactory.build_default_adapters(config)
+        self.office_adapter = self.tool_adapters.get("office")
+        self.archive_adapter = self.tool_adapters.get("archive")
+        self.ocr_adapter = self.tool_adapters.get("ocr")
+
         # Extensions that need preprocessing
         self.office_extensions = {'.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'}
         self.archive_extensions = {'.zip', '.7z', '.tar', '.tar.gz', '.tar.xz', '.tar.bz2', '.tgz'}
@@ -60,18 +82,6 @@ class FilePreprocessor:
             "FilePreprocessor initialized: office=%s, archive=%s, ocr=%s",
             self.enable_office, self.enable_archive, self.enable_ocr
         )
-
-    def _post_with_retries(self, url: str, payload: Dict[str, Any]) -> requests.Response:
-        retries = settings.TOOL_CONNECT_RETRIES
-        delay = settings.TOOL_CONNECT_RETRY_DELAY
-        last_exc = None
-        for _ in range(max(1, retries)):
-            try:
-                return requests.post(url, json=payload, timeout=self.timeout)
-            except requests.exceptions.ConnectionError as exc:
-                last_exc = exc
-                time.sleep(delay)
-        raise requests.exceptions.ConnectionError(str(last_exc))
 
     def should_preprocess(self, file_path: Path) -> bool:
         """Check if a file needs preprocessing.
@@ -84,13 +94,13 @@ class FilePreprocessor:
         """
         suffix = file_path.suffix.lower()
 
-        if self.enable_office and suffix in self.office_extensions:
+        if self.office_adapter and self.office_adapter.enabled and suffix in self.office_extensions:
             return True
 
-        if self.enable_archive and suffix in self.archive_extensions:
+        if self.archive_adapter and self.archive_adapter.enabled and suffix in self.archive_extensions:
             return True
 
-        if self.enable_ocr and suffix in self.ocr_extensions:
+        if self.ocr_adapter and self.ocr_adapter.enabled and suffix in self.ocr_extensions:
             return True
 
         return False
@@ -111,21 +121,16 @@ class FilePreprocessor:
         suffix = file_path.suffix.lower()
 
         try:
-            # Office documents -> convert to text
-            if self.enable_office and suffix in self.office_extensions:
+            if self.office_adapter and suffix in self.office_extensions:
                 return self._convert_office_document(file_path)
 
-            # Archives -> extract (returns directory)
-            elif self.enable_archive and suffix in self.archive_extensions:
+            if self.archive_adapter and suffix in self.archive_extensions:
                 return self._extract_archive(file_path)
 
-            # Images -> OCR
-            elif self.enable_ocr and suffix in self.ocr_extensions:
+            if self.ocr_adapter and suffix in self.ocr_extensions:
                 return self._perform_ocr(file_path)
 
-            else:
-                return file_path
-
+            return file_path
         except Exception as e:
             log.error("Preprocessing failed for %s: %s", file_path, e)
             return None
@@ -139,40 +144,15 @@ class FilePreprocessor:
         Returns:
             Path to converted text file, or None if failed
         """
-        log.info("Converting Office document: %s", file_path)
-
-        try:
-            response = self._post_with_retries(
-                f"{self.office_url}/convert",
-                {
-                    "input_path": str(file_path.absolute()),
-                    "output_format": "txt",
-                },
-            )
-            response.raise_for_status()
-            result = response.json()
-
-            if result.get("success"):
-                output_path = Path(result["output_path"])
-                log.info("Successfully converted %s -> %s", file_path.name, output_path.name)
-                return output_path
-
-            log.error("Office conversion failed: %s", result.get("error"))
-            log.info("Falling back to direct ingestion for %s", file_path.name)
+        if not self.office_adapter:
             return file_path
 
-        except requests.exceptions.ConnectionError:
-            log.warning(
-                "Office tool not available at %s. "
-                "Make sure socket is enabled: systemctl --user status tool-office.socket",
-                self.office_url
-            )
-            log.info("Falling back to direct ingestion for %s", file_path.name)
-            return file_path
-        except Exception as e:
-            log.error("Office conversion error: %s", e)
-            log.info("Falling back to direct ingestion for %s", file_path.name)
-            return file_path
+        output = self.office_adapter.process(file_path)
+        if output:
+            return output
+
+        log.info("Falling back to direct ingestion for %s", file_path.name)
+        return file_path
 
     def convert_office_document(self, file_path: Path) -> Optional[Path]:
         """Public wrapper to convert an Office document to text."""
@@ -187,43 +167,10 @@ class FilePreprocessor:
         Returns:
             Path to extraction directory, or None if failed
         """
-        log.info("Extracting archive: %s", file_path)
-
-        try:
-            response = self._post_with_retries(
-                f"{self.archive_url}/extract",
-                {
-                    "archive_path": str(file_path.absolute()),
-                    "max_size_mb": settings.ARCHIVE_MAX_SIZE_MB,
-                },
-            )
-            response.raise_for_status()
-            result = response.json()
-
-            if result.get("success"):
-                output_dir = Path(result["output_dir"])
-                file_count = result.get("file_count", 0)
-                total_size_mb = result.get("total_size_mb", 0)
-
-                log.info(
-                    "Successfully extracted %s -> %s (%d files, %.2f MB)",
-                    file_path.name, output_dir.name, file_count, total_size_mb
-                )
-                return output_dir
-            else:
-                log.error("Archive extraction failed: %s", result.get("error"))
-                return None
-
-        except requests.exceptions.ConnectionError:
-            log.warning(
-                "Archive tool not available at %s. "
-                "Make sure socket is enabled: systemctl --user status tool-extractor.socket",
-                self.archive_url
-            )
+        if not self.archive_adapter:
             return None
-        except Exception as e:
-            log.error("Archive extraction error: %s", e)
-            return None
+
+        return self.archive_adapter.process(file_path)
 
     def extract_archive(self, file_path: Path) -> Optional[Path]:
         """Public wrapper to extract an archive."""
@@ -238,43 +185,14 @@ class FilePreprocessor:
         Returns:
             Path to OCR'd text file, or None if failed
         """
-        log.info("Performing OCR on: %s", file_path)
-
-        try:
-            response = self._post_with_retries(
-                f"{self.ocr_url}/ocr",
-                {
-                    "input_path": str(file_path.absolute()),
-                    "language": settings.OCR_DEFAULT_LANGUAGE,
-                    "output_format": "txt",
-                },
-            )
-            response.raise_for_status()
-            result = response.json()
-
-            if result.get("success"):
-                output_path = Path(result["output_path"])
-                log.info("Successfully OCR'd %s -> %s", file_path.name, output_path.name)
-                return output_path
-            else:
-                log.error("OCR failed: %s", result.get("error"))
-                return None
-
-        except requests.exceptions.ConnectionError:
-            log.warning(
-                "OCR tool not available at %s. "
-                "Make sure socket is enabled: systemctl --user status tool-ocr.socket",
-                self.ocr_url
-            )
+        if not self.ocr_adapter:
             return None
+
+        return self.ocr_adapter.process(file_path)
 
     def perform_ocr(self, file_path: Path) -> Optional[Path]:
         """Public wrapper to perform OCR on an image file."""
-        try:
-            return self._perform_ocr(file_path)
-        except Exception as e:
-            log.error("OCR error: %s", e)
-            return None
+        return self._perform_ocr(file_path)
 
     def get_status(self) -> Dict[str, Any]:
         """Get preprocessor status.
@@ -291,17 +209,8 @@ class FilePreprocessor:
             "tools_available": {},
         }
 
-        # Check if tools are reachable
-        for name, url in [
-            ("office", self.office_url),
-            ("archive", self.archive_url),
-            ("ocr", self.ocr_url),
-        ]:
-            try:
-                response = requests.get(f"{url}/healthz", timeout=2)
-                status["tools_available"][name] = response.status_code == 200
-            except:
-                status["tools_available"][name] = False
+        for name, adapter in self.tool_adapters.items():
+            status["tools_available"][name] = adapter.is_available()
 
         return status
 

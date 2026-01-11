@@ -17,6 +17,11 @@ import types
 
 from weaviate.classes.config import Property, DataType
 from src.rag.interfaces.vector_interface import VectorInterface
+from src.storage.vector.registry import (
+    get_vector_store_factory,
+    register_vector_store,
+)
+from src.storage.vector.backends.chroma import build_chroma_repository
 
 
 def _get_rag_document_properties() -> List[Property]:
@@ -185,36 +190,13 @@ def _normalize_vector_store_cfg(store_cfg: Mapping[str, Any], config: Any) -> Ma
     return normalized
 
 
-def get_vector_store(config: Any, alias: str = "default") -> VectorInterface:
+def _build_weaviate_repository(config: Any, store_cfg: Mapping[str, Any], alias: str) -> VectorInterface:
     """
-    Create the vector store backend selected in settings.
+    Build the default Weaviate repository backend.
 
-    Django-like usage:
-        VECTOR_STORES = {
-            "default": {"ENGINE": "weaviate"},
-            "analytics": {"ENGINE": "weaviate", "URL": "..."},
-        }
-
-    Args:
-        config: Application settings object or module.
-        alias: Vector store alias to use.
-
-    Returns:
-        An instance implementing VectorInterface.
+    This is the only backend implemented for now, but the registry allows
+    more in the future.
     """
-    store_cfg = _normalize_vector_store_cfg(_vector_store_settings(config, alias), config)
-    backend = (store_cfg.get("BACKEND") or store_cfg.get("ENGINE") or "").strip().lower()
-    if not backend:
-        backend = (getattr(config, "VECTOR_BACKEND", None) or "weaviate").strip().lower()
-
-    if backend != "weaviate":
-        raise ValueError(f"Unsupported vector backend: {backend}")
-
-    import weaviate
-    from weaviate.classes.init import AdditionalConfig, Timeout
-    from src.storage.vector.weaviate_repository.repository import WeaviateRepository
-    from src.storage.vector.weaviate_repository.schema import SchemaManager
-
     cfg = _config_with_overrides(
         config,
         store_cfg,
@@ -243,10 +225,16 @@ def get_vector_store(config: Any, alias: str = "default") -> VectorInterface:
     weaviate_api_key = getattr(cfg, "WEAVIATE_API_KEY", None) or store_cfg.get("API_KEY")
     weaviate_class = getattr(cfg, "WEAVIATE_CLASS", None) or store_cfg.get("CLASS") or "RagDocument"
     weaviate_timeout = getattr(cfg, "WEAVIATE_TIMEOUT", None) or store_cfg.get("TIMEOUT") or 120
-    weaviate_multi_tenancy = bool(getattr(cfg, "WEAVIATE_MULTI_TENANCY", False) or store_cfg.get("MULTI_TENANCY") or False)
+    weaviate_multi_tenancy = bool(
+        getattr(cfg, "WEAVIATE_MULTI_TENANCY", False) or store_cfg.get("MULTI_TENANCY") or False
+    )
     weaviate_default_tenant = getattr(cfg, "WEAVIATE_DEFAULT_TENANT", None) or store_cfg.get("DEFAULT_TENANT") or "default"
     weaviate_grpc_port = getattr(cfg, "WEAVIATE_GRPC_PORT", None) or store_cfg.get("GRPC_PORT")
     skip_init_checks = bool(getattr(cfg, "WEAVIATE_SKIP_INIT_CHECKS", False))
+
+    from weaviate.classes.init import AdditionalConfig, Timeout
+    from src.storage.vector.weaviate_repository.repository import WeaviateRepository
+    from src.storage.vector.weaviate_repository.schema import SchemaManager
 
     additional = AdditionalConfig(timeout=Timeout(init=weaviate_timeout, query=weaviate_timeout))
 
@@ -255,6 +243,8 @@ def get_vector_store(config: Any, alias: str = "default") -> VectorInterface:
     port = parsed_url.port or (443 if parsed_url.scheme == "https" else 8080)
     use_https = parsed_url.scheme == "https"
     grpc_port = weaviate_grpc_port or (50051 if not use_https else 443)
+
+    import weaviate
 
     if weaviate_api_key:
         client = weaviate.connect_to_custom(
@@ -291,3 +281,33 @@ def get_vector_store(config: Any, alias: str = "default") -> VectorInterface:
     schema_manager.ensure_class()
 
     return WeaviateRepository(schema=schema_manager)
+
+
+register_vector_store("weaviate", _build_weaviate_repository)
+register_vector_store("chroma", build_chroma_repository)
+
+
+def get_vector_store(config: Any, alias: str = "default") -> VectorInterface:
+    """
+    Create the vector store backend selected in settings.
+
+    Django-like usage:
+        VECTOR_STORES = {
+            "default": {"ENGINE": "weaviate"},
+            "analytics": {"ENGINE": "weaviate", "URL": "..."},
+        }
+
+    Args:
+        config: Application settings object or module.
+        alias: Vector store alias to use.
+
+    Returns:
+        An instance implementing VectorInterface.
+    """
+    store_cfg = _normalize_vector_store_cfg(_vector_store_settings(config, alias), config)
+    backend = (store_cfg.get("BACKEND") or store_cfg.get("ENGINE") or "").strip().lower()
+    if not backend:
+        backend = (getattr(config, "VECTOR_BACKEND", None) or "weaviate").strip().lower()
+
+    factory = get_vector_store_factory(backend)
+    return factory(config, store_cfg, alias)
