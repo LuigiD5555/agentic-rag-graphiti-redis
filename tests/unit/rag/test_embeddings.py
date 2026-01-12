@@ -3,7 +3,7 @@ from typing import Optional
 import pytest
 import requests
 
-from src.providers.lmstudio.embeddings import EmbeddingService
+from src.backends.llm.lmstudio.embeddings import EmbeddingService
 
 
 class ConfigStub:

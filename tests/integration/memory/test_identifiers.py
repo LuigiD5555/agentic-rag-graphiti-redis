@@ -1,7 +1,7 @@
 """Tests for identity generation (user_id, thread_id)."""
 import pytest
 
-from src.memory.core.identifiers import (
+from src.workflows.memory.core.identifiers import (
     generate_user_id,
     generate_thread_id,
     validate_thread_id,

@@ -1,7 +1,5 @@
 """Helper to instantiate and tear down the RAG runtime for FastAPI."""
 
-from __future__ import annotations
-
 import logging
 from dataclasses import dataclass
 from typing import Any, Optional, Mapping
@@ -9,11 +7,11 @@ from typing import Any, Optional, Mapping
 import weaviate
 
 from src.apps.websearch import SearXNGClient
-from src.ingestion.orchestrator import IngestionOrchestrator
-from src.providers.factory import ProviderFactory
-from src.rag.embeddings_factory import get_embedding_service
-from src.rag.pipeline.rag_orchestrator import RAGOrchestrator
-from src.rag.retrieval import WeaviateRetriever
+from src.workflows.ingestion.orchestrator import IngestionOrchestrator
+from src.backends.llm.factory import ProviderFactory
+from src.workflows.query.embeddings_factory import get_embedding_service
+from src.workflows.query.pipeline.rag_orchestrator import RAGOrchestrator
+from src.workflows.query.retrieval import WeaviateRetriever
 
 log = logging.getLogger(__name__)
 
@@ -70,13 +68,13 @@ class RuntimeFactory:
             grpc_port=cfg.WEAVIATE_GRPC_PORT,
         )
 
-        from src.storage.vector import get_vector_store
+        from src.backends.storage.vector import get_vector_store
 
         log.info("Ensuring Weaviate schema exists...")
         get_vector_store(cfg)
         log.info("Weaviate schema ready")
 
-        from src.memory.storage.chat_memory_schema import create_chat_memory_collection
+        from src.workflows.memory.storage.chat_memory_schema import create_chat_memory_collection
 
         log.info("Ensuring ChatMemory collection exists...")
         chat_memory_created = create_chat_memory_collection(
@@ -113,7 +111,7 @@ class RuntimeFactory:
 
         chat_memory_manager: Optional[Any] = None
         try:
-            from src.memory.integration import ChatMemoryManager
+            from src.workflows.memory import ChatMemoryManager
 
             chat_memory_manager = ChatMemoryManager(
                 weaviate_client=weaviate_client,
@@ -127,35 +125,33 @@ class RuntimeFactory:
         snapshot_scheduler = None
         if cfg.SNAPSHOT_ENABLED:
             try:
-                from src.memory.snapshot_scheduler import SnapshotScheduler
+                from src.workflows.memory.snapshot_scheduler import SnapshotScheduler
 
                 snapshot_scheduler = SnapshotScheduler(
-                    memory_manager=chat_memory_manager,
-                    interval_hours=cfg.SNAPSHOT_INTERVAL_HOURS,
+                    snapshot_interval=cfg.SNAPSHOT_INTERVAL_HOURS * 3600,
                 )
-                snapshot_scheduler.start()
-                log.info("Snapshot scheduler started")
+                log.info("Snapshot scheduler initialized")
             except Exception as exc:  # pragma: no cover - optional
                 log.error("Failed to initialize snapshot scheduler: %s", exc)
 
         cleanup_scheduler = None
         if cfg.CLEANUP_ENABLED:
             try:
-                from src.memory.cleanup_scheduler import CleanupScheduler
+                from src.workflows.memory.cleanup_scheduler import CleanupScheduler
 
                 cleanup_scheduler = CleanupScheduler(
-                    memory_manager=chat_memory_manager,
-                    interval_hours=cfg.CLEANUP_INTERVAL_HOURS,
+                    chat_memory_manager=chat_memory_manager,
+                    snapshot_scheduler=snapshot_scheduler,
+                    cleanup_interval=cfg.CLEANUP_INTERVAL_HOURS * 3600,
                 )
-                cleanup_scheduler.start()
-                log.info("Cleanup scheduler started")
+                log.info("Cleanup scheduler initialized")
             except Exception as exc:  # pragma: no cover - optional
                 log.error("Failed to initialize cleanup scheduler: %s", exc)
 
         temporal_scheduler = None
         if cfg.TEMPORAL_CLEANUP_ENABLED:
             try:
-                from src.rag.temporal_cleanup_scheduler import TemporalCleanupScheduler
+                from src.workflows.query.temporal.cleanup_scheduler import TemporalCleanupScheduler
 
                 temporal_scheduler = TemporalCleanupScheduler(
                     interval_hours=cfg.TEMPORAL_CLEANUP_INTERVAL_HOURS,

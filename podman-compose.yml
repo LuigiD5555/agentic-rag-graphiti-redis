@@ -357,7 +357,7 @@ services:
       - ./.ingestignore:/app/.ingestignore:Z
       - ./src:/app/src:ro,Z
       - ./tests:/app/tests:ro,Z
-    command: ["python", "-m", "src.ingestion.auto_scan.scheduler"]
+    command: ["python", "-m", "src.workflows.ingestion.auto_scan.scheduler"]
     stop_grace_period: 20s
     ulimits:
       nofile: { soft: 65536, hard: 65536 }

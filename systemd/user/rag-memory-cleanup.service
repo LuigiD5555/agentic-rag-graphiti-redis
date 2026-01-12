@@ -5,7 +5,7 @@ Documentation=file://%h/Documents/Documents/Programacion/Proyectos_Programacion/
 [Service]
 Type=oneshot
 WorkingDirectory=%h/Documents/Documents/Programacion/Proyectos_Programacion/RAG Project/rag-agentic-graphiti
-ExecStart=%h/Documents/Documents/Programacion/Proyectos_Programacion/RAG Project/rag-agentic-graphiti/.venv/bin/python -m src.memory.artifacts.cleanup
+ExecStart=%h/Documents/Documents/Programacion/Proyectos_Programacion/RAG Project/rag-agentic-graphiti/.venv/bin/python -m src.workflows.memory.artifacts.cleanup
 Environment="PYTHONPATH=%h/Documents/Documents/Programacion/Proyectos_Programacion/RAG Project/rag-agentic-graphiti"
 
 # Logs

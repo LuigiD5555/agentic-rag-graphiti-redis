@@ -1,7 +1,7 @@
 """Tests for retriever contract compatibility."""
 import pytest
 from unittest.mock import Mock, MagicMock
-from src.rag.retrieval.weaviate_retriever import WeaviateRetriever
+from src.workflows.query.retrieval.weaviate_retriever import WeaviateRetriever
 
 
 class TestRetrieverContract:

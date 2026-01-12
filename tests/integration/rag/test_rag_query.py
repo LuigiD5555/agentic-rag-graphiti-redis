@@ -5,7 +5,7 @@ import sys
 import pytest
 
 from src.api.runtime import RuntimeFactory
-from src.rag.engine import AppConfig
+from src.workflows.query.engine import AppConfig
 
 pytestmark = pytest.mark.integration
 

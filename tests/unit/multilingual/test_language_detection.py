@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Test script for multilingual RAG support."""
 
-from src.rag.multilingual import LanguageDetector
+from src.workflows.query.multilingual import LanguageDetector
 
 # Test queries in different languages
 test_queries = {

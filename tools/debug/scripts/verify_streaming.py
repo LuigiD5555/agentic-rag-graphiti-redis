@@ -7,11 +7,11 @@ from typing import Optional
 
 import weaviate
 
-from src.ingestion.helpers import build_ingestion_options_from_args
-from src.ingestion.orchestrator import IngestionOrchestrator
+from src.workflows.ingestion.helpers import build_ingestion_options_from_args
+from src.workflows.ingestion.orchestrator import IngestionOrchestrator
 import src.settings as settings
-from src.rag.engine import AppConfig
-from src.rag.retrieval import WeaviateRetriever
+from src.workflows.query.engine import AppConfig
+from src.workflows.query.retrieval import WeaviateRetriever
 
 
 def _connect_weaviate(app_cfg: AppConfig):

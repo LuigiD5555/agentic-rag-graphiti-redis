@@ -11,11 +11,11 @@ Verifies that:
 import sys
 import time
 import weaviate
-from src.rag.engine import AppConfig
-from src.memory.integration import create_chat_memory_manager
-from src.memory.storage.chat_memory_schema import CHAT_MEMORY_COLLECTION
-from src.memory.snapshot_scheduler import create_snapshot_scheduler
-from src.memory.cleanup_scheduler import create_cleanup_scheduler
+from src.workflows.query.engine import AppConfig
+from src.workflows.memory.integration import create_chat_memory_manager
+from src.workflows.memory.storage.chat_memory_schema import CHAT_MEMORY_COLLECTION
+from src.workflows.memory.snapshot_scheduler import create_snapshot_scheduler
+from src.workflows.memory.cleanup_scheduler import create_cleanup_scheduler
 
 def main():
     print("=== Test ChatMemory Integration ===\n")
@@ -71,8 +71,8 @@ def main():
     print("4. Testing basic ChatMemory operations...")
     try:
         # Create test snapshot
-        from src.memory.snapshot import create_snapshot
-        from src.memory.core.state import create_initial_state
+        from src.workflows.memory.snapshot import create_snapshot
+        from src.workflows.memory.core.state import create_initial_state
 
         state = create_initial_state("test_user", "test_thread")
         state["messages"] = [

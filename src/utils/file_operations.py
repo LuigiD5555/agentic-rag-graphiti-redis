@@ -8,7 +8,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
-from src.rag.audit import get_logger
+from src.workflows.query.audit import get_logger
 from src.utils.hashing import generate_hash_presanitized
 
 log = get_logger(__name__)

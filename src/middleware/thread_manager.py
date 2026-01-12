@@ -8,7 +8,7 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from src.conf import settings
-from src.memory.core.identifiers import (
+from src.workflows.memory.core.identifiers import (
     generate_user_id,
     generate_thread_id,
     validate_thread_id,

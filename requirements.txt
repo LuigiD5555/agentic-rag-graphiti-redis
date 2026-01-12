@@ -14,9 +14,9 @@ neo4j
 weaviate-client>=4,<5
 grpcio
 
-# Ingestion (Office tools delegated to rag-tool-office)
+# Ingestion (Office tools delegated to rag-tool-document-processor)
 networkx
-python-docx  # Still needed for DOCX native parsing (fallback to rag-tool-office)
+python-docx  # Still needed for DOCX native parsing (fallback to rag-tool-document-processor)
 pypdf
 
 # API

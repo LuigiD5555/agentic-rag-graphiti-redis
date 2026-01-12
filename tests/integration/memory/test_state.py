@@ -3,7 +3,7 @@ import time
 
 import pytest
 
-from src.memory.core.state import (
+from src.workflows.memory.core.state import (
     ConversationState,
     ToolExecution,
     create_initial_state,

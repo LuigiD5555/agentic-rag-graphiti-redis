@@ -10,12 +10,12 @@ import time
 import pickle
 import weaviate
 from redis import Redis
-from src.rag.engine import AppConfig
-from src.memory.integration import create_chat_memory_manager
-from src.memory.snapshot_scheduler import create_snapshot_scheduler
-from src.memory.core.checkpointer import create_checkpointer
-from src.memory.startup_migrator import migrate_redis_conversations_on_startup
-from src.rag.embeddings_factory import get_embedding_service
+from src.workflows.query.engine import AppConfig
+from src.workflows.memory.integration import create_chat_memory_manager
+from src.workflows.memory.snapshot_scheduler import create_snapshot_scheduler
+from src.workflows.memory.core.checkpointer import create_checkpointer
+from src.workflows.memory.startup_migrator import migrate_redis_conversations_on_startup
+from src.workflows.query.embeddings_factory import get_embedding_service
 
 
 def create_test_checkpoint(thread_id: str, user_id: str, age_hours: float):
@@ -99,7 +99,7 @@ def main():
         )
 
         # Create embedding service
-        from src.rag.conf import Config as RAGConfig
+        from src.workflows.query.conf import Config as RAGConfig
         rag_config = RAGConfig()
         embedding_service = get_embedding_service(rag_config)
 
@@ -158,7 +158,7 @@ def main():
     # 4. Verify snapshots in Weaviate
     print("4. Verifying snapshots in Weaviate...")
     try:
-        from src.memory.storage.chat_memory_schema import CHAT_MEMORY_COLLECTION
+        from src.workflows.memory.storage.chat_memory_schema import CHAT_MEMORY_COLLECTION
 
         collection = client.collections.get(CHAT_MEMORY_COLLECTION)
 

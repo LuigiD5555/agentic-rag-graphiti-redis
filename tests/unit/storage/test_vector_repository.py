@@ -1,4 +1,4 @@
-from src.storage.vector.weaviate_repository import WeaviateRepository
+from src.backends.storage.vector.weaviate_repository import WeaviateRepository
 
 
 def _make_repo(timeout: int = 15) -> WeaviateRepository:

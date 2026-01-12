@@ -19,152 +19,266 @@ How it works:
 4. Updates cache after successful ingestion
 """
 
-"""Auto-scan scheduler for periodic ingestion scans."""
-import argparse
-import asyncio
 import os
-import sys
 import time
-from datetime import datetime
+import signal
 from typing import Optional
+from datetime import datetime
 
-from src.rag.audit import get_logger
-from src.ingestion.options import IngestionOptions
-from src.ingestion.orchestrator import IngestionOrchestrator
-from src.ingestion.helpers import build_ingestion_options_from_args
-from src.storage.cache.ingestion.manager import IngestionCacheManager
-from src.conf import settings as runtime_settings
+from src.workflows.query.audit import get_logger, configure_logging, resolve_level
+import src.settings as settings
+from src.workflows.query.conf import sync_settings_json
+from src.workflows.ingestion.orchestrator import IngestionOrchestrator
+from src.workflows.ingestion.helpers import build_ingestion_options_from_args
 
 logger = get_logger(__name__)
 
 
-class AutoScanScheduler:
-    """Scheduler that periodically scans for changed files and triggers ingestion."""
+class AutoIngestionScheduler:
+    """
+    Periodically runs ingestion scanner to detect and process changed files.
 
-    def __init__(self, config: object) -> None:
+    Uses the existing Redis cache system to efficiently skip unchanged files.
+    """
+
+    def __init__(
+        self,
+        scan_interval: int = 300,  # 5 minutes default
+        initial_scan: bool = True,
+        initial_wait: int = 30,
+        max_files: int = 0
+    ):
         """
-        Initialize scheduler with configuration.
+        Initialize the auto-ingestion scheduler.
 
         Args:
-            config: Runtime settings object.
+            scan_interval: Seconds between scans (default: 300 = 5 minutes)
+            initial_scan: Whether to run full scan on startup
+            initial_wait: Seconds to wait before initial scan (for services to be ready)
         """
-        self.config = config
-        self.orchestrator = IngestionOrchestrator(config)
-        if hasattr(config, "model_dump"):
-            settings_dict = config.model_dump()
-        else:
-            settings_dict = {
-                k: getattr(config, k)
-                for k in dir(config)
-                if not k.startswith("_")
-            }
-        self.cache_manager = IngestionCacheManager.from_settings(settings_dict)
+        self.scan_interval = scan_interval
+        self.initial_scan = initial_scan
+        self.initial_wait = initial_wait
+        self.max_files = max_files
+        self.orchestrator = IngestionOrchestrator()
 
-        # Scheduler configuration
-        self.scan_interval = getattr(config, "AUTO_SCAN_INTERVAL", 300)
-        self.initial_scan = getattr(config, "AUTO_SCAN_INITIAL", True)
-        self.initial_wait = getattr(config, "AUTO_SCAN_INITIAL_WAIT", 30)
-        self.max_files_per_scan = getattr(config, "AUTO_SCAN_MAX_FILES", None)
+        # Shutdown flag
+        self._running = False
+        self._shutdown_requested = False
 
-    async def run(self) -> None:
-        """Run the scheduler loop indefinitely."""
-        logger.info("=" * 60)
-        logger.info("Auto-Scan Scheduler Starting")
-        logger.info("=" * 60)
-        logger.info("")
-        logger.info("This scheduler uses Redis cache to efficiently detect")
-        logger.info("changed files without watching the filesystem.")
-        logger.info("")
-        logger.info("Scheduler configuration:")
-        logger.info(f"  Scan interval: {self.scan_interval}s ({self.scan_interval/60:.1f} minutes)")
-        logger.info(f"  Initial scan: {self.initial_scan}")
-        logger.info(f"  Initial wait: {self.initial_wait}s")
-        logger.info(f"  Max files per scan: {self.max_files_per_scan or 'unlimited'}")
-        logger.info("=" * 60)
+        # Statistics
+        self.total_scans = 0
+        self.total_ingested = 0
+        self.total_failed = 0
+        self.last_scan_time: Optional[datetime] = None
+        self.last_scan_duration: float = 0.0
 
-        # Wait for initial delay
-        if self.initial_wait > 0:
-            logger.info(f"Waiting {self.initial_wait}s before first scan...")
-            await asyncio.sleep(self.initial_wait)
+        logger.info(
+            "AutoIngestionScheduler initialized: interval=%ss, max_files=%s",
+            scan_interval,
+            max_files if max_files else "unlimited",
+        )
 
-        # Perform initial scan if enabled
-        if self.initial_scan:
-            await self.run_ingestion_scan(full_scan=True)
-
-        # Main scheduler loop
-        logger.info("")
-        logger.info("=" * 60)
-        logger.info(f"Starting periodic scanning (every {self.scan_interval}s)")
-        logger.info("=" * 60)
-
-        while True:
-            try:
-                await asyncio.sleep(self.scan_interval)
-                await self.run_ingestion_scan(full_scan=False)
-            except Exception as e:
-                logger.error(f"Scheduler loop error: {e}", exc_info=True)
-                # Continue running despite errors
-
-    async def run_ingestion_scan(self, full_scan: bool = False) -> None:
+    def run_ingestion_scan(self) -> dict:
         """
-        Run an ingestion scan.
+        Run a single ingestion scan.
 
-        Args:
-            full_scan: If True, run a full scan. If False, run incremental scan.
+        The scanner uses Redis cache to detect only changed files,
+        so this is very efficient even with many files.
+
+        Returns:
+            Dictionary with scan results
         """
-        scan_type = "FULL" if full_scan else "INCREMENTAL"
-        logger.info("")
-        logger.info("-" * 60)
-        logger.info(f"Starting {scan_type} scan at {datetime.now().isoformat()}")
-        logger.info("-" * 60)
+        from argparse import Namespace
 
-        # Build options
-        parser = self._create_arg_parser()
-        args = parser.parse_args([])  # No CLI args for scheduler
-        options = build_ingestion_options_from_args(args, self.config)
+        logger.info("=" * 60)
+        logger.info(f"Running scheduled ingestion scan (#{self.total_scans + 1})")
+        logger.info("=" * 60)
+
+        start_time = time.time()
 
         try:
-            if full_scan:
-                result = self.orchestrator.run_with_report(options)
-            else:
-                result = self.orchestrator.run_incremental_scan(options)
+            # Build ingestion options
+            # The scanner will use Redis cache to skip unchanged files
+            args = Namespace(
+                paths=[],  # Will use default paths from config
+                exts=None,
+                exclude_dirs=None,
+                exclude_patterns=None,
+                follow_symlinks=False,
+                dry_run=False,
+                per_file=False,
+                streaming=True,  # Stream results as they're found
+                max_files=self.max_files,
+                scan_progress=100,  # Log every 100 directories
+                log_level=None
+            )
 
-            status = result.get("status", "unknown")
-            processed = result.get("pipeline", {}).get("processed_files", 0)
+            options = build_ingestion_options_from_args(args, settings)
+            result = self.orchestrator.run_with_report(options)
 
-            logger.info(f"Scan completed: status={status}, processed_files={processed}")
+            # Update statistics
+            self.total_scans += 1
+            self.total_ingested += result.get('ingested', 0)
+            self.total_failed += result.get('failed', 0)
+            self.last_scan_time = datetime.now()
+            self.last_scan_duration = time.time() - start_time
+
+            logger.info("=" * 60)
+            logger.info("Scan complete:")
+            logger.info(f"  Ingested: {result.get('ingested', 0)} files")
+            logger.info(f"  Failed: {result.get('failed', 0)} files")
+            logger.info(f"  Candidates: {result.get('candidates', 0)} files")
+            logger.info(f"  Duration: {self.last_scan_duration:.2f}s")
+            logger.info(f"  Total scans: {self.total_scans}")
+            logger.info(f"  Total ingested: {self.total_ingested}")
+            logger.info("=" * 60)
+
+            return result
 
         except Exception as e:
             logger.error(f"Scan failed: {e}", exc_info=True)
+            self.last_scan_duration = time.time() - start_time
+            return {
+                "status": "error",
+                "error": str(e),
+                "ingested": 0,
+                "failed": 0,
+                "candidates": 0
+            }
 
-    def _create_arg_parser(self) -> argparse.ArgumentParser:
+    def _setup_signal_handlers(self):
+        """Setup signal handlers for graceful shutdown."""
+        def signal_handler(signum, frame):
+            sig_name = signal.Signals(signum).name
+            logger.info(f"Received {sig_name} signal, initiating shutdown...")
+            self._shutdown_requested = True
+
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+
+    def run_forever(self):
         """
-        Create argument parser for ingestion options.
+        Run the scheduler indefinitely until shutdown is requested.
 
-        Returns:
-            argparse.ArgumentParser instance.
+        This will:
+        1. Optionally run initial full scan
+        2. Then periodically run scans at the configured interval
+        3. Handle graceful shutdown on SIGINT/SIGTERM
         """
-        parser = argparse.ArgumentParser(add_help=False)
-        parser.add_argument("--paths", nargs="*")
-        parser.add_argument("--exts", nargs="*")
-        parser.add_argument("--exclude-dirs", nargs="*")
-        parser.add_argument("--exclude-patterns", nargs="*")
-        parser.add_argument("--enabled-paths", nargs="*")
-        parser.add_argument("--follow-symlinks", action="store_true")
-        parser.add_argument("--dry-run", action="store_true")
-        parser.add_argument("--per-file", action="store_true")
-        parser.add_argument("--max-files", type=int)
-        parser.add_argument("--streaming", action="store_true")
-        parser.add_argument("--log-level")
-        parser.add_argument("--scan-progress", type=int)
-        return parser
+        self._setup_signal_handlers()
+        self._running = True
+
+        try:
+            # Initial scan
+            if self.initial_scan:
+                logger.info(f"Waiting {self.initial_wait}s for services to be ready...")
+
+                # Allow interruption during wait
+                for _ in range(self.initial_wait):
+                    if self._shutdown_requested:
+                        logger.info("Shutdown requested during initial wait")
+                        return
+                    time.sleep(1)
+
+                logger.info("Running initial full scan...")
+                self.run_ingestion_scan()
+            else:
+                logger.info("Skipping initial scan (AUTO_INGEST_INITIAL=false)")
+
+            # Periodic scanning loop
+            logger.info("")
+            logger.info("=" * 60)
+            logger.info(f"Starting periodic scanning (every {self.scan_interval}s)")
+            logger.info("=" * 60)
+
+            while not self._shutdown_requested:
+                # Wait for next scan interval (with periodic checks for shutdown)
+                logger.debug(f"Next scan in {self.scan_interval}s...")
+
+                for _ in range(self.scan_interval):
+                    if self._shutdown_requested:
+                        break
+                    time.sleep(1)
+
+                if self._shutdown_requested:
+                    break
+
+                # Run scan
+                self.run_ingestion_scan()
+
+        except KeyboardInterrupt:
+            logger.info("Keyboard interrupt received")
+        finally:
+            self._running = False
+            logger.info("Scheduler stopped")
+
+    def stop(self):
+        """Request shutdown of the scheduler."""
+        logger.info("Stopping scheduler...")
+        self._shutdown_requested = True
 
 
-async def main() -> None:
-    """Entry point for running the scheduler."""
-    scheduler = AutoScanScheduler(runtime_settings)
-    await scheduler.run()
+def create_scheduler_from_env() -> AutoIngestionScheduler:
+    """
+    Create scheduler instance from environment configuration.
+
+    Environment variables:
+        AUTO_SCAN_INTERVAL: Seconds between scans (default: 300 = 5 minutes)
+        AUTO_SCAN_INITIAL: Whether to run initial scan (default: true)
+        AUTO_SCAN_INITIAL_WAIT: Seconds to wait before initial scan (default: 30)
+        AUTO_SCAN_MAX_FILES: Max files to ingest per scan (default: 0 = no limit)
+
+    Returns:
+        Configured AutoIngestionScheduler instance
+    """
+    # Sync settings
+    sync_settings_json()
+
+    logger.info(f"Scheduler configuration:")
+    logger.info(f"  Scan interval: {settings.AUTO_SCAN_INTERVAL}s ({settings.AUTO_SCAN_INTERVAL // 60} minutes)")
+    logger.info(f"  Initial scan: {settings.AUTO_SCAN_INITIAL}")
+    logger.info(f"  Initial wait: {settings.AUTO_SCAN_INITIAL_WAIT}s")
+    logger.info(f"  Max files per scan: {settings.AUTO_SCAN_MAX_FILES if settings.AUTO_SCAN_MAX_FILES else 'unlimited'}")
+
+    return AutoIngestionScheduler(
+        scan_interval=settings.AUTO_SCAN_INTERVAL,
+        initial_scan=settings.AUTO_SCAN_INITIAL,
+        initial_wait=settings.AUTO_SCAN_INITIAL_WAIT,
+        max_files=settings.AUTO_SCAN_MAX_FILES,
+    )
+
+
+def main():
+    """Main entry point for auto-scan scheduler."""
+    # Configure logging
+    log_level = os.environ.get("AUTO_SCAN_LOG_LEVEL", "INFO").upper()
+    configure_logging(resolve_level(log_level))
+
+    logger.info("=" * 60)
+    logger.info("Auto-Scan Scheduler Starting")
+    logger.info("=" * 60)
+    logger.info("")
+    logger.info("This scheduler uses Redis cache to efficiently detect")
+    logger.info("changed files without watching the filesystem.")
+    logger.info("")
+
+    try:
+        # Create and run scheduler
+        scheduler = create_scheduler_from_env()
+        scheduler.run_forever()
+
+    except KeyboardInterrupt:
+        logger.info("Shutdown requested")
+    except Exception as e:
+        logger.error(f"Fatal error: {e}", exc_info=True)
+        raise
+
+    logger.info("")
+    logger.info("=" * 60)
+    logger.info("Auto-Scan Scheduler Stopped")
+    logger.info("=" * 60)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

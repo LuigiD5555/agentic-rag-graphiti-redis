@@ -10,7 +10,7 @@ This package contains reusable utility functions organized by functionality:
 - progress: Progress tracking and reporting utilities
 
 Note: Ingestion-specific utilities (text_reading, language_routing, splitting)
-have been moved to src.ingestion.pipeline.utils for better organization.
+have been moved to src.workflows.ingestion.pipeline.utils for better organization.
 """
 
 from .hashing import (

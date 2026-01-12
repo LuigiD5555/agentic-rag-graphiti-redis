@@ -3,7 +3,7 @@ import time
 import hashlib
 from typing import List, Dict, Any, Optional
 import httpx
-from src.rag.audit import get_logger
+from src.workflows.query.audit import get_logger
 
 log = get_logger(__name__)
 

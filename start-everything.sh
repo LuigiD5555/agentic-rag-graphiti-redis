@@ -105,7 +105,7 @@ print_success "All dependencies are installed"
 print_header "STEP 2: Building Tool Images"
 
 # Check if images already exist
-if podman images | grep -q "rag-tool-office" && \
+if podman images | grep -q "rag-tool-document-processor" && \
    podman images | grep -q "rag-tool-extractor"; then
     print_success "Tool images are already built"
     read -p "Rebuild images? (y/N): " rebuild
@@ -230,13 +230,29 @@ if podman ps | grep -q "weaviate\|neo4j\|redis\|app\|open-webui\|monitoring"; th
 
         print_step "Building custom images..."
 
-        if ! podman-compose build app monitoring open-webui; then
-            print_error "Failed to build app/monitoring/open-webui images"
+        if ! podman-compose build app monitoring; then
+            print_error "Failed to build app/monitoring images"
             exit 1
         fi
 
+        # Build open-webui only if profile is enabled
+        print_step "Checking if open-webui should be built..."
+        if podman-compose config --services | grep -q "open-webui"; then
+            if ! podman-compose --profile webui build open-webui; then
+                print_warning "Failed to build open-webui image (continuing without it)"
+            else
+                print_success "open-webui image built"
+            fi
+        else
+            print_info "open-webui service not available (profile not enabled)"
+        fi
+
 print_step "Starting all services..."
-podman-compose up -d
+if podman-compose config --services | grep -q "open-webui"; then
+    podman-compose --profile webui up -d
+else
+    podman-compose up -d
+fi
 
 print_step "Waiting for services to initialize..."
 sleep 10
@@ -246,13 +262,29 @@ sleep 10
 else
     print_step "Building custom images..."
 
-    if ! podman-compose build app monitoring open-webui; then
-        print_error "Failed to build app/monitoring/open-webui images"
+    if ! podman-compose build app monitoring; then
+        print_error "Failed to build app/monitoring images"
         exit 1
     fi
 
+    # Build open-webui only if profile is enabled
+    print_step "Checking if open-webui should be built..."
+    if podman-compose config --services | grep -q "open-webui"; then
+        if ! podman-compose --profile webui build open-webui; then
+            print_warning "Failed to build open-webui image (continuing without it)"
+        else
+            print_success "open-webui image built"
+        fi
+    else
+        print_info "open-webui service not available (profile not enabled)"
+    fi
+
 print_step "Starting all services (Weaviate, Neo4j, Redis, App, Open WebUI, Monitoring)..."
-podman-compose up -d
+if podman-compose config --services | grep -q "open-webui"; then
+    podman-compose --profile webui up -d
+else
+    podman-compose up -d
+fi
 
 print_step "Waiting for services to initialize..."
 sleep 10
@@ -443,7 +475,7 @@ echo "   podman-compose logs -f monitoring            # Monitoring logs"
 echo "   systemctl --user list-sockets | grep tool-   # Tool sockets"
 echo ""
 echo -e "${CYAN}View tool logs:${NC}"
-echo "   journalctl --user -u tool-office.service -f"
+echo "   journalctl --user -u tool-document-processor.service -f"
 echo "   journalctl --user -u tool-extractor.service -f"
 echo ""
 echo -e "${CYAN}Stop everything:${NC}"

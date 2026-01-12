@@ -1,4 +1,4 @@
-from src.rag.embeddings_factory import get_embedding_service
+from src.workflows.query.embeddings_factory import get_embedding_service
 
 
 class ConfigStub:

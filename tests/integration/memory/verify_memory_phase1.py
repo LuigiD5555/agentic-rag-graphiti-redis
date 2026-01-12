@@ -11,7 +11,7 @@ print("=" * 60)
 print("Testing identifiers.py...")
 print("=" * 60)
 
-from src.memory.core.identifiers import (
+from src.workflows.memory.core.identifiers import (
     generate_user_id,
     generate_thread_id,
     validate_user_id,
@@ -62,7 +62,7 @@ print("\n" + "=" * 60)
 print("Testing state.py...")
 print("=" * 60)
 
-from src.memory.core.state import (
+from src.workflows.memory.core.state import (
     create_initial_state,
     update_state_metadata,
     add_tool_execution,

@@ -19,9 +19,9 @@ sys.path.insert(0, str(project_root))
 
 import weaviate
 import src.settings as settings
-from src.rag.importance import DocumentImportanceClassifier, ImportanceLevel
-from src.storage.vector.dual_store import DualCollectionVectorStore
-from src.rag.audit import get_logger
+from src.workflows.query.importance import DocumentImportanceClassifier, ImportanceLevel
+from src.backends.storage.vector.dual_store import DualCollectionVectorStore
+from src.workflows.query.audit import get_logger
 
 log = get_logger(__name__)
 

@@ -3,9 +3,9 @@ import argparse
 import sys
 
 from src.api.runtime import RuntimeFactory
-from src.rag.engine import AppConfig
-from src.rag.pipeline.rag_orchestrator import RAGOrchestrator
-from src.rag.audit import get_logger
+from src.workflows.query.engine import AppConfig
+from src.workflows.query.pipeline.rag_orchestrator import RAGOrchestrator
+from src.workflows.query.audit import get_logger
 
 log = get_logger(__name__)
 

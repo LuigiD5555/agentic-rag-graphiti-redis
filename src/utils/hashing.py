@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 try:
-    from src.rag.audit import get_logger
+    from src.workflows.query.audit import get_logger
 except Exception:  # pragma: no cover - fallback for minimal containers
     def get_logger(name: str | None = None) -> logging.Logger:
         return logging.getLogger(name or "rag")

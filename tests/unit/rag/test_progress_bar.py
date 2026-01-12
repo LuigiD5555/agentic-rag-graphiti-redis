@@ -2,8 +2,8 @@ import io
 import sys
 import time
 
-from src.rag.audit import ProgressBar
-from src.rag.audit import EmbeddingProgress
+from src.workflows.query.audit import ProgressBar
+from src.workflows.query.audit import EmbeddingProgress
 
 
 def _last_line(buffer: io.StringIO) -> str:

@@ -1,5 +1,5 @@
-from src.rag.engine import RAGEngine, _build_user_filter
-from src.rag.interfaces.vector_interface import ScoredItem
+from src.workflows.query.engine import RAGEngine, _build_user_filter
+from src.workflows.query.interfaces.vector_interface import ScoredItem
 
 
 class DummyEmbedding:

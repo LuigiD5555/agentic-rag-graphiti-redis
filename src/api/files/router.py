@@ -17,11 +17,11 @@ from src.api.files.models import (
     PromotionResponse,
 )
 from src.api.files.tracking import FileTracker, create_file_tracker
-from src.rag.temporal.tenant_manager import (
+from src.workflows.query.temporal.tenant_manager import (
     TemporalTenantManager,
     create_temporal_tenant_manager,
 )
-from src.ingestion.orchestrator import IngestionOrchestrator
+from src.workflows.ingestion.orchestrator import IngestionOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +136,7 @@ async def upload_file(
             original_tenant = ingestion_orch._config.WEAVIATE_DEFAULT_TENANT
             ingestion_orch._config.WEAVIATE_DEFAULT_TENANT = tenant_name
 
-            from src.ingestion.options import IngestionOptions
+            from src.workflows.ingestion.options import IngestionOptions
 
             ingestion_options = IngestionOptions(
                 root_paths=[temp_file_path],
@@ -299,7 +299,7 @@ async def promote_file(
         if _file_promoter is None:
             raise HTTPException(status_code=500, detail="File promoter not initialized")
 
-        from src.rag.temporal.promotion import PromotionMode
+        from src.workflows.query.temporal.promotion import PromotionMode
 
         mode = PromotionMode.PARETO if request.mode == "pareto" else PromotionMode.FULL
 
@@ -360,14 +360,14 @@ def initialize_files_router(
         ttl_seconds=_config.TEMPORAL_TENANT_TTL,
     )
 
-    from src.rag.temporal.pareto import create_pareto_analyzer
+    from src.workflows.query.temporal.pareto import create_pareto_analyzer
     _pareto_analyzer = create_pareto_analyzer(
         redis_client=redis_client,
         top_percent=_config.TEMPORAL_PARETO_TOP_PERCENT,
         min_queries=_config.TEMPORAL_PARETO_MIN_QUERIES,
     )
 
-    from src.rag.temporal.promotion import create_file_promoter
+    from src.workflows.query.temporal.promotion import create_file_promoter
     _file_promoter = create_file_promoter(
         weaviate_client=weaviate_client,
         redis_client=redis_client,

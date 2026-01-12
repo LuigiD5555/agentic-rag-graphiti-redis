@@ -33,7 +33,7 @@ def test_chatmemory_initialization():
     # Step 2: Check if ChatMemory collection exists
     logger.info("Step 2: Checking if ChatMemory collection exists...")
     try:
-        from src.memory.storage.chat_memory_schema import CHAT_MEMORY_COLLECTION
+        from src.workflows.memory.storage.chat_memory_schema import CHAT_MEMORY_COLLECTION
         exists = client.collections.exists(CHAT_MEMORY_COLLECTION)
         logger.info(f"  ChatMemory exists: {exists}")
     except Exception as e:
@@ -44,7 +44,7 @@ def test_chatmemory_initialization():
     # Step 3: Create ChatMemory collection
     logger.info("Step 3: Creating ChatMemory collection...")
     try:
-        from src.memory.storage.chat_memory_schema import create_chat_memory_collection
+        from src.workflows.memory.storage.chat_memory_schema import create_chat_memory_collection
         created = create_chat_memory_collection(client, force_recreate=False)
         if created:
             logger.info("✓ ChatMemory collection created/verified successfully")
@@ -60,7 +60,7 @@ def test_chatmemory_initialization():
     # Step 4: Retrieve collection reference
     logger.info("Step 4: Retrieving ChatMemory collection reference...")
     try:
-        from src.memory.storage.chat_memory_schema import get_chat_memory_collection
+        from src.workflows.memory.storage.chat_memory_schema import get_chat_memory_collection
         collection = get_chat_memory_collection(client, auto_create=True)
         if collection:
             logger.info(f"✓ Collection retrieved: {collection.name}")
@@ -76,7 +76,7 @@ def test_chatmemory_initialization():
     # Step 5: Test ChatMemoryPersistence initialization
     logger.info("Step 5: Testing ChatMemoryPersistence initialization...")
     try:
-        from src.memory.storage.chat_memory_persistence import ChatMemoryPersistence
+        from src.workflows.memory.storage.chat_memory_persistence import ChatMemoryPersistence
         persistence = ChatMemoryPersistence(client, embedding_service=None)
         if persistence.collection:
             logger.info("✓ ChatMemoryPersistence initialized successfully")

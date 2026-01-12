@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify Weaviate database has data and can be queried."""
 import weaviate
-from src.rag.engine import AppConfig
+from src.workflows.query.engine import AppConfig
 
 def main():
     config = AppConfig()
@@ -67,7 +67,7 @@ def main():
             if total_count == 0:
                 print("\n⚠ WARNING: Collection is empty! No documents to query.")
                 print("\nYou need to run ingestion first:")
-                print("  python -m src.ingestion.cli --streaming")
+                print("  python -m src.workflows.ingestion.cli --streaming")
                 return 1
             else:
                 print(f"\n✓ Collection has {total_count:,} documents")

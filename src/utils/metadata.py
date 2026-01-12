@@ -6,8 +6,8 @@ checking vector store contents for deduplication.
 
 from typing import Dict, List
 
-from src.rag.audit import get_logger, resolve_level
-from src.rag.interfaces.vector_interface import (
+from src.workflows.query.audit import get_logger, resolve_level
+from src.workflows.query.interfaces.vector_interface import (
     SupportsExists,
     SupportsBatchExists,
     VectorInterface,

@@ -14,7 +14,7 @@ class ToolClient:
 
     def __init__(
         self,
-        office_url: str = "http://127.0.0.1:9102",
+        office_url: str = "http://127.0.0.1:9106",
         archive_url: str = "http://127.0.0.1:9101",
         ocr_url: str = "http://127.0.0.1:9103",
         timeout: int = 120,
@@ -22,7 +22,7 @@ class ToolClient:
         """Initialize tool client.
 
         Args:
-            office_url: Office conversion tool URL
+            office_url: Document processor (office conversion) tool URL
             archive_url: Archive extraction tool URL
             ocr_url: OCR tool URL
             timeout: Default request timeout (seconds)

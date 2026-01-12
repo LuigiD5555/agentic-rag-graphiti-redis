@@ -14,22 +14,22 @@ Each tool is:
 
 | Tool | Port | Purpose | Technologies |
 |------|------|---------|--------------|
-| **tool-office** | 9102 | Office document conversion | LibreOffice, pdftotext |
+| **tool-document-processor** | 9106 | OCR + Office conversion | LibreOffice, Tesseract, poppler |
 | **tool-extractor** | 9101 | File extraction | unzip, 7z, tar |
 | **tool-ocr** | 9103 | Optical Character Recognition | Tesseract, poppler |
 
 ## How Socket Activation Works
 
 ```
-User/RAG makes request to http://127.0.0.1:9102
+User/RAG makes request to http://127.0.0.1:9106
          ↓
 systemd detects connection on socket
          ↓
-systemd starts tool-office.service
+systemd starts tool-document-processor.service
          ↓
-service starts container on port 19102
+service starts container on port 19104
          ↓
-systemd-socket-proxyd bridges 9102 → 19102
+systemd-socket-proxyd bridges 9106 → 19104
          ↓
 request reaches container
 ```
@@ -50,7 +50,7 @@ cd tools
 ```
 
 This builds the tool images:
-- `rag-tool-office:latest`
+- `rag-tool-document-processor:latest`
 - `rag-tool-extractor:latest`
 - `rag-tool-ocr:latest`
 
@@ -68,7 +68,7 @@ This:
 ### 3. Enable Sockets
 
 ```bash
-systemctl --user enable --now tool-office.socket
+systemctl --user enable --now tool-document-processor.socket
 systemctl --user enable --now tool-extractor.socket
 systemctl --user enable --now tool-ocr.socket
 ```
@@ -76,8 +76,8 @@ systemctl --user enable --now tool-ocr.socket
 ### 4. Test
 
 ```bash
-# Test office tool
-curl http://127.0.0.1:9102/healthz
+# Test document processor tool
+curl http://127.0.0.1:9106/healthz
 
 # Test archive tool
 curl http://127.0.0.1:9101/healthz
@@ -97,16 +97,16 @@ Subsequent requests will be instant (container is already running).
 
 ## Tool Details
 
-### tool-office
+### tool-document-processor
 
-**Convert Office documents to PDF/text/markdown**
+**Convert Office documents to PDF/text/markdown (plus OCR endpoints)**
 
 Endpoints:
 - `POST /convert` - Convert DOCX/XLSX/PPTX to PDF, TXT, or MD
 
 Example:
 ```bash
-curl -X POST http://127.0.0.1:9102/convert \
+curl -X POST http://127.0.0.1:9106/convert \
   -H "Content-Type: application/json" \
   -d '{
     "input_path": "/mnt/documents/report.docx",
@@ -160,17 +160,17 @@ curl -X POST http://127.0.0.1:9103/ocr \
 systemctl --user list-sockets
 
 # Check specific socket
-systemctl --user status tool-office.socket
+systemctl --user status tool-document-processor.socket
 ```
 
 ### Check Service Status
 
 ```bash
 # Check if service is running
-systemctl --user status tool-office.service
+systemctl --user status tool-document-processor.service
 
 # View logs
-journalctl --user -u tool-office.service -f
+journalctl --user -u tool-document-processor.service -f
 ```
 
 ### Stop Services
@@ -178,7 +178,7 @@ journalctl --user -u tool-office.service -f
 Services will stop automatically when inactive. To stop manually:
 
 ```bash
-systemctl --user stop tool-office.service
+systemctl --user stop tool-document-processor.service
 ```
 
 The socket remains active and will restart the service on next request.
@@ -186,7 +186,7 @@ The socket remains active and will restart the service on next request.
 ### Disable Socket Activation
 
 ```bash
-systemctl --user disable --now tool-office.socket
+systemctl --user disable --now tool-document-processor.socket
 ```
 
 This completely disables the tool.
@@ -196,7 +196,7 @@ This completely disables the tool.
 In your RAG API configuration (`.env` or settings):
 
 ```bash
-TOOL_OFFICE_URL=http://127.0.0.1:9102
+TOOL_OFFICE_URL=http://127.0.0.1:9106
 TOOL_EXTRACTOR_URL=http://127.0.0.1:9101
 TOOL_OCR_URL=http://127.0.0.1:9103
 ```
@@ -208,7 +208,7 @@ import requests
 
 # Convert DOCX to PDF
 response = requests.post(
-    "http://127.0.0.1:9102/convert",
+    "http://127.0.0.1:9106/convert",
     json={
         "input_path": "/mnt/documents/report.docx",
         "output_format": "pdf"
@@ -238,25 +238,25 @@ Each tool runs with:
 
 Check logs:
 ```bash
-journalctl --user -u tool-office.service -n 50
+journalctl --user -u tool-document-processor.service -n 50
 ```
 
 Try starting manually:
 ```bash
-podman run --rm -p 127.0.0.1:19102:8000 rag-tool-office:latest
-curl http://127.0.0.1:19102/healthz
+podman run --rm -p 127.0.0.1:19104:8000 rag-tool-document-processor:latest
+curl http://127.0.0.1:19104/healthz
 ```
 
 ### Socket not responding
 
 Check socket status:
 ```bash
-systemctl --user status tool-office.socket
+systemctl --user status tool-document-processor.socket
 ```
 
 Restart socket:
 ```bash
-systemctl --user restart tool-office.socket
+systemctl --user restart tool-document-processor.socket
 ```
 
 ### Permission denied errors
@@ -272,7 +272,7 @@ ls -la ~/.cache/rag-tools/
 
 ```bash
 cd tools/office
-podman build -t rag-tool-office:latest .
+podman build -t rag-tool-document-processor:latest .
 ```
 
 ### Test Locally (without systemd)
@@ -282,7 +282,7 @@ cd tools/office
 podman run --rm -p 8000:8000 \
   -v ~/.cache/rag-tools/office:/work \
   -v /mnt:/mnt:ro \
-  rag-tool-office:latest
+  rag-tool-document-processor:latest
 ```
 
 Then test:
@@ -336,7 +336,7 @@ RuntimeMaxSec=300
 | Port | Internal Port | Tool | Protocol |
 |------|---------------|------|----------|
 | 9101 | 19101 | archive | HTTP |
-| 9102 | 19102 | office | HTTP |
+| 9106 | 19104 | document-processor | HTTP |
 | 9103 | 19103 | ocr | HTTP |
 
 ## License

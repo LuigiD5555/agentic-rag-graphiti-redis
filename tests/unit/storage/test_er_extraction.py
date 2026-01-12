@@ -1,4 +1,4 @@
-from src.storage.graph.ner.extractor import NERExtractor
+from src.backends.storage.graph.ner.extractor import NERExtractor
 
 
 class DummyLLM:

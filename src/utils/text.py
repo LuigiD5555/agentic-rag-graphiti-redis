@@ -21,7 +21,7 @@ import unicodedata
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from src.rag.audit import get_logger
+from src.workflows.query.audit import get_logger
 
 logger = get_logger(__name__)
 

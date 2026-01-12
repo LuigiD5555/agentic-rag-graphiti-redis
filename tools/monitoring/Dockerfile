@@ -29,9 +29,9 @@ COPY tools/monitoring/config/ ./config/
 COPY src/utils/ ./src/utils/
 COPY src/settings.py ./src/settings.py
 COPY src/__init__.py ./src/__init__.py
-COPY src/rag/__init__.py ./src/rag/__init__.py
-COPY src/rag/audit/ ./src/rag/audit/
-COPY src/rag/interfaces/ ./src/rag/interfaces/
+COPY src/workflows/query/__init__.py ./src/workflows/query/__init__.py
+COPY src/workflows/query/audit/ ./src/workflows/query/audit/
+COPY src/workflows/query/interfaces/ ./src/workflows/query/interfaces/
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/data /app/reports

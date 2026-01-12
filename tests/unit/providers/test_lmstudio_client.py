@@ -1,7 +1,7 @@
 import pytest
 import requests
 
-from src.providers.lmstudio.client import LLMService
+from src.backends.llm.lmstudio.client import LLMService
 
 
 class ConfigStub:

@@ -1,4 +1,4 @@
-from src.rag.conf import Config
+from src.workflows.query.conf import Config
 
 
 def test_config_defaults():

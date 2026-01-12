@@ -1,6 +1,6 @@
-from src.rag.cli.agent import Agent
-from src.rag.engine import RAGEngine
-from src.rag.interfaces.vector_interface import ScoredItem
+from src.workflows.query.cli.agent import Agent
+from src.workflows.query.engine import RAGEngine
+from src.workflows.query.interfaces.vector_interface import ScoredItem
 
 
 class DummyEmbedding:

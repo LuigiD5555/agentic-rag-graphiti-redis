@@ -20,10 +20,10 @@ Usage examples:
     python -m src.main --ingest /data/docs --dry-run --log-level DEBUG
 """
 
-from src.ingestion.discovery import FileDiscoveryService
-from src.ingestion import IngestionCLI
-from src.ingestion.orchestrator import IngestionOrchestrator
-from src.ingestion.cli import main as _ingestion_main
+from src.workflows.ingestion.discovery import FileDiscoveryService
+from src.workflows.ingestion import IngestionCLI
+from src.workflows.ingestion.orchestrator import IngestionOrchestrator
+from src.workflows.ingestion.cli import main as _ingestion_main
 
 
 __all__ = ["FileDiscoveryService", "IngestionCLI", "IngestionOrchestrator", "main"]

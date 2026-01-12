@@ -1,7 +1,7 @@
 import requests
 import pytest
 
-from src.providers.lmstudio.model_manager import ModelManager
+from src.backends.llm.lmstudio.model_manager import ModelManager
 
 
 class ResponseStub:

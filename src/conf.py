@@ -15,7 +15,7 @@ Use ``from src.conf import settings`` in runtime code.
 
 from typing import Any, Dict
 
-from src.rag.conf import Config, get_settings, settings, sync_settings_json
+from src.workflows.query.conf import Config, get_settings, settings, sync_settings_json
 
 
 def as_dict() -> Dict[str, Any]:

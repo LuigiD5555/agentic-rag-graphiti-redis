@@ -285,7 +285,7 @@ docker run -d \
 
 1. **Ingest documents**: Before querying, ingest your documents
    ```bash
-   python -m src.ingestion.cli /path/to/docs
+   python -m src.workflows.ingestion.cli /path/to/docs
    ```
 
 2. **Explore the interactive docs**: http://localhost:8000/docs

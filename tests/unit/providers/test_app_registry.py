@@ -1,7 +1,7 @@
-from src.providers.registry import list_providers, reset_provider_registry
-from src.providers.app_registry import ensure_apps_loaded, reset_app_registry
-from src.providers.builtins import _reset_for_tests as reset_builtin_providers
-from src.rag.conf import Config
+from src.backends.llm.registry import list_providers, reset_provider_registry
+from src.backends.llm.app_registry import ensure_apps_loaded, reset_app_registry
+from src.backends.llm.builtins import _reset_for_tests as reset_builtin_providers
+from src.workflows.query.conf import Config
 
 
 def test_installed_apps_populate_provider_registry():
@@ -12,9 +12,9 @@ def test_installed_apps_populate_provider_registry():
     cfg = Config().copy(
         update={
             "INSTALLED_APPS": [
-                "src.providers.lmstudio.apps.LMStudioProviderAppConfig",
-                "src.providers.openai.apps.OpenAIProviderAppConfig",
-                "src.providers.litellm_gateway.apps.LiteLLMGatewayAppConfig",
+                "src.backends.llm.lmstudio.apps.LMStudioProviderAppConfig",
+                "src.backends.llm.openai.apps.OpenAIProviderAppConfig",
+                "src.backends.llm.litellm_gateway.apps.LiteLLMGatewayAppConfig",
             ]
         }
     )
