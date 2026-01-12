@@ -4,9 +4,9 @@ from typing import Dict, Any, Iterator, List, Optional
 
 import pytest
 
-from src.ingestion.pipeline import IngestionPipeline, SplitterStrategy
-from src.rag.cli.options import PipelineOptions
-from src.rag.interfaces.vector_interface import VectorInterface, SupportsExists
+from src.workflows.ingestion.pipeline import IngestionPipeline, SplitterStrategy
+from src.workflows.query.cli.options import PipelineOptions
+from src.workflows.query.interfaces.vector_interface import VectorInterface, SupportsExists
 
 
 class DummyEmbedding:
@@ -74,7 +74,7 @@ class FailingLoader:
         self.path = path
 
     def load(self):
-        from src.ingestion.loaders.errors import LoaderError
+        from src.workflows.ingestion.loaders.errors import LoaderError
 
         raise LoaderError("boom")
 
@@ -179,7 +179,7 @@ def test_loader_failure_is_recorded(tmp_path):
     )
 
     # call processor directly to force loader error path
-    from src.ingestion.pipeline.text_processor import process_text_document
+    from src.workflows.ingestion.pipeline.text_processor import process_text_document
 
     process_text_document(pipeline, FailingLoader(str(doc)))
 

@@ -14,11 +14,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.ingestion.helpers import build_ingestion_options_from_args
-from src.ingestion.loaders.pdf_loader import PDFLoader
-from src.ingestion.loaders.csv_loader import CSVLoader
+from src.workflows.ingestion.helpers import build_ingestion_options_from_args
+from src.workflows.ingestion.loaders.pdf_loader import PDFLoader
+from src.workflows.ingestion.loaders.csv_loader import CSVLoader
 from src.utils.file_operations import sort_paths_by_size_desc
-from src.settings import _DEFAULT_EXCLUDED_FILES
+from settings import _DEFAULT_EXCLUDED_FILES
 import argparse
 
 

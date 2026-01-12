@@ -16,7 +16,7 @@ podman cp tests/multilingual/test_data.txt rag-graphiti-agentic_app_1:/tmp/test_
 echo ""
 echo "2. Testing text reading with multilingual encoding support..."
 podman exec rag-graphiti-agentic_app_1 python -c "
-from src.ingestion.pipeline.utils.text_reading import read_text_with_fallbacks
+from src.workflows.ingestion.pipeline.utils.text_reading import read_text_with_fallbacks
 
 result = read_text_with_fallbacks('/tmp/test_multilingual.txt')
 print(f'Encoding detected: {result.encoding}')
@@ -35,7 +35,7 @@ for lang in languages:
 echo ""
 echo "3. Testing PlainTextLoader..."
 podman exec rag-graphiti-agentic_app_1 python -c "
-from src.ingestion.loaders.text_loader import PlainTextLoader
+from src.workflows.ingestion.loaders.text_loader import PlainTextLoader
 
 loader = PlainTextLoader('/tmp/test_multilingual.txt')
 docs = loader.load()

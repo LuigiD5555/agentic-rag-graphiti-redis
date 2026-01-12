@@ -14,9 +14,9 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.ingestion.discovery import FileDiscoveryService, PathTree
-from src.ingestion.options import DiscoveryOptions
-from src.rag.audit import get_logger
+from src.workflows.ingestion.discovery import FileDiscoveryService, PathTree
+from src.workflows.ingestion.options import DiscoveryOptions
+from src.workflows.query.audit import get_logger
 
 log = get_logger(__name__)
 

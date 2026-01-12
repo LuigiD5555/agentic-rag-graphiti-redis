@@ -11,7 +11,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.ingestion.discovery.path_tree import PathTree, PathNode
+from src.workflows.ingestion.discovery.path_tree import PathTree, PathNode
 
 
 def test_path_tree_basic():

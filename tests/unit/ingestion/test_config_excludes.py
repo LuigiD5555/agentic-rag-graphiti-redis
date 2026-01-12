@@ -1,6 +1,6 @@
 import pytest
 
-from src.rag.conf import Config
+from src.workflows.query.conf import Config
 
 
 @pytest.fixture(autouse=True)

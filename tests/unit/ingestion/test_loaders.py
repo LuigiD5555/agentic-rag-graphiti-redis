@@ -1,9 +1,9 @@
 import pytest
 
-from src.ingestion.loaders.errors import LoaderFileNotFoundError, LoaderInvalidFormatError
-from src.ingestion.loaders.ppt_loader import PowerPointLoader
-from src.ingestion.loaders.xlsx_loader import ExcelLoader
-from src.ingestion.loaders.helpers import should_skip_path
+from src.workflows.ingestion.loaders.errors import LoaderFileNotFoundError, LoaderInvalidFormatError
+from src.workflows.ingestion.loaders.ppt_loader import PowerPointLoader
+from src.workflows.ingestion.loaders.xlsx_loader import ExcelLoader
+from src.workflows.ingestion.loaders.helpers import should_skip_path
 
 
 def test_should_skip_office_lock_file(tmp_path):
@@ -24,7 +24,7 @@ def test_powerpoint_loader_wraps_invalid_format(monkeypatch, tmp_path):
     ppt_path = tmp_path / "broken.pptx"
     ppt_path.write_text("bad data", encoding="utf-8")
 
-    from src.ingestion.loaders import ppt_loader
+    from src.workflows.ingestion.loaders import ppt_loader
 
     class DummyLoader:
         def __init__(self, path: str):
@@ -46,7 +46,7 @@ def test_excel_loader_wraps_unstructured_errors(monkeypatch, tmp_path):
     excel_path = tmp_path / "not-really.xlsx"
     excel_path.write_text("123", encoding="utf-8")
 
-    from src.ingestion.loaders import xlsx_loader
+    from src.workflows.ingestion.loaders import xlsx_loader
 
     class DummyLoader:
         def __init__(self, path: str):
