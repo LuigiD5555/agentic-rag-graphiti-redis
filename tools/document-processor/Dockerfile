@@ -37,7 +37,7 @@ RUN useradd -m -u 1000 tooluser && \
 USER tooluser
 
 ENV PORT=8000
-ENV WORK_DIR=/work
+ENV WORK_DIR=/tmp/rag-work
 
 EXPOSE 8000
 

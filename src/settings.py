@@ -116,11 +116,11 @@ PROVIDERS = {
 
 # App registry (providers are registered by these AppConfig entries).
 INSTALLED_APPS = [
-    "src.providers.lmstudio.apps.LMStudioProviderAppConfig",
-    "src.providers.openai.apps.OpenAIProviderAppConfig",
-    "src.providers.huggingface.apps.HuggingFaceProviderAppConfig",
-    "src.providers.anythingllm.apps.AnythingLLMProviderAppConfig",
-    "src.providers.litellm_gateway.apps.LiteLLMGatewayAppConfig",
+    "src.backends.llm.lmstudio.apps.LMStudioProviderAppConfig",
+    "src.backends.llm.openai.apps.OpenAIProviderAppConfig",
+    "src.backends.llm.huggingface.apps.HuggingFaceProviderAppConfig",
+    "src.backends.llm.anythingllm.apps.AnythingLLMProviderAppConfig",
+    "src.backends.llm.litellm_gateway.apps.LiteLLMGatewayAppConfig",
 ]
 AUTOLOAD_APP_ENTRYPOINTS = False
 APP_ENTRYPOINT_GROUP = "rag_agentic_graphiti.apps"
@@ -330,7 +330,7 @@ SEARXNG_LANGUAGE = "es"
 # ===== Processing Tools =====
 ENABLE_OFFICE_CONVERSION = True
 ENABLE_EXTRACTOR_EXTRACTION = True
-ENABLE_OCR = False
+ENABLE_OCR = True
 ENABLE_GPU_ACCELERATION = False
 TOOL_OFFICE_URL = "http://host.containers.internal:9106"
 TOOL_FILEEXTRACTOR_URL = "http://host.containers.internal:9101"
