@@ -55,7 +55,8 @@ venv.bak/
 # -----------------------------
 # Logs & temp files
 # -----------------------------
-/logs/
+**/logs/
+tools/debug/scripts/reorganize.py
 *.log
 *.tmp
 *.temp
