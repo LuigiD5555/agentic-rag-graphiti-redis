@@ -1,4 +1,9 @@
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Base path for resolving project-relative files (.env, data/settings.json, etc.).
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -210,6 +215,16 @@ DOCS_FILE_EXTS = (
     ".cpp",
 )
 
+INGESTION_STRATEGY = os.getenv("INGESTION_STRATEGY", "auto")
+PHASED_INGESTION_ENABLED = os.getenv("PHASED_INGESTION_ENABLED", "true").strip().lower() == "true"
+INGESTION_PHASE_TTL_SECONDS = int(os.getenv("INGESTION_PHASE_TTL_SECONDS", "86400"))
+INGESTION_PREPROCESS_WORKERS = int(os.getenv("INGESTION_PREPROCESS_WORKERS", "3"))
+INGESTION_LOW_MEMORY_BATCH_SIZE = int(os.getenv("INGESTION_LOW_MEMORY_BATCH_SIZE", "1"))
+MAX_RAM_USAGE_PERCENT = int(os.getenv("MAX_RAM_USAGE_PERCENT", "80"))
+INGESTION_RESUMABLE_ENABLED = os.getenv("INGESTION_RESUMABLE_ENABLED", "true").strip().lower() == "true"
+INGESTION_CLEANUP_PREPROCESSED = os.getenv("INGESTION_CLEANUP_PREPROCESSED", "true").strip().lower() == "true"
+INGESTION_PREPROCESS_RETRY_FAILED = os.getenv("INGESTION_PREPROCESS_RETRY_FAILED", "true").strip().lower() == "true"
+
 # Default cache TTL for application-level caching (seconds).
 CACHE_TTL = 3600
 
@@ -368,6 +383,12 @@ WEAVIATE_MULTI_TENANCY = True
 WEAVIATE_DEFAULT_TENANT = "tenant-default"
 WEAVIATE_SKIP_INIT_CHECKS = False
 
+# Weaviate HNSW Index Configuration (Memory Optimization)
+# Lower values reduce memory usage at the cost of slight accuracy/speed trade-offs
+WEAVIATE_HNSW_EF_CONSTRUCTION = int(os.getenv("WEAVIATE_HNSW_EF_CONSTRUCTION", "128"))
+WEAVIATE_HNSW_MAX_CONNECTIONS = int(os.getenv("WEAVIATE_HNSW_MAX_CONNECTIONS", "32"))
+WEAVIATE_HNSW_DISTANCE_METRIC = os.getenv("WEAVIATE_HNSW_DISTANCE_METRIC", "cosine")
+
 # If provided (via user settings JSON), this list REPLACES _DEFAULT_EXCLUDED_FILES.
 # GUI can manage this list to fully control fast-prune directory basenames.
 DOCS_EXCLUDE_DIRS_BUILTINS_OVERRIDE = None
@@ -466,4 +487,7 @@ _USER_SETTING_FIELDS = (
     "CLEANUP_INTERVAL_HOURS",
     "TEMPORAL_CLEANUP_ENABLED",
     "TEMPORAL_CLEANUP_INTERVAL_HOURS",
+    "WEAVIATE_HNSW_EF_CONSTRUCTION",
+    "WEAVIATE_HNSW_MAX_CONNECTIONS",
+    "WEAVIATE_HNSW_DISTANCE_METRIC",
 )

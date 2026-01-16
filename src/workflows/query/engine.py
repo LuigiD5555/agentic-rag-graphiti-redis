@@ -34,6 +34,18 @@ def _load_json_settings(json_path: Path) -> Dict[str, Any]:
     return {}
 
 
+def _resolve_user_settings_path() -> Path:
+    """Resolve the canonical settings.json path using runtime settings."""
+    settings_path = getattr(settings, "USER_SETTINGS_FILE", None)
+    if settings_path:
+        return Path(str(settings_path))
+    json_path = Path("data/settings.json")
+    if not json_path.is_absolute():
+        base_dir = Path(getattr(settings, "BASE_DIR", Path.cwd()))
+        json_path = base_dir / json_path
+    return json_path
+
+
 def _build_user_filter(user_id: Optional[str]) -> Dict[str, Any]:
     """Backend-agnostic filter description for user access control."""
     if not user_id:
@@ -178,6 +190,15 @@ class AppConfig(BaseSettings):
     DOCS_EXCLUDE_DIRS: tuple = Field(default_factory=lambda: settings.DOCS_EXCLUDE_DIRS)
     DOCS_EXCLUDE_GLOBS: tuple = Field(default_factory=lambda: settings.DOCS_EXCLUDE_GLOBS)
     DOCS_FILE_EXTS: tuple = Field(default_factory=lambda: settings.DOCS_FILE_EXTS)
+    INGESTION_STRATEGY: str = Field(default_factory=lambda: settings.INGESTION_STRATEGY)
+    PHASED_INGESTION_ENABLED: bool = Field(default_factory=lambda: settings.PHASED_INGESTION_ENABLED)
+    INGESTION_PHASE_TTL_SECONDS: int = Field(default_factory=lambda: settings.INGESTION_PHASE_TTL_SECONDS)
+    INGESTION_PREPROCESS_WORKERS: int = Field(default_factory=lambda: settings.INGESTION_PREPROCESS_WORKERS)
+    INGESTION_LOW_MEMORY_BATCH_SIZE: int = Field(default_factory=lambda: settings.INGESTION_LOW_MEMORY_BATCH_SIZE)
+    MAX_RAM_USAGE_PERCENT: int = Field(default_factory=lambda: settings.MAX_RAM_USAGE_PERCENT)
+    INGESTION_RESUMABLE_ENABLED: bool = Field(default_factory=lambda: settings.INGESTION_RESUMABLE_ENABLED)
+    INGESTION_CLEANUP_PREPROCESSED: bool = Field(default_factory=lambda: settings.INGESTION_CLEANUP_PREPROCESSED)
+    INGESTION_PREPROCESS_RETRY_FAILED: bool = Field(default_factory=lambda: settings.INGESTION_PREPROCESS_RETRY_FAILED)
 
     # Auto-scan scheduler settings
     AUTO_SCAN_INTERVAL: int = Field(default_factory=lambda: settings.AUTO_SCAN_INTERVAL)
@@ -375,10 +396,7 @@ class AppConfig(BaseSettings):
             def get_field_value(self, field, field_name: str) -> tuple[Any, str, bool]:
                 # Load JSON on first access
                 if not hasattr(self, '_json_data'):
-                    json_path = Path("data/settings.json")
-                    if not json_path.is_absolute():
-                        base_dir = Path(__file__).resolve().parent.parent.parent
-                        json_path = base_dir / json_path
+                    json_path = _resolve_user_settings_path()
                     self._json_data = _load_json_settings(json_path)
 
                 # Return value if present in JSON
@@ -388,10 +406,7 @@ class AppConfig(BaseSettings):
 
             def __call__(self) -> Dict[str, Any]:
                 if not hasattr(self, '_json_data'):
-                    json_path = Path("data/settings.json")
-                    if not json_path.is_absolute():
-                        base_dir = Path(__file__).resolve().parent.parent.parent
-                        json_path = base_dir / json_path
+                    json_path = _resolve_user_settings_path()
                     self._json_data = _load_json_settings(json_path)
                 return self._json_data
 

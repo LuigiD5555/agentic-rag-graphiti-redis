@@ -10,10 +10,17 @@ from pydantic import BaseModel, Field
 import pandas as pd
 
 # Initialize application with all improvements
-from .init_app import initialize_application
-
-# Initialize on module import
-initialize_application()
+try:
+    from .init_app import initialize_application
+    # Initialize on module import
+    initialize_application()
+except ImportError as e:
+    # Fallback for when running as main or in different context
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(__file__))
+    from init_app import initialize_application
+    initialize_application()
 
 app = FastAPI(
     title="RAG Tool: Document Processor",

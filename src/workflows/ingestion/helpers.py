@@ -22,18 +22,31 @@ def _detect_available_volumes() -> list[str]:
 
     # Check for Libros directory
     libros_path = "/mnt/resources/Libros"
+    fallback_libros = os.environ.get("FALLBACK_LIBROS_DIR", "./data/libros-fallback")
     if os.path.exists(libros_path):
-        # Check if it's a fallback
-        fallback_marker = os.path.join(libros_path, ".using-fallback")
-        if os.path.exists(fallback_marker):
-            logger.warning(
-                f"Volume {libros_path} is using FALLBACK directory. "
-                "Primary volume is not accessible. Fix the mount to use the primary volume."
-            )
+        try:
+            # Detect broken mounts (existence returns True but directory is unreadable)
+            os.listdir(libros_path)
+        except OSError as exc:
+            # Try fallback if primary mount is broken
+            if os.path.exists(fallback_libros):
+                logger.warning(f"Volume {libros_path} not accessible ({exc}); using fallback {fallback_libros}")
+                available.append(fallback_libros)
+            else:
+                logger.warning(f"Volume {libros_path} not accessible ({exc}); skipping.")
         else:
-            logger.info(f"Volume {libros_path} is available (primary)")
-
-        available.append(libros_path)
+            # Check if it's a fallback
+            fallback_marker = os.path.join(libros_path, ".using-fallback")
+            if os.path.exists(fallback_marker):
+                logger.warning(
+                    f"Volume {libros_path} is using FALLBACK directory. "
+                    "Primary volume is not accessible. Fix the mount to use the primary volume."
+                )
+                if os.path.exists(fallback_libros):
+                    available.append(fallback_libros)
+            else:
+                logger.info(f"Volume {libros_path} is available (primary)")
+                available.append(libros_path)
     else:
         logger.debug(f"Volume {libros_path} is not mounted")
 
@@ -129,6 +142,14 @@ def build_ingestion_options_from_args(args: argparse.Namespace, config: object) 
         ),
         log_level_name=(getattr(args, "log_level", None) or getattr(config, "INGEST_LOG_LEVEL", "INFO") or "INFO"),
         scan_progress_every=int(getattr(args, "scan_progress", 0) or 0),
+        strategy=getattr(args, "strategy", None),
+        phased_ingestion=getattr(args, "phased_ingestion", None),
+        max_ram_usage_percent=(
+            int(getattr(args, "max_ram_percent"))
+            if getattr(args, "max_ram_percent", None) is not None
+            else None
+        ),
+        run_id=getattr(args, "run_id", None),
     )
 
 

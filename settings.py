@@ -210,6 +210,16 @@ DOCS_FILE_EXTS = (
     ".cpp",
 )
 
+INGESTION_STRATEGY = "auto"
+PHASED_INGESTION_ENABLED = True
+INGESTION_PHASE_TTL_SECONDS = 24 * 60 * 60
+INGESTION_PREPROCESS_WORKERS = 3
+INGESTION_LOW_MEMORY_BATCH_SIZE = 1
+MAX_RAM_USAGE_PERCENT = 80
+INGESTION_RESUMABLE_ENABLED = True
+INGESTION_CLEANUP_PREPROCESSED = True
+INGESTION_PREPROCESS_RETRY_FAILED = True
+
 # Default cache TTL for application-level caching (seconds).
 CACHE_TTL = 3600
 
@@ -269,7 +279,7 @@ RAG_DEFAULT_FREQUENCY_PENALTY = 0.0
 RAG_DEFAULT_PRESENCE_PENALTY = 0.0
 
 # RAG Retrieval Parameters
-RAG_DEFAULT_TOP_K = 40  # Number of chunks to retrieve (~5000 tokens context with 500 char chunks)
+RAG_DEFAULT_TOP_K = 8  # Reduced from 40 for low-memory systems
 
 # RAG Profile System
 RAG_PROFILE = "auto"

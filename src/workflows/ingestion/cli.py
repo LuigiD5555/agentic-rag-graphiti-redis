@@ -85,6 +85,37 @@ class IngestionCLI:
             help="Wait for discovery to finish before ingesting.",
         )
         parser.add_argument(
+            "--strategy",
+            choices=["auto", "high_memory", "low_memory"],
+            default=None,
+            help="Force a specific ingestion strategy (default: auto-detect).",
+        )
+        parser.add_argument(
+            "--max-ram-percent",
+            type=int,
+            default=None,
+            dest="max_ram_percent",
+            help="Treat the environment as low-memory when RAM usage exceeds this percent.",
+        )
+        parser.add_argument(
+            "--phased-ingestion",
+            dest="phased_ingestion",
+            action="store_true",
+            default=None,
+            help="Explicitly enable phased ingestion (default behavior).",
+        )
+        parser.add_argument(
+            "--no-phased-ingestion",
+            dest="phased_ingestion",
+            action="store_false",
+            help="Run legacy ingestion without the phased strategy.",
+        )
+        parser.add_argument(
+            "--run-id",
+            default=None,
+            help="Resume or tag an ingestion run with a specific run_id.",
+        )
+        parser.add_argument(
             "--max-files",
             type=int,
             default=0,

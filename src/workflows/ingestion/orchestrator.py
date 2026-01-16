@@ -1,10 +1,15 @@
 """Orchestrates end-to-end ingestion into the vector store."""
+import uuid
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.workflows.query.audit import get_logger
 from src.workflows.ingestion.discovery.service import FileDiscoveryService
 from src.workflows.ingestion.pipeline import IngestionPipeline
 from src.workflows.ingestion.options import IngestionOptions, PipelineOptions, DiscoveryOptions
+from src.workflows.ingestion.phases import PhaseManager
+from src.workflows.ingestion.preprocessor import get_ingestion_preprocessor
+from src.workflows.ingestion.strategies import select_strategy
 from src.backends.storage.cache.ingestion.manager import IngestionCacheManager
 from src.backends.storage.vector import get_vector_store
 from src.workflows.query.embeddings_factory import get_embedding_service
@@ -96,28 +101,48 @@ class IngestionOrchestrator:
         logger.info("Starting discovery phase...")
         discovery_opts = self._to_discovery_options(options)
         discovered_files, visited_dirs = self._discovery.discover(discovery_opts, use_cache=True)
+        strategy_run_id = options.run_id or str(uuid.uuid4())
+        phase_manager = self._build_phase_manager(strategy_run_id)
+        sorted_files = sort_paths_by_size_desc(discovered_files)
+        phase_manager.record_discovered_files(sorted_files, visited_dirs)
 
-        if not discovered_files:
+        if not sorted_files:
             logger.info("No files to process. Exiting.")
             return {
                 "status": "no_files",
+                "run_id": strategy_run_id,
                 "discovery": {"total_files": 0, "visited_dirs": visited_dirs},
                 "pipeline": {"processed_files": 0},
             }
 
         logger.info("Discovered %d file(s) from %d directories.", len(discovered_files), visited_dirs)
 
-        # Sort files by size for efficient processing
-        sorted_files = sort_paths_by_size_desc(discovered_files)
+        if getattr(options, "dry_run", False):
+            logger.info("Dry-run flagged; skipping preprocessing and ingestion.")
+            return {
+                "status": "dry_run",
+                "run_id": strategy_run_id,
+                "discovery": {"total_files": len(sorted_files), "visited_dirs": visited_dirs},
+                "pipeline": {
+                    "processed_files": 0,
+                    "ingested": 0,
+                    "failed": 0,
+                    "candidates": len(sorted_files),
+                },
+            }
 
-        # Phase 2: Pipeline Execution
-        pipeline = self._build_pipeline()
-        results = pipeline.process_batch(sorted_files, options)
+        pipeline_result, strategy_name = self._execute_phased_ingestion(
+            sorted_files,
+            options,
+            phase_manager,
+        )
 
         return {
             "status": "completed",
-            "discovery": {"total_files": len(discovered_files), "visited_dirs": visited_dirs},
-            "pipeline": results,
+            "run_id": strategy_run_id,
+            "strategy": strategy_name,
+            "discovery": {"total_files": len(sorted_files), "visited_dirs": visited_dirs},
+            "pipeline": pipeline_result,
         }
 
     def run_incremental_scan(self, options: IngestionOptions) -> dict:
@@ -138,28 +163,50 @@ class IngestionOrchestrator:
         # Use discovery with cache enabled - it will detect changes automatically
         discovery_opts = self._to_discovery_options(options)
         discovered_files, visited_dirs = self._discovery.discover(discovery_opts, use_cache=True)
+        strategy_run_id = options.run_id or str(uuid.uuid4())
+        phase_manager = self._build_phase_manager(strategy_run_id)
 
-        if not discovered_files:
+        # Sort changed files by size (small to large for efficiency)
+        sorted_files = sort_paths_by_size_desc(discovered_files)
+        phase_manager.record_discovered_files(sorted_files, visited_dirs)
+
+        if not sorted_files:
             logger.info("No changed files detected. Exiting.")
             return {
                 "status": "no_changes",
+                "run_id": strategy_run_id,
                 "discovery": {"changed_files": 0, "visited_dirs": visited_dirs},
                 "pipeline": {"processed_files": 0},
             }
 
-        logger.info("Detected %d file(s) for processing...", len(discovered_files))
+        logger.info("Detected %d file(s) for processing...", len(sorted_files))
 
-        # Sort changed files by size (small to large for efficiency)
-        sorted_files = sort_paths_by_size_desc(discovered_files)
+        if getattr(options, "dry_run", False):
+            logger.info("Dry-run flagged; skipping incremental ingestion.")
+            return {
+                "status": "dry_run",
+                "run_id": strategy_run_id,
+                "discovery": {"changed_files": len(sorted_files), "visited_dirs": visited_dirs},
+                "pipeline": {
+                    "processed_files": 0,
+                    "ingested": 0,
+                    "failed": 0,
+                    "candidates": len(sorted_files),
+                },
+            }
 
-        # Build and run pipeline
-        pipeline = self._build_pipeline()
-        results = pipeline.process_batch(sorted_files, options)
+        pipeline_result, strategy_name = self._execute_phased_ingestion(
+            sorted_files,
+            options,
+            phase_manager,
+        )
 
         return {
             "status": "completed",
-            "discovery": {"changed_files": len(discovered_files), "visited_dirs": visited_dirs},
-            "pipeline": results,
+            "run_id": strategy_run_id,
+            "strategy": strategy_name,
+            "discovery": {"changed_files": len(sorted_files), "visited_dirs": visited_dirs},
+            "pipeline": pipeline_result,
         }
 
     def _build_pipeline(self) -> IngestionPipeline:
@@ -206,3 +253,101 @@ class IngestionOrchestrator:
 
         logger.info("Ingestion pipeline built successfully.")
         return pipeline
+
+    def _build_phase_manager(self, run_id: str) -> PhaseManager:
+        ttl = getattr(
+            self._config, 
+            "INGESTION_PHASE_TTL_SECONDS", 
+            getattr(self._config, "INGESTION_PHASE_TTL", 24 * 60 * 60)
+        )
+        return PhaseManager(cache_manager=self._cache_manager, run_id=run_id, ttl=ttl)
+
+    def _execute_phased_ingestion(
+        self,
+        file_paths: List[str],
+        options: IngestionOptions,
+        phase_manager: PhaseManager,
+    ) -> tuple[dict, str]:
+        """Run preprocessing and ingestion phases in order, using the configured strategy."""
+        phased_enabled = getattr(options, "phased_ingestion", None)
+        if phased_enabled is None:
+            phased_enabled = getattr(self._config, "PHASED_INGESTION_ENABLED", True)
+
+        if not phased_enabled:
+            logger.warning(
+                "Phased ingestion disabled for run=%s; falling back to legacy pipeline.",
+                phase_manager.run_id,
+            )
+            pipeline = self._build_pipeline()
+            result = pipeline.process_batch(file_paths, options)
+            phase_manager.record_ingestion_summary(result)
+            return result, "legacy"
+
+        strategy = select_strategy(
+            self._config,
+            self._cache_manager,
+            strategy_override=getattr(options, "strategy", None),
+            max_ram_override=getattr(options, "max_ram_usage_percent", None),
+        )
+        phase_id = phase_manager.run_id
+        logger.info("Using strategy %s for run %s", strategy.__class__.__name__, phase_id)
+
+        preprocessor = get_ingestion_preprocessor()
+        logger.info("Starting preprocessing phase (run=%s)", phase_id)
+        preprocessed_records = strategy.preprocess_phase(file_paths, options, preprocessor, phase_manager)
+        logger.info("Preprocessing completed for %d files (run=%s)", len(preprocessed_records), phase_id)
+
+        pipeline = self._build_pipeline()
+        pipeline.disable_preprocessing = True
+        self._configure_resumable_ingestion(pipeline)
+        logger.info("Starting ingestion phase (run=%s)", phase_id)
+        result = strategy.embedding_phase(preprocessed_records, pipeline, options, phase_manager)
+        logger.info("Ingestion phase finished (run=%s)", phase_id)
+
+        self._cleanup_preprocessed_outputs(preprocessed_records, result)
+
+        return result, strategy.__class__.__name__
+
+    def _configure_resumable_ingestion(self, pipeline: IngestionPipeline) -> None:
+        if not getattr(self._config, "INGESTION_RESUMABLE_ENABLED", False):
+            return
+        if not self._cache_manager:
+            logger.warning("Resumable ingestion requested but cache manager is unavailable.")
+            return
+        redis_client = getattr(self._cache_manager, "redis", None)
+        if not redis_client:
+            logger.warning("Resumable ingestion requested but Redis client is unavailable.")
+            return
+
+        try:
+            from src.workflows.ingestion.checkpoint import IngestQueue, ChunkRegistry
+
+            pipeline.ingest_queue = IngestQueue(redis_client)
+            pipeline.chunk_registry = ChunkRegistry(redis_client)
+            logger.info("Resumable ingestion enabled (IngestQueue + ChunkRegistry)")
+        except Exception as exc:  # pragma: no cover - best-effort
+            logger.warning("Failed to enable resumable ingestion: %s", exc)
+
+    def _cleanup_preprocessed_outputs(self, records: List[Any], result: dict) -> None:
+        if not getattr(self._config, "INGESTION_CLEANUP_PREPROCESSED", True):
+            return
+        if result.get("failed", 0) > 0:
+            logger.info("Skipping preprocessed cleanup due to failures.")
+            return
+
+        base_dir = Path(getattr(self._config, "PREPROCESSING_WORK_DIR", "/tmp")).resolve()
+        cleaned = 0
+        for record in records:
+            original = getattr(record, "original_path", None)
+            processed = getattr(record, "processed_path", None)
+            if not processed or processed == original:
+                continue
+            try:
+                path = Path(processed)
+                if path.is_file() and base_dir in path.resolve().parents:
+                    path.unlink(missing_ok=True)
+                    cleaned += 1
+            except Exception as exc:  # pragma: no cover - best-effort cleanup
+                logger.debug("Failed to clean preprocessed file %s: %s", processed, exc)
+        if cleaned:
+            logger.info("Cleaned %d preprocessed file(s).", cleaned)

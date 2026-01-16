@@ -74,13 +74,20 @@ async def rag_ingest(
             else True
         ),
         scan_progress_every=int(request.scan_progress_every or 0),
+        strategy=request.strategy,
+        phased_ingestion=request.phased_ingestion,
+        max_ram_usage_percent=request.max_ram_percent,
+        run_id=request.run_id,
     )
     report = ingestion.run_with_report(options)
+    pipeline_report = report.get("pipeline", {})
     return RagIngestResponse(
         status=report["status"],
-        ingested=report["ingested"],
-        failed=report["failed"],
-        candidates=report.get("candidates"),
+        ingested=pipeline_report.get("ingested", 0),
+        failed=pipeline_report.get("failed", 0),
+        candidates=pipeline_report.get("candidates"),
+        run_id=report.get("run_id"),
+        strategy=report.get("strategy"),
     )
 
 

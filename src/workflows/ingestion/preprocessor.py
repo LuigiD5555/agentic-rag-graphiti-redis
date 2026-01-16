@@ -217,6 +217,7 @@ class FilePreprocessor:
 
 # Singleton instance
 _preprocessor_instance: Optional[FilePreprocessor] = None
+_ingestion_preprocessor_instance: Optional[FilePreprocessor] = None
 
 
 def get_preprocessor(**kwargs) -> FilePreprocessor:
@@ -232,3 +233,11 @@ def get_preprocessor(**kwargs) -> FilePreprocessor:
     if _preprocessor_instance is None:
         _preprocessor_instance = FilePreprocessor(**kwargs)
     return _preprocessor_instance
+
+
+def get_ingestion_preprocessor(**kwargs) -> FilePreprocessor:
+    """Get or create a preprocessor tailored for ingestion (no archive extraction)."""
+    global _ingestion_preprocessor_instance
+    if _ingestion_preprocessor_instance is None:
+        _ingestion_preprocessor_instance = FilePreprocessor(enable_archive=False, **kwargs)
+    return _ingestion_preprocessor_instance

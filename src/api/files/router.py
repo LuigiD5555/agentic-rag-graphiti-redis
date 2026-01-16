@@ -148,7 +148,9 @@ async def upload_file(
 
             ingestion_orch._config.WEAVIATE_DEFAULT_TENANT = original_tenant
 
-            chunk_ids = [f"{file_id}_chunk_{i}" for i in range(result.get("ingested", 0))]
+            pipeline_report = result.get("pipeline", {})
+            ingested_count = pipeline_report.get("ingested", 0)
+            chunk_ids = [f"{file_id}_chunk_{i}" for i in range(ingested_count)]
 
             tracking_result = tracker.track_file_upload(
                 file_hash=file_hash,
@@ -167,7 +169,7 @@ async def upload_file(
                 status="processed",
                 temporal=True,
                 tenant=tenant_name,
-                chunks=result.get("ingested", 0),
+                chunks=ingested_count,
                 upload_count=tracking_result["upload_count"],
                 should_promote=tracking_result["should_auto_promote"],
             )

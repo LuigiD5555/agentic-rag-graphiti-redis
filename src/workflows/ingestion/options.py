@@ -71,6 +71,10 @@ class IngestionOptions:
     stream_ingest: bool = True
     log_level_name: str = "INFO"
     scan_progress_every: int = 0
+    strategy: Optional[str] = None
+    phased_ingestion: Optional[bool] = None
+    max_ram_usage_percent: Optional[int] = None
+    run_id: Optional[str] = None
 
 
 @dataclass(frozen=True)

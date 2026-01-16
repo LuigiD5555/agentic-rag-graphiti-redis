@@ -120,6 +120,10 @@ class RagIngestRequest(BaseModel):
     follow_symlinks: Optional[bool] = False
     enabled_paths: Optional[List[str]] = None
     scan_progress_every: Optional[int] = 0
+    strategy: Optional[str] = None
+    phased_ingestion: Optional[bool] = None
+    max_ram_percent: Optional[int] = None
+    run_id: Optional[str] = None
 
 
 class RagIngestResponse(BaseModel):
@@ -127,6 +131,8 @@ class RagIngestResponse(BaseModel):
     ingested: int
     failed: int
     candidates: Optional[int] = None
+    run_id: Optional[str] = None
+    strategy: Optional[str] = None
 
 
 class RagToolRequest(BaseModel):

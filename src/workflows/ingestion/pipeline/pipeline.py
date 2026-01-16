@@ -99,6 +99,7 @@ class IngestionPipeline:
 
         # Max parallel workers (default: 4, set to 1 to disable parallelization)
         self._max_workers = max(1, int(os.environ.get("RAG_PARALLEL_WORKERS", "4")))
+        self.disable_preprocessing = False
 
     def start_ingestion_run(self) -> None:
         """Reset per-run state before ingesting."""

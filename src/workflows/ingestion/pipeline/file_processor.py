@@ -208,48 +208,49 @@ def process_candidate_file(
 
     # ============== PREPROCESSING: Convert/extract files before ingestion ==============
     # Check if file needs preprocessing (Office docs, archives, images for OCR, etc.)
-    preprocessor = get_preprocessor()
-    file_path = Path(full_path)
+    if not getattr(pipeline, "disable_preprocessing", False):
+        preprocessor = get_preprocessor()
+        file_path = Path(full_path)
 
-    if preprocessor.should_preprocess(file_path):
-        logger.info("Preprocessing required for: %s", os.path.basename(full_path))
-        processed_path = preprocessor.preprocess(file_path)
+        if preprocessor.should_preprocess(file_path):
+            logger.info("Preprocessing required for: %s", os.path.basename(full_path))
+            processed_path = preprocessor.preprocess(file_path)
 
-        if processed_path is None:
-            # Preprocessing failed - skip this file
-            logger.warning("Preprocessing failed for %s, skipping file", full_path)
-            pipeline._current_file_info = None
-            return
+            if processed_path is None:
+                # Preprocessing failed - skip this file
+                logger.warning("Preprocessing failed for %s, skipping file", full_path)
+                pipeline._current_file_info = None
+                return
 
-        if processed_path.is_dir():
-            # Archive extraction -> process each extracted file recursively
-            logger.info(
-                "Archive extracted to %s, processing %d files...",
-                processed_path.name,
-                sum(1 for _ in processed_path.rglob("*") if _.is_file())
-            )
+            if processed_path.is_dir():
+                # Archive extraction -> process each extracted file recursively
+                logger.info(
+                    "Archive extracted to %s, processing %d files...",
+                    processed_path.name,
+                    sum(1 for _ in processed_path.rglob("*") if _.is_file())
+                )
 
-            for extracted_file in processed_path.rglob("*"):
-                if extracted_file.is_file():
-                    # Recursively process each extracted file
-                    process_candidate_file(
-                        pipeline,
-                        str(extracted_file),
-                        file_index=file_index,
-                        total_files=total_files,
-                        directory_path=str(processed_path),  # Use extraction dir as parent
-                    )
+                for extracted_file in processed_path.rglob("*"):
+                    if extracted_file.is_file():
+                        # Recursively process each extracted file
+                        process_candidate_file(
+                            pipeline,
+                            str(extracted_file),
+                            file_index=file_index,
+                            total_files=total_files,
+                            directory_path=str(processed_path),  # Use extraction dir as parent
+                        )
 
-            pipeline._current_file_info = None
-            return
+                pipeline._current_file_info = None
+                return
 
-        # File was converted (e.g., DOCX -> TXT) -> use preprocessed version
-        full_path = str(processed_path)
-        if str(file_path) != full_path:
-            logger.info("Using preprocessed file: %s", os.path.basename(full_path))
+            # File was converted (e.g., DOCX -> TXT) -> use preprocessed version
+            full_path = str(processed_path)
+            if str(file_path) != full_path:
+                logger.info("Using preprocessed file: %s", os.path.basename(full_path))
 
-        # Update file_info with preprocessed file metadata
-        file_info = gather_file_metadata(full_path)
+            # Update file_info with preprocessed file metadata
+            file_info = gather_file_metadata(full_path)
     # ============== END PREPROCESSING ==============
 
     pipeline.progress.register_file(full_path, file_info.get("file_size_bytes"))
