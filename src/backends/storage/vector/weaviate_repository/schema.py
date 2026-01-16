@@ -78,16 +78,28 @@ class SchemaManager:
         For 'bring your own vectors' setups (your embeddings come from LM Studio),
         use self-provided vectors to avoid server-side vectorization.
         """
+        # Use configurable HNSW parameters from settings (memory optimization)
+        hnsw_ef_construction = getattr(self.cfg, 'WEAVIATE_HNSW_EF_CONSTRUCTION', 128)
+        hnsw_max_connections = getattr(self.cfg, 'WEAVIATE_HNSW_MAX_CONNECTIONS', 32)
+        hnsw_distance_metric = getattr(self.cfg, 'WEAVIATE_HNSW_DISTANCE_METRIC', 'cosine')
+
         schema.create(
             self.class_name,
             vector_config=Configure.Vectors.self_provided(),
+            vector_index_config=Configure.VectorIndex.hnsw(
+                distance_metric=hnsw_distance_metric,
+                ef_construction=hnsw_ef_construction,
+                max_connections=hnsw_max_connections,
+            ),
             properties=self._class_properties_provider(),
             multi_tenancy_config=Configure.multi_tenancy(enabled=self.multitenant_enabled),
         )
         logger.info(
-            "Created Weaviate class '%s' (multitenant=%s)",
+            "Created Weaviate class '%s' (multitenant=%s, HNSW: ef=%d, max_conn=%d)",
             self.class_name,
             self.multitenant_enabled,
+            hnsw_ef_construction,
+            hnsw_max_connections,
         )
 
     def _ensure_default_tenant(self) -> None:

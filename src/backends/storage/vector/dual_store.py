@@ -12,6 +12,7 @@ import weaviate
 from weaviate.classes.config import Configure, Property, DataType
 from src.workflows.query.audit import get_logger
 from src.workflows.query.importance import DocumentImportanceClassifier, ImportanceLevel
+from src.conf import settings
 
 log = get_logger(__name__)
 
@@ -92,15 +93,20 @@ class DualCollectionVectorStore:
 
         vectorizer_config = Configure.Vectorizer.none()
 
+        # Use configurable HNSW parameters from settings (memory optimization)
+        hnsw_ef_construction = getattr(settings, 'WEAVIATE_HNSW_EF_CONSTRUCTION', 128)
+        hnsw_max_connections = getattr(settings, 'WEAVIATE_HNSW_MAX_CONNECTIONS', 32)
+        hnsw_distance_metric = getattr(settings, 'WEAVIATE_HNSW_DISTANCE_METRIC', 'cosine')
+
         if self.enable_multi_tenancy:
             self.client.collections.create(
                 name=collection_name,
                 properties=properties,
                 vectorizer_config=vectorizer_config,
                 vector_index_config=Configure.VectorIndex.hnsw(
-                    distance_metric="cosine",
-                    ef_construction=128,
-                    max_connections=32,
+                    distance_metric=hnsw_distance_metric,
+                    ef_construction=hnsw_ef_construction,
+                    max_connections=hnsw_max_connections,
                 ),
                 multi_tenancy_config=Configure.multi_tenancy(enabled=True),
             )
@@ -110,9 +116,9 @@ class DualCollectionVectorStore:
                 properties=properties,
                 vectorizer_config=vectorizer_config,
                 vector_index_config=Configure.VectorIndex.hnsw(
-                    distance_metric="cosine",
-                    ef_construction=128,
-                    max_connections=32,
+                    distance_metric=hnsw_distance_metric,
+                    ef_construction=hnsw_ef_construction,
+                    max_connections=hnsw_max_connections,
                 ),
             )
 
