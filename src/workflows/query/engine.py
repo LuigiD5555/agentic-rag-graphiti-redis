@@ -256,6 +256,11 @@ class AppConfig(BaseSettings):
     PREPROCESSING_WORK_DIR: str = Field(default_factory=lambda: settings.PREPROCESSING_WORK_DIR)
     EXTERNAL_VOLUMES: List[Dict[str, str]] = Field(default_factory=lambda: settings.EXTERNAL_VOLUMES)
 
+    # ===== Weaviate HNSW Configuration =====
+    WEAVIATE_HNSW_EF_CONSTRUCTION: int = Field(default_factory=lambda: settings.WEAVIATE_HNSW_EF_CONSTRUCTION)
+    WEAVIATE_HNSW_MAX_CONNECTIONS: int = Field(default_factory=lambda: settings.WEAVIATE_HNSW_MAX_CONNECTIONS)
+    WEAVIATE_HNSW_DISTANCE_METRIC: str = Field(default_factory=lambda: settings.WEAVIATE_HNSW_DISTANCE_METRIC)
+
     # ===== Apps =====
     INSTALLED_APPS: List[str] = Field(default_factory=lambda: settings.INSTALLED_APPS)
     AUTOLOAD_APP_ENTRYPOINTS: bool = Field(default_factory=lambda: settings.AUTOLOAD_APP_ENTRYPOINTS)

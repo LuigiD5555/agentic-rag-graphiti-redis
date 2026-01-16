@@ -368,6 +368,12 @@ WEAVIATE_MULTI_TENANCY = True
 WEAVIATE_DEFAULT_TENANT = "tenant-default"
 WEAVIATE_SKIP_INIT_CHECKS = False
 
+# Weaviate HNSW Index Configuration (Memory Optimization)
+# Lower values reduce memory usage at the cost of slight accuracy/speed trade-offs
+WEAVIATE_HNSW_EF_CONSTRUCTION = 128  # Build-time search quality (default: 128, low-memory: 64)
+WEAVIATE_HNSW_MAX_CONNECTIONS = 32   # Graph connections per node (default: 32, low-memory: 16)
+WEAVIATE_HNSW_DISTANCE_METRIC = "cosine"  # Distance metric for similarity
+
 # If provided (via user settings JSON), this list REPLACES _DEFAULT_EXCLUDED_FILES.
 # GUI can manage this list to fully control fast-prune directory basenames.
 DOCS_EXCLUDE_DIRS_BUILTINS_OVERRIDE = None
@@ -466,4 +472,7 @@ _USER_SETTING_FIELDS = (
     "CLEANUP_INTERVAL_HOURS",
     "TEMPORAL_CLEANUP_ENABLED",
     "TEMPORAL_CLEANUP_INTERVAL_HOURS",
+    "WEAVIATE_HNSW_EF_CONSTRUCTION",
+    "WEAVIATE_HNSW_MAX_CONNECTIONS",
+    "WEAVIATE_HNSW_DISTANCE_METRIC",
 )
