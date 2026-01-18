@@ -11,45 +11,60 @@ logger = get_logger(__name__)
 def _detect_available_volumes() -> list[str]:
     """
     Detect which volumes are currently available.
-
-    This checks for external volumes and determines if they're using
-    fallback directories. Logs warnings when fallbacks are in use.
-
+    
+    This function checks for external volumes defined in EXTERNAL_VOLUMES
+    configuration and determines if they're using fallback directories.
+    
     Returns:
         List of available volume paths
     """
     available = []
-
-    # Check for Libros directory
-    libros_path = "/mnt/resources/Libros"
-    fallback_libros = os.environ.get("FALLBACK_LIBROS_DIR", "./data/libros-fallback")
-    if os.path.exists(libros_path):
-        try:
-            # Detect broken mounts (existence returns True but directory is unreadable)
-            os.listdir(libros_path)
-        except OSError as exc:
-            # Try fallback if primary mount is broken
-            if os.path.exists(fallback_libros):
-                logger.warning(f"Volume {libros_path} not accessible ({exc}); using fallback {fallback_libros}")
-                available.append(fallback_libros)
-            else:
-                logger.warning(f"Volume {libros_path} not accessible ({exc}); skipping.")
-        else:
-            # Check if it's a fallback
-            fallback_marker = os.path.join(libros_path, ".using-fallback")
-            if os.path.exists(fallback_marker):
-                logger.warning(
-                    f"Volume {libros_path} is using FALLBACK directory. "
-                    "Primary volume is not accessible. Fix the mount to use the primary volume."
-                )
-                if os.path.exists(fallback_libros):
-                    available.append(fallback_libros)
-            else:
-                logger.info(f"Volume {libros_path} is available (primary)")
-                available.append(libros_path)
-    else:
-        logger.debug(f"Volume {libros_path} is not mounted")
-
+    
+    try:
+        # Try to load external volumes configuration
+        from src.utils.volume_monitor import load_external_volumes_config
+        
+        volumes_config = load_external_volumes_config()
+        
+        # Only add paths that are actually accessible
+        def check_and_add_path(path: str, description: str) -> bool:
+            """Check if path exists and is accessible, add to available if it is."""
+            if not os.path.exists(path):
+                logger.debug(f"{description} {path} does not exist")
+                return False
+            
+            try:
+                # Try to list directory to check accessibility
+                os.listdir(path)
+                logger.info(f"{description} {path} is available")
+                available.append(path)
+                return True
+            except OSError as exc:
+                logger.warning(f"{description} {path} not accessible ({exc})")
+                return False
+        
+        for vol_config in volumes_config:
+            name = vol_config.get("name", "Unknown")
+            mount_point = vol_config.get("mount", "")
+            primary = vol_config.get("primary", "")
+            fallback = vol_config.get("fallback", "")
+            
+            if not mount_point:
+                continue
+            
+            # Check if mount point exists and is accessible
+            if not check_and_add_path(mount_point, f"Volume '{name}'"):
+                # Try fallback if primary mount is not accessible
+                if fallback and os.path.exists(fallback):
+                    check_and_add_path(fallback, f"Fallback for '{name}'")
+                else:
+                    logger.debug(f"Volume '{name}' is not mounted and no fallback available")
+                    
+    except ImportError:
+        logger.debug("Volume monitor module not available, skipping external volume detection")
+    except Exception as e:
+        logger.warning(f"Failed to detect external volumes: {e}")
+    
     return available
 
 
@@ -65,12 +80,24 @@ def build_ingestion_options_from_args(args: argparse.Namespace, config: object) 
     if getattr(args, "paths", None):
         root_paths = tuple(args.paths)
     else:
-        cfg_paths = getattr(config, "DOCS_PATHS", None) or []
-        base_paths = list(cfg_paths) if cfg_paths else ["/mnt/Documents/Documents"]
+        # Try to use the path manager as the primary source of document paths
+        try:
+            from src.utils.path_manager import get_enabled_document_paths
+            base_paths = get_enabled_document_paths()
+            logger.info(f"Using {len(base_paths)} enabled paths from path manager")
+        except ImportError:
+            logger.debug("Path manager not available, falling back to config")
+            cfg_paths = getattr(config, "DOCS_PATHS", None) or []
+            base_paths = list(cfg_paths) if cfg_paths else ["/mnt/Documents/Documents"]
 
-        # Add available external volumes dynamically
+        # Add available external volumes dynamically, but avoid duplicates
         external_volumes = _detect_available_volumes()
-        base_paths.extend(external_volumes)
+        for vol in external_volumes:
+            if vol not in base_paths:
+                base_paths.append(vol)
+                logger.debug(f"Added external volume: {vol}")
+            else:
+                logger.debug(f"Volume {vol} already in paths, skipping duplicate")
 
         root_paths = tuple(base_paths)
 

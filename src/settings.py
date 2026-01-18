@@ -150,11 +150,9 @@ LITELLM_TARGET_PROVIDER = "lmstudio"
 
 # Ingestion settings (discovery + splitting).
 # DOCS_PATHS define the BASE paths to scan.
-# To avoid scanning all of /mnt/Documents/Documents (which includes code),
-# we only scan the books folder:
 DOCS_PATHS = [
-    "/mnt/resources/Libros/Aprendizaje",  # Books only, no source code
-    # "/mnt/Documents/Documents",  # Commented out: contains too much code
+    "/mnt/Documents/Documents",  # Main documents directory
+    "/mnt/resources/Libros/Aprendizaje",  # Books directory
 ]
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
