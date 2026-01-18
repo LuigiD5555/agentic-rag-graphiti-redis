@@ -179,7 +179,18 @@ class PDFLoader:
         all_documents = []
 
         try:
-            reader = PdfReader(self._path, strict=False)
+            # Temporarily suppress pypdf logging warnings
+            import logging
+            pypdf_logger = logging.getLogger('pypdf._reader')
+            original_level = pypdf_logger.level
+            pypdf_logger.setLevel(logging.ERROR)
+            
+            try:
+                reader = PdfReader(self._path, strict=False)
+            finally:
+                # Restore original logging level
+                pypdf_logger.setLevel(original_level)
+            
             total_pages = len(reader.pages)
 
             logger.info(
@@ -306,7 +317,19 @@ class PDFLoader:
             List of Document objects extracted from the PDF pages.
         """
         logger.debug("Loading PDF using pypdf with strict=False fallback: %s", Path(self._path).name)
-        reader = PdfReader(self._path, strict=False)
+        
+        # Temporarily suppress pypdf logging warnings
+        import logging
+        pypdf_logger = logging.getLogger('pypdf._reader')
+        original_level = pypdf_logger.level
+        pypdf_logger.setLevel(logging.ERROR)
+        
+        try:
+            reader = PdfReader(self._path, strict=False)
+        finally:
+            # Restore original logging level
+            pypdf_logger.setLevel(original_level)
+        
         documents: List[Document] = []
         total_pages = len(reader.pages)
 

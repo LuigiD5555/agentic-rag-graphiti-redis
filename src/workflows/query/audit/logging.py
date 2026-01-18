@@ -37,8 +37,15 @@ def configure_logging(level: str | int | None = None, fmt: str = DEFAULT_FORMAT)
         "httpcore",
         "weaviate",
         "urllib3",
+        "pypdf",
+        "pypdf._reader",
     ):
-        logging.getLogger(noisy_logger_name).setLevel(logging.WARNING)
+        # Set pypdf loggers to ERROR to suppress "wrong pointing object" warnings
+        # These warnings are harmless but very noisy for malformed PDFs
+        if noisy_logger_name.startswith("pypdf"):
+            logging.getLogger(noisy_logger_name).setLevel(logging.ERROR)
+        else:
+            logging.getLogger(noisy_logger_name).setLevel(logging.WARNING)
 
     return get_logger()
 
