@@ -186,10 +186,10 @@ def main():
     print(f"\nTotal: {passed}/{total} tests passed")
     
     if passed == total:
-        print("\n✅ All improvements are working correctly!")
+        print("\n✓ All improvements are working correctly!")
         return 0
     else:
-        print(f"\n❌ {total - passed} tests failed")
+        print(f"\n✗ {total - passed} tests failed")
         return 1
 
 

@@ -8,7 +8,7 @@ services:
   weaviate:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_weaviate_1"
     image: "docker.io/semitechnologies/weaviate:${WEAVIATE_IMAGE_TAG:?WEAVIATE_IMAGE_TAG is required}"
-    restart: unless-stopped
+    restart: "no"
     logging:
       driver: journald
     # Bind ONLY to localhost so it's not exposed to LAN
@@ -43,7 +43,7 @@ services:
   neo4j:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_neo4j_1"
     image: "docker.io/library/neo4j:${NEO4J_IMAGE_TAG:?NEO4J_IMAGE_TAG is required}"
-    restart: unless-stopped
+    restart: "no"
     logging:
       driver: journald
     # Only start when explicitly requested via profile (optional plugin)
@@ -82,7 +82,7 @@ services:
   redis:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_redis_1"
     image: "docker.io/library/redis:${REDIS_IMAGE_TAG:?REDIS_IMAGE_TAG is required}"
-    restart: unless-stopped
+    restart: "no"
     logging:
       driver: journald
     # AOF persistence with 1-day session TTL
@@ -131,7 +131,7 @@ services:
       context: ./open-webui
       dockerfile: Dockerfile
     image: "open-webui-local:${OPEN_WEBUI_IMAGE_TAG:-main-slim}"
-    restart: unless-stopped
+    restart: "no"
     logging:
       driver: journald
     # Only start when explicitly requested via profile
@@ -208,7 +208,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: development
-    restart: unless-stopped
+    restart: "no"
     logging:
       driver: journald
     depends_on:
@@ -289,7 +289,7 @@ services:
       # External volume: Documents (auto-detected from EXTERNAL_VOLUMES)
       - ${HOST_DOCUMENTS_DIR:-./data/documents-fallback}:/mnt/Documents/Documents:Z
       # External volume: Libros (auto-detected from EXTERNAL_VOLUMES)
-      - ${HOST_LIBROS_DIR:-./data/libros-fallback}:/mnt/resources/Libros:Z
+      - ${ACTIVE_LIBROS_DIR:-./data/libros-fallback}:/mnt/resources/Libros:Z
 
       # Add more external volumes here as needed (see instructions above)
 
@@ -325,7 +325,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runtime
-    restart: unless-stopped
+    restart: "no"
     logging:
       driver: journald
     depends_on:
@@ -352,7 +352,7 @@ services:
     network_mode: "host"
     volumes:
       - ${HOST_DOCUMENTS_DIR:-./data/documents-fallback}:/mnt/Documents/Documents:Z
-      - ${HOST_LIBROS_DIR:-./data/libros-fallback}:/mnt/resources/Libros:Z
+      - ${ACTIVE_LIBROS_DIR:-./data/libros-fallback}:/mnt/resources/Libros:Z
       - ${HOST_DATA_DIR:-./data}:/app/data:Z
       - ./.ingestignore:/app/.ingestignore:Z
       - ./src:/app/src:ro,Z
@@ -372,7 +372,7 @@ services:
     build:
       context: .
       dockerfile: tools/monitoring/Dockerfile
-    restart: unless-stopped
+    restart: "no"
     logging:
       driver: journald
     depends_on:

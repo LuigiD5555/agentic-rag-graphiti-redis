@@ -155,7 +155,7 @@ def create_chat_memory_collection(
         )
 
         logger.info(
-            f"✅ Created {CHAT_MEMORY_COLLECTION} collection successfully "
+            f"✓ Created {CHAT_MEMORY_COLLECTION} collection successfully "
             f"(TTL: {ttl_days} days)"
         )
         return True

@@ -141,7 +141,7 @@ print("   ✓ State metadata updates correctly")
 
 # Summary
 print("\n" + "=" * 60)
-print("✅ ALL PHASE 1 TESTS PASSED!")
+print("✓ ALL PHASE 1 TESTS PASSED!")
 print("=" * 60)
 print("\nPhase 1 Components Verified:")
 print("  ✓ identifiers.py - User/Thread ID generation")

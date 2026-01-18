@@ -13,14 +13,13 @@ services:
       dockerfile: Containerfile
     container_name: rag-debug
 
-    # Access to main RAG network
-    networks:
-      - rag-network
+    # Use host network to access services (same as main services)
+    network_mode: "host"
 
     # Mount logs directory for journal_dump.sh
     volumes:
       - ../../logs:/logs:rw
-      - /run/podman/podman.sock:/run/podman/podman.sock:ro  # Access to podman for monitoring
+      - /run/user/1000/podman/podman.sock:/run/podman/podman.sock:ro  # Access to podman for monitoring
 
     # Environment variables
     environment:
@@ -30,11 +29,11 @@ services:
       - DEFAULT_SINCE=${DEFAULT_SINCE:-24 hours ago}
       - MEMORY_THRESHOLD=${MEMORY_THRESHOLD:-85}
 
-      # Access to RAG services
-      - WEAVIATE_URL=http://weaviate:8080
-      - REDIS_HOST=redis
+      # Access to RAG services via localhost (host network)
+      - WEAVIATE_URL=http://127.0.0.1:8080
+      - REDIS_HOST=127.0.0.1
       - REDIS_PORT=6379
-      - API_URL=http://app:8001
+      - API_URL=http://127.0.0.1:8000
 
     # Keep container running for exec commands
     command: tail -f /dev/null
@@ -51,8 +50,3 @@ services:
         reservations:
           cpus: '0.25'
           memory: 256M
-
-networks:
-  rag-network:
-    external: true
-    name: ${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_rag-network

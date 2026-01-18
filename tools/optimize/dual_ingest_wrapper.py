@@ -107,16 +107,16 @@ def print_ingestion_plan(files: List[str], classifier: DocumentImportanceClassif
     stats = classifier.get_statistics(files)
 
     print("\n" + "="*70)
-    print("📊 DUAL EMBEDDING INGESTION PLAN")
+    print("[Bar Chart] DUAL EMBEDDING INGESTION PLAN")
     print("="*70)
     print(f"\nTotal files to ingest: {stats['total_files']}")
-    print(f"\n✨ HIGH importance (768 dims): {stats['high_importance']} files ({stats['high_percentage']:.1f}%)")
+    print(f"\n[Sparkles] HIGH importance (768 dims): {stats['high_importance']} files ({stats['high_percentage']:.1f}%)")
     print(f"   → Code, docs, configs, technical content")
-    print(f"\n📄 LOW importance (384 dims): {stats['low_importance']} files ({stats['low_percentage']:.1f}%)")
+    print(f"\n[Page Facing Up] LOW importance (384 dims): {stats['low_importance']} files ({stats['low_percentage']:.1f}%)")
     print(f"   → Logs, data, general text files")
 
     dual_config = get_dual_config()
-    print(f"\n🔧 Models:")
+    print(f"\n[Wrench] Models:")
     print(f"   - Small: {dual_config['small_model']} ({dual_config['small_dim']} dims)")
     print(f"   - Large: {dual_config['large_model']} ({dual_config['large_dim']} dims)")
 
@@ -145,7 +145,7 @@ def main():
     dual_config = get_dual_config()
 
     # Print config
-    print("\n🔍 Dual Embeddings Configuration:")
+    print("\n[Left-Pointing Magnifying Glass] Dual Embeddings Configuration:")
     print(f"  Enabled: {dual_config['enabled']}")
     print(f"  Small collection: {dual_config['small_collection']} ({dual_config['small_dim']} dims)")
     print(f"  Large collection: {dual_config['large_collection']} ({dual_config['large_dim']} dims)")
@@ -159,13 +159,13 @@ def main():
 
     # Verify setup
     if args.verify or not args.analyze_path:
-        print("\n🔧 Verifying dual collections setup...")
+        print("\n[Wrench] Verifying dual collections setup...")
         is_ready = setup_dual_collections()
 
         if is_ready:
-            print("✅ Dual embeddings system is ready!")
+            print("✓ Dual embeddings system is ready!")
         else:
-            print("❌ Dual embeddings system failed to initialize")
+            print("✗ Dual embeddings system failed to initialize")
             sys.exit(1)
 
     # Analyze path if provided
@@ -175,7 +175,7 @@ def main():
 
         path = Path(args.analyze_path)
         if not path.exists():
-            print(f"\n❌ Path not found: {path}")
+            print(f"\n✗ Path not found: {path}")
             sys.exit(1)
 
         # Find all files recursively
@@ -185,7 +185,7 @@ def main():
             files = [str(f) for f in path.rglob("*") if f.is_file()]
 
         if not files:
-            print(f"\n❌ No files found in: {path}")
+            print(f"\n✗ No files found in: {path}")
             sys.exit(1)
 
         # Classify and print plan
