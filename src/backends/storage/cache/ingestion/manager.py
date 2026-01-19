@@ -1,5 +1,5 @@
-"""Main cache manager class."""
-from typing import TYPE_CHECKING, Dict, Any
+"""Main cache manager class with graceful fallback."""
+from typing import TYPE_CHECKING, Dict, Any, Optional
 import time
 
 if TYPE_CHECKING:
@@ -21,55 +21,95 @@ from src.utils.hashing import compute_file_hash, compute_directory_hash
 log = get_logger(__name__)
 
 
-class IngestionCacheManager(FileCacheOperations, DirectoryCacheOperations):
-    """Redis-based cache manager for file ingestion.
+class NullCacheManager:
+    """Null cache manager for when Redis is unavailable."""
+    
+    def __init__(self):
+        self.enabled = False
+        log.warning("Using null cache manager (Redis unavailable)")
+    
+    def get_file_metadata(self, file_path: str):
+        """Always return None - no caching."""
+        return None
+    
+    def set_file_metadata(self, file_path: str, metadata):
+        """Do nothing - no caching."""
+        return True
+    
+    def get_files_by_hash(self, content_hash: str):
+        """Return empty set - no deduplication."""
+        return set()
+    
+    def delete_file_metadata(self, file_path: str):
+        """Do nothing."""
+        return True
+    
+    def clear_all(self):
+        """Do nothing."""
+        return True
+    
+    def increment_stats(self, **kwargs):
+        """Do nothing."""
+        pass
+    
+    def get_stats(self):
+        """Return empty stats."""
+        return {
+            'enabled': False,
+            'backend': 'null',
+            'cached_files': 0,
+            'cached_dirs': 0,
+            'error': 'Redis unavailable'
+        }
 
-    Redis is required - if unavailable, the manager will raise an error.
-    This ensures predictable behavior and avoids silent performance degradation.
-    """
+
+class IngestionCacheManager(FileCacheOperations, DirectoryCacheOperations):
+    """Redis-based cache manager for file ingestion with graceful fallback."""
 
     def __init__(
         self,
-        redis_client: "redis.Redis",
+        redis_client: Optional["redis.Redis"] = None,
         ttl: int = FileCacheOperations.DEFAULT_TTL,
         paranoid_mode: bool = False
     ):
-        """Initialize cache manager.
+        """Initialize cache manager with fallback support.
 
         Args:
-            redis_client: Redis client instance (required).
+            redis_client: Redis client instance (optional - can be None for fallback).
             ttl: Time-to-live for cache entries in seconds.
             paranoid_mode: If True, always verify content hash even when mtime+size match.
-                         If False (default), trust mtime+size for better performance.
-
-        Raises:
-            TypeError: If redis_client is None.
         """
-        if redis_client is None:
-            raise TypeError("Redis client is required. Cannot initialize cache without Redis.")
-
-        FileCacheOperations.__init__(self, redis_client, ttl, paranoid_mode)
-        DirectoryCacheOperations.__init__(self, redis_client, ttl)
-
-        self.enabled = True  # Cache is enabled when Redis is available
-        log.info(
-            "Ingestion cache manager initialized with Redis (paranoid_mode=%s)",
-            paranoid_mode
-        )
+        if redis_client is not None:
+            # Use Redis directly
+            FileCacheOperations.__init__(self, redis_client, ttl, paranoid_mode)
+            DirectoryCacheOperations.__init__(self, redis_client, ttl)
+            self.enabled = True
+            self.null_cache = False
+            log.info(
+                "Ingestion cache manager initialized with Redis (paranoid_mode=%s)",
+                paranoid_mode
+            )
+        else:
+            # Use null cache (no caching)
+            self.enabled = False
+            self.null_cache = True
+            self.null_manager = NullCacheManager()
+            log.warning("Redis unavailable, using null cache manager (no caching)")
 
     @classmethod
-    def from_settings(cls, settings: Dict[str, Any], max_retries: int = 60) -> "IngestionCacheManager":
-        """Create cache manager from settings with connection retry logic.
+    def from_settings(cls, settings: Dict[str, Any], max_retries: int = 10) -> "IngestionCacheManager":
+        """Create cache manager from settings with connection retry and graceful fallback.
 
         Args:
             settings: Configuration dictionary.
             max_retries: Maximum number of connection attempts.
 
-        Raises:
-            RuntimeError: If Redis is unavailable or connection fails after retries.
+        Returns:
+            Cache manager instance (may be in null cache mode if Redis unavailable).
         """
         if not REDIS_AVAILABLE:
-            raise RuntimeError("redis-py is not installed. Install it with: pip install redis")
+            log.warning("redis-py is not installed. Using null cache manager.")
+            return cls(redis_client=None)
 
         cache_config = settings.get("CACHES", {}).get("default", {})
         location = cache_config.get("LOCATION", "").strip()
@@ -86,8 +126,7 @@ class IngestionCacheManager(FileCacheOperations, DirectoryCacheOperations):
 
         # Retry logic with exponential backoff
         delay = 1.0
-        max_delay = 10.0
-        last_error = None
+        max_delay = 5.0
 
         for attempt in range(1, max_retries + 1):
             try:
@@ -103,8 +142,8 @@ class IngestionCacheManager(FileCacheOperations, DirectoryCacheOperations):
                     location,
                     password=redis_password,
                     decode_responses=True,
-                    socket_connect_timeout=5,
-                    socket_timeout=5,
+                    socket_connect_timeout=3,
+                    socket_timeout=3,
                 )
 
                 # Test connection
@@ -112,52 +151,73 @@ class IngestionCacheManager(FileCacheOperations, DirectoryCacheOperations):
                 log.info("Successfully connected to Redis cache at %s", location)
                 return cls(redis_client=client)
 
-            except redis_module.exceptions.BusyLoadingError as e:
-                # Redis is loading dataset - this is expected on startup with AOF
-                last_error = e
-
-                if attempt == 1:
-                    log.info("Redis is loading dataset (AOF recovery). Waiting...")
-                elif attempt <= max_retries:
-                    log.debug(
-                        "Redis still loading (attempt %d/%d). Retrying in %.1f seconds...",
-                        attempt, max_retries, delay
-                    )
-
-                if attempt == max_retries:
-                    log.error(
-                        "Redis failed to complete loading after %d attempts (%.1f seconds)",
-                        max_retries, sum(min(1.0 * (2 ** i), max_delay) for i in range(max_retries))
-                    )
-                    break
-
-                time.sleep(delay)
-                delay = min(delay * 1.5, max_delay)  # Gentler backoff for loading
-
             except Exception as e:
-                # Other errors (connection refused, network, etc.)
-                last_error = e
-
+                # Handle all Redis connection errors
+                error_msg = str(e)
+                
                 if attempt == max_retries:
-                    log.error(
+                    log.warning(
                         "Failed to connect to Redis at %s after %d attempts. Last error: %s",
-                        location, max_retries, e
+                        location, max_retries, error_msg
                     )
-                    break
+                    log.warning("Using null cache manager (Redis unavailable)")
+                    return cls(redis_client=None)
 
                 log.warning(
                     "Redis connection attempt %d/%d failed: %s. Retrying in %.1f seconds...",
-                    attempt, max_retries, e, delay
+                    attempt, max_retries, error_msg, delay
                 )
 
                 time.sleep(delay)
                 delay = min(delay * 2, max_delay)  # Exponential backoff with cap
 
-        # If we get here, all retries failed
-        raise RuntimeError(
-            f"Failed to connect to Redis at {location} after {max_retries} attempts. "
-            f"Last error: {last_error}"
-        ) from last_error
+        # If we get here, all retries failed - use null cache
+        log.warning("All Redis connection attempts failed. Using null cache manager.")
+        return cls(redis_client=None)
+
+    # Delegate methods to null manager when in null cache mode
+    def get_file_metadata(self, file_path: str):
+        """Get file metadata with null cache support."""
+        if self.null_cache:
+            return self.null_manager.get_file_metadata(file_path)
+        return super().get_file_metadata(file_path)
+    
+    def set_file_metadata(self, metadata):
+        """Set file metadata with null cache support."""
+        if self.null_cache:
+            # Convert metadata to simple dict for null cache
+            return self.null_manager.set_file_metadata(metadata.file_path, metadata)
+        return super().set_file_metadata(metadata)
+    
+    def find_files_by_hash(self, content_hash: str):
+        """Find files by hash with null cache support."""
+        if self.null_cache:
+            return self.null_manager.get_files_by_hash(content_hash)
+        return super().find_files_by_hash(content_hash)
+    
+    def invalidate_file(self, file_path: str):
+        """Invalidate file with null cache support."""
+        if self.null_cache:
+            return self.null_manager.delete_file_metadata(file_path)
+        return super().invalidate_file(file_path)
+    
+    def clear_all(self):
+        """Clear all cache entries with null cache support."""
+        if self.null_cache:
+            return self.null_manager.clear_all()
+        return super().clear_all()
+    
+    def update_stats(self, **kwargs):
+        """Update stats with null cache support."""
+        if self.null_cache:
+            return self.null_manager.increment_stats(**kwargs)
+        return super().update_stats(**kwargs)
+    
+    def get_stats(self):
+        """Get stats with null cache support."""
+        if self.null_cache:
+            return self.null_manager.get_stats()
+        return super().get_stats()
 
     # Re-expose utility methods for backwards compatibility
     def compute_file_hash(self, file_path: str, chunk_size: int = 8192):

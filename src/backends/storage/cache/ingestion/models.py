@@ -16,7 +16,6 @@ class FileMetadata:
     status: str  # 'processed', 'failed', 'skipped'
     error_message: Optional[str] = None
     # Extended fields for checkpoint support
-    last_seen_run: Optional[str] = None  # Last run_id that saw this file
     ingestion_run_id: Optional[str] = None  # Run that processed this file
     scan_run_id: Optional[str] = None  # Scan run that discovered this file
     chunk_ids: Optional[str] = None  # Comma-separated list of chunk_ids

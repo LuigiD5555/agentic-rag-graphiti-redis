@@ -451,7 +451,18 @@ _DEFAULT_EXCLUDED_FILES = {
     "*.rar",
     "*.7z",
     "*.gz",
-    "*.tar.xz"
+    "*.tar.xz",
+
+    # Office temporary files
+    "~$*",       # Word/Excel temporary files (e.g., ~$document.docx)
+    "*~",        # Backup/temporary files (e.g., document.docx~) - CHANGED from ".*~" to "*~"
+    ".~*",       # PowerPoint temporary files (e.g., .~presentation.pptx)
+    "*.tmp",     # General temporary files
+    "*.temp",    # General temporary files
+    "*.bak",     # Backup files
+    "*.backup",  # Backup files
+    "Thumbs.db",  # Windows thumbnail cache
+    "desktop.ini"  # Windows desktop configuration
 }
 
 # Keys that can be persisted/overridden via the user settings JSON file.

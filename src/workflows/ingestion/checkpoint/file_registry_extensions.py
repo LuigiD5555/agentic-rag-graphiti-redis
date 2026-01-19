@@ -99,7 +99,6 @@ class FileRegistryExtensions(RedisOperations):
         # Update fields
         if scan_run_id:
             metadata.scan_run_id = scan_run_id
-            metadata.last_seen_run = scan_run_id
 
         if ingestion_run_id:
             metadata.ingestion_run_id = ingestion_run_id

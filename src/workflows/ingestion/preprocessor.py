@@ -151,6 +151,12 @@ class FilePreprocessor:
         if output:
             return output
 
+        # Try Python-based DOCX extraction as fallback
+        if file_path.suffix.lower() in {'.docx', '.doc'}:
+            python_extracted = self._try_python_docx_extraction(file_path)
+            if python_extracted:
+                return python_extracted
+
         log.info("Falling back to direct ingestion for %s", file_path.name)
         return file_path
 
@@ -175,6 +181,56 @@ class FilePreprocessor:
     def extract_archive(self, file_path: Path) -> Optional[Path]:
         """Public wrapper to extract an archive."""
         return self._extract_archive(file_path)
+
+    def _try_python_docx_extraction(self, file_path: Path) -> Optional[Path]:
+        """Try to extract text from DOCX using Python libraries as fallback.
+        
+        This is used when LibreOffice fails to convert the document.
+        
+        Args:
+            file_path: Path to DOCX file
+            
+        Returns:
+            Path to extracted text file, or None if failed
+        """
+        try:
+            # Try to use python-docx if available
+            import docx
+            
+            doc = docx.Document(str(file_path))
+            text_content = []
+            
+            # Extract text from paragraphs
+            for paragraph in doc.paragraphs:
+                if paragraph.text.strip():
+                    text_content.append(paragraph.text)
+            
+            # Extract text from tables
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        if cell.text.strip():
+                            text_content.append(cell.text)
+            
+            if not text_content:
+                log.warning("Python DOCX extraction produced no text for %s", file_path.name)
+                return None
+            
+            # Create output file
+            output_path = self.work_dir / f"{file_path.stem}_python_fallback.txt"
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write('\n\n'.join(text_content))
+            
+            log.info("Python DOCX extraction succeeded for %s -> %s",
+                     file_path.name, output_path.name)
+            return output_path
+            
+        except ImportError:
+            log.debug("python-docx not available for fallback extraction")
+            return None
+        except Exception as e:
+            log.warning("Python DOCX extraction failed for %s: %s", file_path.name, str(e))
+            return None
 
     def _perform_ocr(self, file_path: Path) -> Optional[Path]:
         """Perform OCR on image.

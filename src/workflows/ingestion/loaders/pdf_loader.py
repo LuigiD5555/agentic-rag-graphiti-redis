@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from io import BytesIO
 
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError, PdfStreamError
@@ -187,6 +188,40 @@ class PDFLoader:
             
             try:
                 reader = PdfReader(self._path, strict=False)
+            except (AttributeError, UnboundLocalError) as e:
+                # Handle specific case where encryption_entry is NullObject
+                if "'NullObject' object has no attribute 'get'" in str(e):
+                    logger.warning(
+                        "PDF has malformed encryption dictionary (NullObject), attempting workaround: %s",
+                        Path(self._path).name
+                    )
+                    # Try alternative approach: read PDF as binary and create reader
+                    with open(self._path, 'rb') as f:
+                        pdf_bytes = f.read()
+                    
+                    # Create reader from bytes using BytesIO
+                    reader = PdfReader(BytesIO(pdf_bytes), strict=False)
+                    
+                    # Try to bypass encryption by setting it to None if it exists
+                    if hasattr(reader, '_encryption') and reader._encryption is not None:
+                        logger.debug("Bypassing encryption for malformed PDF")
+                        reader._encryption = None
+                else:
+                    # Handle UnboundLocalError specifically
+                    if isinstance(e, UnboundLocalError):
+                        logger.error(
+                            "PDF loader error: PdfReader not available in scope for %s. "
+                            "This may indicate a problem with pypdf installation or imports.",
+                            Path(self._path).name
+                        )
+                        raise LoaderInvalidFormatError(
+                            self._path,
+                            expected="PDF",
+                            detail=f"PDF loader configuration error: {str(e)}. "
+                                   "Check that pypdf is properly installed and imported."
+                        ) from e
+                    # Re-raise other AttributeErrors
+                    raise
             finally:
                 # Restore original logging level
                 pypdf_logger.setLevel(original_level)
@@ -326,6 +361,53 @@ class PDFLoader:
         
         try:
             reader = PdfReader(self._path, strict=False)
+        except (AttributeError, UnboundLocalError) as e:
+            # Handle specific case where encryption_entry is NullObject
+            if "'NullObject' object has no attribute 'get'" in str(e):
+                logger.warning(
+                    "PDF has malformed encryption dictionary (NullObject), attempting workaround: %s",
+                    Path(self._path).name
+                )
+                # Try alternative approach: read PDF as binary and create reader
+                try:
+                    # Read file as binary and create PdfReader from bytes
+                    with open(self._path, 'rb') as f:
+                        pdf_bytes = f.read()
+                    
+                    # Create reader from bytes using BytesIO
+                    reader = PdfReader(BytesIO(pdf_bytes), strict=False)
+                    
+                    # Try to bypass encryption by setting it to None if it exists
+                    if hasattr(reader, '_encryption') and reader._encryption is not None:
+                        logger.debug("Bypassing encryption for malformed PDF")
+                        reader._encryption = None
+                        
+                except Exception as inner_e:
+                    logger.error(
+                        "Failed to work around malformed encryption for PDF %s: %s",
+                        Path(self._path).name, str(inner_e)
+                    )
+                    raise LoaderInvalidFormatError(
+                        self._path,
+                        expected="PDF",
+                        detail=f"PDF has malformed encryption that cannot be processed: {str(inner_e)}"
+                    ) from inner_e
+            else:
+                # Handle UnboundLocalError specifically
+                if isinstance(e, UnboundLocalError):
+                    logger.error(
+                        "PDF loader error: PdfReader not available in scope for %s. "
+                        "This may indicate a problem with pypdf installation or imports.",
+                        Path(self._path).name
+                    )
+                    raise LoaderInvalidFormatError(
+                        self._path,
+                        expected="PDF",
+                        detail=f"PDF loader configuration error: {str(e)}. "
+                               "Check that pypdf is properly installed and imported."
+                    ) from e
+                # Re-raise other AttributeErrors
+                raise
         finally:
             # Restore original logging level
             pypdf_logger.setLevel(original_level)

@@ -46,7 +46,7 @@ def _detect_available_volumes() -> list[str]:
         for vol_config in volumes_config:
             name = vol_config.get("name", "Unknown")
             mount_point = vol_config.get("mount", "")
-            primary = vol_config.get("primary", "")
+            # Note: primary is loaded but not used directly - it's part of the config structure
             fallback = vol_config.get("fallback", "")
             
             if not mount_point:
@@ -110,36 +110,44 @@ def build_ingestion_options_from_args(args: argparse.Namespace, config: object) 
         allowed_extensions.discard("")
 
     # Always start with built-in defaults, then add user-specified exclusions
-    excluded_directory_names = set()
-
-    # Prefer runtime config (Django-style settings object). Fallback to the
-    # module-level defaults if the caller provided a plain module.
+    # We need to classify entries as directory names vs glob patterns
+    from src.utils.path_discovery import classify_exclude_entries
+    
+    # Collect all exclusion entries
+    all_exclusion_entries = set()
+    
+    # Add built-in exclusions
     built_in_exclusions = getattr(config, "DEFAULT_EXCLUDED_FILES", None)
     if built_in_exclusions:
-        excluded_directory_names.update(set(built_in_exclusions))
+        all_exclusion_entries.update(set(built_in_exclusions))
     else:
         try:
             # Lazily import to avoid import-order issues during startup.
             from src.settings import _DEFAULT_EXCLUDED_FILES  # type: ignore
-
-            excluded_directory_names.update(_DEFAULT_EXCLUDED_FILES)
+            all_exclusion_entries.update(_DEFAULT_EXCLUDED_FILES)
         except ImportError:
             pass
-
+    
+    # Add config exclusions
+    cfg_excludes = getattr(config, "DOCS_EXCLUDE_DIRS", ()) or ()
+    if cfg_excludes:
+        all_exclusion_entries.update(cfg_excludes)
+    
+    # Add CLI exclusions if provided
     if getattr(args, "exclude_dirs", None) is not None:
-        # CLI args provided - merge with defaults
-        excluded_directory_names.update(args.exclude_dirs)
-    else:
-        # Check config for additional exclusions
-        cfg_excludes = getattr(config, "DOCS_EXCLUDE_DIRS", ()) or ()
-        if cfg_excludes:
-            excluded_directory_names.update(cfg_excludes)
-
+        all_exclusion_entries.update(args.exclude_dirs)
+    
+    # Classify entries into directory names and glob patterns
+    excluded_directory_names, excluded_path_globs = classify_exclude_entries(all_exclusion_entries)
+    
+    # Now handle glob patterns from config and CLI args
+    # Start with config globs
+    cfg_patterns = getattr(config, "DOCS_EXCLUDE_GLOBS", ()) or ()
+    excluded_path_globs.update(cfg_patterns)
+    
+    # Add CLI glob patterns if provided
     if getattr(args, "exclude_patterns", None) is not None:
-        excluded_path_globs = set(args.exclude_patterns)
-    else:
-        cfg_patterns = getattr(config, "DOCS_EXCLUDE_GLOBS", ()) or ()
-        excluded_path_globs = set(cfg_patterns)
+        excluded_path_globs.update(args.exclude_patterns)
 
     # Load enabled paths from config
     if getattr(args, "enabled_paths", None) is not None:
