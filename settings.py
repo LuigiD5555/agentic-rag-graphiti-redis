@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 # Base path for resolving project-relative files (.env, data/settings.json, etc.).
@@ -236,6 +237,7 @@ NEO4J_PASSWORD = ""
 
 # ===== API Configuration =====
 API_MODE = "openai"  # "openai" or "ollama"
+RAG_AUTOSTART = os.getenv("RAG_AUTOSTART", "false").strip().lower() == "true"
 API_PORT = 8001  # Port for API server
 SOCKET_PORT = 5555  # Port for RAG socket server
 OPENAI_API_BASE = "http://127.0.0.1:1234/v1"

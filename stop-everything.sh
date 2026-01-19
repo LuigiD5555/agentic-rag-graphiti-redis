@@ -112,9 +112,23 @@ fi
 
 print_step "Stopping systemd tool sockets/services (if available)..."
 if command -v systemctl >/dev/null 2>&1; then
-    systemctl --user stop tool-document-processor.socket tool-document-processor.service 2>/dev/null || true
-    systemctl --user stop tool-extractor.socket tool-extractor.service 2>/dev/null || true
-    systemctl --user stop tool-websearch.socket tool-websearch.service 2>/dev/null || true
+    TOOLS=(
+        document-processor
+        extractor
+        websearch
+        ocr
+        llm
+        gpu
+        archive
+    )
+    for tool in "${TOOLS[@]}"; do
+        systemctl --user stop "tool-${tool}.socket" "tool-${tool}.service" 2>/dev/null || true
+        systemctl --user disable "tool-${tool}.socket" "tool-${tool}.service" 2>/dev/null || true
+        systemctl --user reset-failed "tool-${tool}.service" 2>/dev/null || true
+    done
+
+    RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    rm -f "$RUNTIME_DIR/rag-tools-enabled"
 else
     print_warning "systemctl not available; skipping systemd stop"
 fi

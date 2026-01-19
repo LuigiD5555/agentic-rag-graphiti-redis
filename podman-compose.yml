@@ -259,6 +259,7 @@ services:
       # Unified RAG API port (consolidated from separate API proxy)
       API_PORT: "${HOST_RAG_API_PORT:-8000}"
       API_MODE: "${API_MODE:-ollama}"
+      RAG_AUTOSTART: "${RAG_AUTOSTART:-false}"
       
       # Embeddings (make explicit; do not rely on env_file parsing)
       EMBEDDING_MODEL: "${EMBEDDING_MODEL:-text-embedding-nomic-embed-text-v2-moe}"

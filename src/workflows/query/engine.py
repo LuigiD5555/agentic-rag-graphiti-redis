@@ -109,6 +109,7 @@ class AppConfig(BaseSettings):
 
     # ===== API Configuration =====
     API_MODE: str = Field(default_factory=lambda: settings.API_MODE)
+    RAG_AUTOSTART: bool = Field(default_factory=lambda: settings.RAG_AUTOSTART)
     API_PORT: int = Field(default_factory=lambda: settings.API_PORT)
     SOCKET_PORT: int = Field(default_factory=lambda: settings.SOCKET_PORT)
     OPENAI_API_BASE: str = Field(default_factory=lambda: settings.OPENAI_API_BASE)

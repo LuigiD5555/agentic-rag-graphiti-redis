@@ -131,6 +131,8 @@ fi
 # STEP 3: INSTALL AND ENABLE SYSTEMD SOCKETS
 # ============================================================================
 
+export RAG_AUTOSTART=true
+
 print_header "STEP 3: Configuring Systemd Sockets"
 
 # Running inside a container? systemd --user sockets won't work here.
@@ -150,13 +152,24 @@ else
         exit 1
     fi
 
-    if ! "$PYTHON_CMD" -m src.utils.tools.systemd_manager enable; then
-        print_warning "Failed to enable sockets, attempting recovery"
-        systemctl --user daemon-reload || true
-        systemctl --user restart tool-extractor.socket || true
-        systemctl --user restart tool-document-processor.socket || true
-        systemctl --user restart tool-websearch.socket || true
-    fi
+    # Do not enable sockets on boot; start them only for this session.
+    print_step "Disabling tool sockets autostart..."
+    systemctl --user disable --now tool-extractor.socket || true
+    systemctl --user disable --now tool-document-processor.socket || true
+    systemctl --user disable --now tool-websearch.socket || true
+
+    print_step "Enabling tool sockets for this session..."
+    RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    mkdir -p "$RUNTIME_DIR"
+    touch "$RUNTIME_DIR/rag-tools-enabled"
+
+    SOCKET_START_TIME="$(date --iso-8601=seconds)"
+
+    print_step "Starting tool sockets (on-demand for this session only)..."
+    systemctl --user daemon-reload || true
+    systemctl --user start tool-extractor.socket || true
+    systemctl --user start tool-document-processor.socket || true
+    systemctl --user start tool-websearch.socket || true
 
     print_step "Checking tool sockets..."
     if systemctl --user list-sockets | grep -q "tool-"; then
@@ -169,8 +182,8 @@ else
 
     if ! systemctl --user is-enabled tool-extractor.socket >/dev/null 2>&1; then
         print_warning "tool-extractor.socket is not enabled. Diagnostics:"
-        systemctl --user status tool-extractor.socket --no-pager || true
-        journalctl --user -u tool-extractor.socket --no-pager -n 50 || true
+        systemctl --user status tool-extractor.socket --no-page --lines=8 || true
+        journalctl --user -u tool-extractor.socket --no-pager --since "$SOCKET_START_TIME" -n 30 || true
         print_warning "Attempting to start tool-extractor.socket anyway..."
         systemctl --user start tool-extractor.socket || true
     fi
@@ -279,7 +292,7 @@ else
         print_info "open-webui service not available (profile not enabled)"
     fi
 
-print_step "Starting all services (Weaviate, Neo4j, Redis, App, Open WebUI, Monitoring)..."
+print_step "Starting all services (Weaviate, Neo4j, Redis, App, Open WebUI, Monitoring, RabbitMQ)..."
 if podman-compose config --services | grep -q "open-webui"; then
     podman-compose --profile webui up -d
 else
@@ -441,6 +454,7 @@ echo -e "${BOLD}Database Services:${NC}"
 echo "  - Weaviate:    http://localhost:8080 (Vector DB)"
 echo "  - Neo4j:       http://localhost:7474 (Graph DB, user: neo4j)"
 echo "  - Redis:       localhost:6379 (Cache)"
+echo "  - RabbitMQ:    http://localhost:15672 (Message Queue, user: admin/change-me-rabbitmq)"
 echo ""
 echo -e "${BOLD}Preprocessing Tools (Socket-Activated):${NC}"
 echo "  - tool-extractor (extractor): http://127.0.0.1:9101 (ZIP/7z/tar extraction)"

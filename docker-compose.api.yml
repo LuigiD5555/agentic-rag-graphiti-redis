@@ -35,6 +35,7 @@ services:
       - LMSTUDIO_PORT=1234
       - PROVIDER=lmstudio
       - API_PORT=8000
+      - RAG_AUTOSTART=${RAG_AUTOSTART:-false}
 
     depends_on:
       - weaviate

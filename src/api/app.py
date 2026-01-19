@@ -36,6 +36,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     logger.info("Initializing RAG API...")
     resources: Optional[RuntimeResources] = None
+    if not rag_config.RAG_AUTOSTART:
+        logger.error("RAG autostart disabled; refusing to start API without initialization.")
+        raise RuntimeError("RAG API cannot run without initialization (RAG_AUTOSTART=false).")
 
     try:
         resources = runtime_factory.create()
