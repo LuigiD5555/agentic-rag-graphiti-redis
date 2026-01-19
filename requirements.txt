@@ -34,3 +34,8 @@ pytest-asyncio
 pydantic
 pydantic-settings
 langdetect
+
+# RabbitMQ for message queuing
+pika==1.3.2
+aio-pika==9.4.1
+celery==5.3.6

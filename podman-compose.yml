@@ -449,6 +449,37 @@ services:
           cpus: "${MONITORING_CPUS:-0.5}"
           memory: "${MONITORING_MEMORY:-512m}"
 
+  rabbitmq:
+    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_rabbitmq_1"
+    image: "docker.io/library/rabbitmq:${RABBITMQ_IMAGE_TAG:-3.13-management}"
+    restart: "no"
+    logging:
+      driver: journald
+    network_mode: "host"
+    user: "rabbitmq:rabbitmq"
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-admin}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-change-me-rabbitmq}
+      - RABBITMQ_DEFAULT_VHOST=${RABBITMQ_VHOST:-/rag}
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbit log_levels [{connection,error},{default,error}]
+      - RABBITMQ_LOGS=-
+      - RABBITMQ_SASL_LOGS=-
+    volumes:
+      - ${HOST_RABBITMQ_DATA:-rabbitmq_data}:/var/lib/rabbitmq:Z
+      - ${HOST_RABBITMQ_LOGS:-rabbitmq_logs}:/var/log/rabbitmq:Z
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "${RABBITMQ_CPUS:-0.5}"
+          memory: "${RABBITMQ_MEMORY:-512m}"
+
 volumes:
   neo4j_data: {}
   neo4j_logs: {}
@@ -458,3 +489,5 @@ volumes:
   monitoring_logs: {}
   monitoring_reports: {}
   monitoring_data: {}
+  rabbitmq_data: {}
+  rabbitmq_logs: {}
