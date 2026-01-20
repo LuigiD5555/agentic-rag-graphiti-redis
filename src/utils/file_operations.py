@@ -37,13 +37,16 @@ def gather_file_metadata(path: Optional[str]) -> Dict[str, Any]:
         "file_id": generate_hash_presanitized(resolved) if resolved else None,
     }
 
-    if resolved and os.path.isfile(resolved):
-        try:
-            stats = os.stat(resolved)
-            info["file_size_bytes"] = stats.st_size
-            info["file_modified_at"] = datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc).isoformat()
-        except OSError:
-            pass
+    # Early return if not a valid file
+    if not resolved or not os.path.isfile(resolved):
+        return info
+
+    try:
+        stats = os.stat(resolved)
+        info["file_size_bytes"] = stats.st_size
+        info["file_modified_at"] = datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc).isoformat()
+    except OSError:
+        pass
 
     return info
 
@@ -92,6 +95,7 @@ def should_skip_path(path: str) -> bool:
     Returns:
         True if the path should be skipped, False otherwise.
     """
+    # Check for broken symlinks
     if os.path.islink(path) and not os.path.exists(path):
         try:
             target = os.readlink(path)
@@ -100,11 +104,13 @@ def should_skip_path(path: str) -> bool:
             log.warning("Skipping broken symlink: %s", path)
         return True
 
+    # Check for temporary Office lock files
     basename = os.path.basename(path)
     if basename.strip().startswith("~$"):
         log.info("Skipping temporary Office lock file: %s", path)
         return True
 
+    # Check if path exists
     if not os.path.exists(path):
         log.error("Path does not exist: %s", path)
         return True

@@ -36,6 +36,12 @@ def resolve_loader_source(loader: object) -> str:
 
 
 def should_skip_path(path: str) -> bool:
+    # Skip temporary files in /tmp/ directories that no longer exist
+    if path.startswith("/tmp/"):
+        if not os.path.exists(path):
+            log.info("Skipping missing temporary file: %s", path)
+            return True
+    
     if os.path.islink(path) and not os.path.exists(path):
         try:
             target = os.readlink(path)

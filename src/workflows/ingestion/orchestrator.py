@@ -273,6 +273,7 @@ class IngestionOrchestrator:
         if phased_enabled is None:
             phased_enabled = getattr(self._config, "PHASED_INGESTION_ENABLED", True)
 
+        # Early return for non-phased ingestion
         if not phased_enabled:
             logger.warning(
                 "Phased ingestion disabled for run=%s; falling back to legacy pipeline.",
@@ -309,11 +310,14 @@ class IngestionOrchestrator:
         return result, strategy.__class__.__name__
 
     def _configure_resumable_ingestion(self, pipeline: IngestionPipeline) -> None:
+        # Early returns for guard conditions
         if not getattr(self._config, "INGESTION_RESUMABLE_ENABLED", False):
             return
+        
         if not self._cache_manager:
             logger.warning("Resumable ingestion requested but cache manager is unavailable.")
             return
+            
         redis_client = getattr(self._cache_manager, "redis", None)
         if not redis_client:
             logger.warning("Resumable ingestion requested but Redis client is unavailable.")
@@ -329,8 +333,10 @@ class IngestionOrchestrator:
             logger.warning("Failed to enable resumable ingestion: %s", exc)
 
     def _cleanup_preprocessed_outputs(self, records: List[Any], result: dict) -> None:
+        # Early returns for guard conditions
         if not getattr(self._config, "INGESTION_CLEANUP_PREPROCESSED", True):
             return
+            
         if result.get("failed", 0) > 0:
             logger.info("Skipping preprocessed cleanup due to failures.")
             return
