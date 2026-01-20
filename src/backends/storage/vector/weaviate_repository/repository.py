@@ -371,7 +371,14 @@ class WeaviateRepository:
         for obj in objects:
             meta = getattr(obj, "metadata", None)
             distance = getattr(meta, "distance", None)
-            score = None if distance is None else float(distance)
+            # Convert distance to similarity score for cosine distance
+            # distance: 0 = identical, 2 = opposite
+            # similarity: 1 = identical, -1 = opposite
+            if distance is not None:
+                # Convert cosine distance to similarity: similarity = 1 - distance
+                score = 1.0 - float(distance)
+            else:
+                score = None
             props = getattr(obj, "properties", {}) or {}
             output.append(ScoredItem(id=str(obj.uuid), score=score, payload=props))
         return output

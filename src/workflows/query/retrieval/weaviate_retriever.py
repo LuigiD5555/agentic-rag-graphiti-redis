@@ -169,7 +169,16 @@ class WeaviateRetriever:
                 scores = []
 
                 for obj in response.objects:
-                    score = obj.metadata.score if obj.metadata else 0.0
+                    # Convert distance to similarity score for cosine distance
+                    # distance: 0 = identical, 2 = opposite
+                    # similarity: 1 = identical, -1 = opposite
+                    distance = obj.metadata.distance if obj.metadata else None
+                    if distance is not None:
+                        # Convert cosine distance to similarity: similarity = 1 - distance
+                        score = 1.0 - distance
+                    else:
+                        score = 0.0
+                    
                     scores.append(score)
 
                     doc = {
@@ -178,7 +187,7 @@ class WeaviateRetriever:
                         "source": obj.properties.get("source", ""),
                         "chunk_index": obj.properties.get("chunk_index", 0),
                         "score": score,
-                        "distance": obj.metadata.distance if obj.metadata else None,
+                        "distance": distance,
                     }
                     results.append(doc)
 
@@ -187,13 +196,19 @@ class WeaviateRetriever:
                 metadata["total_time_ms"] = round(total_time, 2)
 
                 if scores:
-                    avg_score = sum(scores) / len(scores)
-                    metadata["avg_score"] = round(avg_score, 3)
-                    metadata["low_relevance"] = avg_score < self.min_relevance_score
+                    # Filter out None values and ensure we have valid scores
+                    valid_scores = [s for s in scores if s is not None]
+                    if valid_scores:
+                        avg_score = sum(valid_scores) / len(valid_scores)
+                        metadata["avg_score"] = round(avg_score, 3)
+                        metadata["low_relevance"] = avg_score < self.min_relevance_score
+                    else:
+                        metadata["avg_score"] = 0.0
+                        metadata["low_relevance"] = True
 
                     log.info(
                         "Retrieved %d documents in %.2fms (avg_score=%.3f, low_relevance=%s): %s",
-                        len(results), total_time, avg_score,
+                        len(results), total_time, metadata["avg_score"],
                         metadata["low_relevance"], query[:50]
                     )
                 else:
