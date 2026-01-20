@@ -2,6 +2,7 @@
 from typing import Any, Callable, List, Optional
 
 from weaviate.classes.config import Configure, Property
+from weaviate.collections.classes.config_vectorizers import VectorDistances
 
 from src import logger
 
@@ -83,11 +84,23 @@ class SchemaManager:
         hnsw_max_connections = getattr(self.cfg, 'WEAVIATE_HNSW_MAX_CONNECTIONS', 32)
         hnsw_distance_metric = getattr(self.cfg, 'WEAVIATE_HNSW_DISTANCE_METRIC', 'cosine')
 
+        # Convert string distance metric to VectorDistances enum
+        distance_metric_map = {
+            'cosine': VectorDistances.COSINE,
+            'l2': VectorDistances.L2_SQUARED,
+            'dot': VectorDistances.DOT,
+            'hamming': VectorDistances.HAMMING,
+            'manhattan': VectorDistances.MANHATTAN,
+        }
+        
+        # Get the distance metric from config, default to COSINE if not found
+        distance_metric = distance_metric_map.get(hnsw_distance_metric.lower(), VectorDistances.COSINE)
+
         schema.create(
             self.class_name,
-            vector_config=Configure.Vectors.self_provided(),
+            vectorizer_config=None,  # Use None instead of Configure.Vectorizer.none() to avoid named vectors conflict
             vector_index_config=Configure.VectorIndex.hnsw(
-                distance_metric=hnsw_distance_metric,
+                distance_metric=distance_metric,
                 ef_construction=hnsw_ef_construction,
                 max_connections=hnsw_max_connections,
             ),

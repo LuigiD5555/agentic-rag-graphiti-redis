@@ -263,11 +263,6 @@ services:
       
       # Embeddings (make explicit; do not rely on env_file parsing)
       EMBEDDING_MODEL: "${EMBEDDING_MODEL:-text-embedding-nomic-embed-text-v2-moe}"
-      ENABLE_DUAL_EMBEDDINGS: "${ENABLE_DUAL_EMBEDDINGS:-true}"
-      SMALL_EMBEDDING_MODEL: "${SMALL_EMBEDDING_MODEL:-text-embedding-bge-micro-v2}"
-      LARGE_EMBEDDING_MODEL: "${LARGE_EMBEDDING_MODEL:-text-embedding-nomic-embed-text-v2-moe}"
-      SMALL_EMBEDDING_DIM: "${SMALL_EMBEDDING_DIM:-384}"
-      LARGE_EMBEDDING_DIM: "${LARGE_EMBEDDING_DIM:-768}"
 
     volumes:
       # ============================================================================

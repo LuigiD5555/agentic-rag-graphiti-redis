@@ -199,4 +199,5 @@ def create_checkpointer(
     if redis_password:
         auth_segment = f":{quote_plus(redis_password)}@"
     redis_url = f"redis://{auth_segment}{redis_host}:{redis_port}/{redis_db}"
+    logger.info(f"Creating Redis checkpointer with URL: redis://{auth_segment}{redis_host}:{redis_port}/{redis_db}")
     return TTLRedisSaver(redis_url=redis_url, ttl_seconds=ttl_seconds)

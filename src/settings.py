@@ -80,7 +80,7 @@ REDIS_URL: str = ""  # If set, overrides REDIS_HOST/PORT
 REDIS_HOST: str = "localhost"
 REDIS_PORT: int = 6379
 REDIS_DB: int = 0
-REDIS_PASSWORD: str = ""
+REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
 
 # Provider adapters registry (aliases -> provider config dict).
 PROVIDERS = {
@@ -132,7 +132,7 @@ APP_ENTRYPOINT_GROUP = "rag_agentic_graphiti.apps"
 
 # Embeddings settings (used by ingestion/pipeline token limits and embedding size).
 EMBEDDING_DIM = 768
-EMBEDDING_MAX_TOKENS = 512
+EMBEDDING_MAX_TOKENS = int(os.getenv("EMBEDDING_MAX_TOKENS", "512"))
 
 # ChatMemory settings (conversation snapshot persistence).
 CHATMEMORY_TTL_DAYS = 30  # Default TTL for conversation snapshots
@@ -282,10 +282,10 @@ RAG_PERFORMANCE_PROFILE = "performance"
 RESOURCE_MODE = "performance"
 
 # RAG Performance Optimizations
-RAG_EMBED_BATCH_SIZE = 16
+RAG_EMBED_BATCH_SIZE = int(os.getenv("RAG_EMBED_BATCH_SIZE", "4"))  # Reduced for saver mode
 RAG_EMBED_LOG_EVERY_N_CHUNKS = 20
-RAG_PARALLEL_WORKERS = 3
-RAG_PIPELINE_WORKERS = 3
+RAG_PARALLEL_WORKERS = int(os.getenv("RAG_PARALLEL_WORKERS", "1"))  # Reduced for saver mode
+RAG_PIPELINE_WORKERS = int(os.getenv("RAG_PIPELINE_WORKERS", "1"))  # Reduced for saver mode
 
 # RAG Document Splitting Optimizations
 RAG_SPLIT_BATCH_SIZE = 128  # Batch size for document splitting
@@ -364,7 +364,7 @@ EXTERNAL_VOLUMES = []
 VECTOR_BACKEND = "weaviate"
 WEAVIATE_URL = "http://localhost:8080"
 WEAVIATE_API_KEY = ""
-WEAVIATE_CLASS = "RAGDocument"
+WEAVIATE_CLASS = os.getenv("WEAVIATE_CLASS", "RAGDocument768")
 WEAVIATE_TIMEOUT = 30
 WEAVIATE_GRPC_PORT = 50051
 WEAVIATE_CONNECT_RETRIES = 5

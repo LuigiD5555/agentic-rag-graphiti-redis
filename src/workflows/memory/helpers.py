@@ -150,9 +150,9 @@ def should_compress_state(state: ConversationState) -> bool:
     Returns:
         True if compression recommended
     """
-    window_size = _config.MEMORY_WINDOW_SIZE
-    max_state_size_kb = _config.MAX_STATE_SIZE_KB
-    compression_threshold = _config.COMPRESSION_THRESHOLD
+    window_size = settings.MEMORY_WINDOW_SIZE
+    max_state_size_kb = settings.MAX_STATE_SIZE_KB
+    compression_threshold = settings.COMPRESSION_THRESHOLD
 
     messages = state.get("messages", [])
 

@@ -37,12 +37,16 @@ async def rag_query(
     request: RagQueryRequest,
     rag: RAGOrchestrator = Depends(get_rag_orchestrator),
 ) -> RagQueryResponse:
+    # Use default values with early assignment
+    temperature = request.temperature or settings.RAG_DEFAULT_TEMPERATURE
+    max_tokens = request.max_tokens or settings.RAG_DEFAULT_MAX_TOKENS
+    
     result = rag.query(
         question=request.query,
         top_k=request.top_k,
         filters=request.filters,
-        temperature=request.temperature if request.temperature is not None else settings.RAG_DEFAULT_TEMPERATURE,
-        max_tokens=request.max_tokens if request.max_tokens is not None else settings.RAG_DEFAULT_MAX_TOKENS,
+        temperature=temperature,
+        max_tokens=max_tokens,
         system_prompt=request.system,
     )
     sources = result.get("sources", []) if request.include_sources else []
@@ -58,22 +62,27 @@ async def rag_ingest(
     request: RagIngestRequest,
     ingestion: IngestionOrchestrator = Depends(get_ingestion_orchestrator),
 ) -> RagIngestResponse:
+    # Use default values with early assignment
+    enabled_paths = tuple(request.enabled_paths or ())
+    allowed_extensions = set(request.allowed_extensions or ())
+    excluded_dirs = set(request.excluded_dirs or ())
+    excluded_globs = set(request.excluded_globs or ())
+    max_files = int(request.max_files or 0)
+    scan_progress_every = int(request.scan_progress_every or 0)
+    stream_ingest = bool(request.streaming) if request.streaming is not None else True
+    
     options = IngestionOptions(
         root_paths=tuple(request.paths),
-        enabled_paths=tuple(request.enabled_paths or ()),
-        allowed_extensions=set(request.allowed_extensions or ()),
-        excluded_directory_names=set(request.excluded_dirs or ()),
-        excluded_path_globs=set(request.excluded_globs or ()),
+        enabled_paths=enabled_paths,
+        allowed_extensions=allowed_extensions,
+        excluded_directory_names=excluded_dirs,
+        excluded_path_globs=excluded_globs,
         follow_symbolic_links=bool(request.follow_symlinks),
         dry_run=bool(request.dry_run),
         per_file_mode=bool(request.per_file),
-        maximum_files=int(request.max_files or 0),
-        stream_ingest=(
-            bool(request.streaming)
-            if request.streaming is not None
-            else True
-        ),
-        scan_progress_every=int(request.scan_progress_every or 0),
+        maximum_files=max_files,
+        stream_ingest=stream_ingest,
+        scan_progress_every=scan_progress_every,
         strategy=request.strategy,
         phased_ingestion=request.phased_ingestion,
         max_ram_usage_percent=request.max_ram_percent,

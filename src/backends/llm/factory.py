@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional, Any
 
-from src.conf import settings
 from src.workflows.query.interfaces.embedding_interface import EmbeddingInterface
 from src.workflows.query.interfaces.chat_interface import ChatInterface
 from src.workflows.query.interfaces.provider_adapter_interface import ProviderAdapterInterface
@@ -26,18 +25,28 @@ class ProviderFactory:
     _adapter: Optional[ProviderAdapterInterface] = None
 
     def _select_adapter(self) -> ProviderAdapterInterface:
-        if self._adapter is None:
-            ensure_apps_loaded(self.config)
-            provider = (getattr(self.config, "PROVIDER", None) or "").strip().lower()
-            if not provider:
-                providers = getattr(self.config, "PROVIDERS", None) or {}
-                default_cfg = providers.get("default") if isinstance(providers, dict) else None
-                if isinstance(default_cfg, dict):
-                    provider = (default_cfg.get("ENGINE") or default_cfg.get("BACKEND") or "").strip().lower()
-            provider = provider or "lmstudio"
-            factory = get_provider_factory(provider)
-            self._adapter = factory(self.config)
+        if self._adapter is not None:
+            return self._adapter
+            
+        ensure_apps_loaded(self.config)
+        provider = self._get_provider_config()
+        provider = provider or "lmstudio"
+        factory = get_provider_factory(provider)
+        self._adapter = factory(self.config)
         return self._adapter
+        
+    def _get_provider_config(self) -> str:
+        """Get provider configuration with fallback logic."""
+        provider = (getattr(self.config, "PROVIDER", None) or "").strip().lower()
+        if provider:
+            return provider
+            
+        providers = getattr(self.config, "PROVIDERS", None) or {}
+        default_cfg = providers.get("default") if isinstance(providers, dict) else None
+        if isinstance(default_cfg, dict):
+            return (default_cfg.get("ENGINE") or default_cfg.get("BACKEND") or "").strip().lower()
+            
+        return ""
 
     def embeddings(self) -> EmbeddingInterface:
         return self._select_adapter().embeddings()

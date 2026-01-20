@@ -101,6 +101,14 @@ PROFILE_SETTINGS = {
 
 
 def _load_config() -> dict:
+    """Load power manager configuration from JSON file.
+    
+    Loads configuration from data/power_manager.json if it exists, otherwise
+    returns default configuration. Merges existing config with defaults.
+    
+    Returns:
+        dict: Configuration dictionary with defaults for missing values.
+    """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if CONFIG_PATH.exists():
         try:
@@ -113,15 +121,34 @@ def _load_config() -> dict:
 
 
 def _save_config(config: dict) -> None:
+    """Save power manager configuration to JSON file.
+    
+    Saves configuration to data/power_manager.json. Creates directory if needed.
+    
+    Args:
+        config: Configuration dictionary to save.
+    """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     CONFIG_PATH.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _env_path() -> Path:
+    """Get path to .env file in repository root.
+    
+    Returns:
+        Path: Absolute path to .env file.
+    """
     return REPO_ROOT / ".env"
 
 
 def _update_env(updates: dict) -> None:
+    """Update .env file with new key-value pairs.
+    
+    Updates existing keys and adds new ones. Preserves comments and formatting.
+    
+    Args:
+        updates: Dictionary of key-value pairs to update in .env file.
+    """
     env_path = _env_path()
     lines = []
     existing = {}
@@ -158,27 +185,71 @@ def _update_env(updates: dict) -> None:
 
 
 def _run_compose(args: list[str]) -> subprocess.CompletedProcess:
+    """Run podman-compose command with configured compose file.
+    
+    Args:
+        args: List of arguments to pass to podman-compose.
+        
+    Returns:
+        CompletedProcess: Result of the subprocess run.
+    """
     config = _load_config()
     cmd = ["podman-compose", "-f", str(REPO_ROOT / config["compose_file"])] + args
     return subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
 
 
 def _stop_services(services: list[str]) -> dict:
+    """Stop specified services using podman-compose.
+    
+    Args:
+        services: List of service names to stop.
+        
+    Returns:
+        dict: Result dictionary with 'ok' boolean and stdout/stderr.
+    """
     result = _run_compose(["stop"] + services)
     return {"ok": result.returncode == 0, "stdout": result.stdout, "stderr": result.stderr}
 
 
 def _start_services(services: list[str]) -> dict:
+    """Start specified services using podman-compose in detached mode.
+    
+    Args:
+        services: List of service names to start.
+        
+    Returns:
+        dict: Result dictionary with 'ok' boolean and stdout/stderr.
+    """
     result = _run_compose(["up", "-d"] + services)
     return {"ok": result.returncode == 0, "stdout": result.stdout, "stderr": result.stderr}
 
 
 def _recreate_services(services: list[str]) -> dict:
+    """Recreate specified services using podman-compose.
+    
+    Forces recreation of containers with updated environment variables.
+    
+    Args:
+        services: List of service names to recreate.
+        
+    Returns:
+        dict: Result dictionary with 'ok' boolean and stdout/stderr.
+    """
     result = _run_compose(["up", "-d", "--force-recreate"] + services)
     return {"ok": result.returncode == 0, "stdout": result.stdout, "stderr": result.stderr}
 
 
 def _get_active_connections(port: int) -> int:
+    """Get number of active TCP connections on specified port.
+    
+    Uses 'ss' command to count established connections on the given port.
+    
+    Args:
+        port: Port number to check for active connections.
+        
+    Returns:
+        int: Number of active connections, 0 if command fails.
+    """
     cmd = f"ss -Htn state established '( sport = :{port} )'"
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     if result.returncode != 0:
@@ -188,7 +259,14 @@ def _get_active_connections(port: int) -> int:
 
 
 class PowerState:
+    """Thread-safe state manager for power management operations.
+    
+    Tracks configuration, activity timestamps, and service states with
+    proper locking for concurrent access.
+    """
+    
     def __init__(self) -> None:
+        """Initialize power state with current configuration."""
         self.config = _load_config()
         self.last_active = time.time()
         self.last_action = 0.0
@@ -196,19 +274,31 @@ class PowerState:
         self.lock = threading.Lock()
 
     def refresh_config(self) -> None:
+        """Reload configuration from disk (thread-safe)."""
         with self.lock:
             self.config = _load_config()
 
     def set_config(self, updates: dict) -> None:
+        """Update configuration and save to disk (thread-safe).
+        
+        Args:
+            updates: Dictionary of configuration updates to apply.
+        """
         with self.lock:
             self.config.update(updates)
             _save_config(self.config)
 
     def record_activity(self) -> None:
+        """Record current time as last activity (thread-safe)."""
         with self.lock:
             self.last_active = time.time()
 
     def should_suspend(self) -> bool:
+        """Check if services should be suspended due to inactivity.
+        
+        Returns:
+            bool: True if auto-suspend is enabled and idle time exceeds threshold.
+        """
         with self.lock:
             if not self.config.get("auto_suspend_enabled", True):
                 return False
@@ -216,19 +306,35 @@ class PowerState:
             return (time.time() - self.last_active) >= idle_seconds
 
     def set_services_stopped(self, stopped: bool) -> None:
+        """Set whether services are currently stopped (thread-safe).
+        
+        Args:
+            stopped: True if services are stopped, False if running.
+        """
         with self.lock:
             self.services_stopped = stopped
 
     def get_services_stopped(self) -> bool:
+        """Get whether services are currently stopped (thread-safe).
+        
+        Returns:
+            bool: True if services are stopped, False if running.
+        """
         with self.lock:
             return self.services_stopped
 
     def can_run_action(self) -> bool:
+        """Check if an action can be run (respects cooldown).
+        
+        Returns:
+            bool: True if enough time has passed since last action.
+        """
         with self.lock:
             cooldown = int(self.config.get("action_cooldown_seconds", 30))
             return (time.time() - self.last_action) >= cooldown
 
     def mark_action(self) -> None:
+        """Record that an action was just performed (thread-safe)."""
         with self.lock:
             self.last_action = time.time()
 
@@ -338,6 +444,11 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def _monitor_loop() -> None:
+    """Background monitoring loop for power management.
+    
+    Continuously checks for active connections and manages service
+    suspension/resumption based on activity and configuration.
+    """
     while True:
         cfg = _load_config()
         STATE.refresh_config()
@@ -356,6 +467,10 @@ def _monitor_loop() -> None:
 
 
 def main() -> None:
+    """Main entry point for power manager daemon.
+    
+    Starts background monitoring thread and HTTP server for API control.
+    """
     STATE.refresh_config()
     monitor_thread = threading.Thread(target=_monitor_loop, daemon=True)
     monitor_thread.start()

@@ -44,28 +44,13 @@ class ToolMemoryManager:
         doc_id = f"doc#{current_count + 1}"
 
         # Calculate file hash
-        try:
-            with open(input_path, "rb") as f:
-                file_hash = hashlib.sha256(f.read()).hexdigest()[:16]
-        except Exception as e:
-            logger.warning(f"Could not hash file {input_path}: {e}")
-            file_hash = "unknown"
+        file_hash = self._calculate_file_hash(input_path)
 
         # Extract structure from metadata
-        structure = "unknown"
-        if metadata:
-            if "pages" in metadata:
-                structure = f"{metadata['pages']} pages"
-            elif "sheets" in metadata:
-                structure = f"{metadata['sheets']} sheets"
-            elif "files" in metadata:
-                structure = f"{metadata['files']} files"
+        structure = self._extract_structure_from_metadata(metadata)
 
         # Generate auto-summary if not provided
-        if not summary:
-            import os
-            filename = os.path.basename(input_path)
-            summary = f"{tool_name.upper()} processed: {filename}"
+        summary = summary or self._generate_auto_summary(tool_name, input_path)
 
         # Create execution record
         execution: ToolExecution = {
@@ -85,6 +70,38 @@ class ToolMemoryManager:
         )
 
         return execution
+        
+    def _calculate_file_hash(self, input_path: str) -> str:
+        """Calculate file hash for the given input path."""
+        try:
+            with open(input_path, "rb") as f:
+                return hashlib.sha256(f.read()).hexdigest()[:16]
+        except Exception as e:
+            logger.warning(f"Could not hash file {input_path}: {e}")
+            return "unknown"
+            
+    def _extract_structure_from_metadata(self, metadata: Optional[dict]) -> str:
+        """Extract structure information from metadata."""
+        if not metadata:
+            return "unknown"
+            
+        structure_mappings = {
+            "pages": lambda m: f"{m['pages']} pages",
+            "sheets": lambda m: f"{m['sheets']} sheets", 
+            "files": lambda m: f"{m['files']} files"
+        }
+        
+        for key, formatter in structure_mappings.items():
+            if key in metadata:
+                return formatter(metadata)
+                
+        return "unknown"
+        
+    def _generate_auto_summary(self, tool_name: str, input_path: str) -> str:
+        """Generate automatic summary for tool execution."""
+        import os
+        filename = os.path.basename(input_path)
+        return f"{tool_name.upper()} processed: {filename}"
 
     def get_tool_reference(
         self,
@@ -114,51 +131,60 @@ class ToolMemoryManager:
 
         # Direct doc_id reference
         if query_lower.startswith("doc#"):
-            for exec in executions:
-                if exec["doc_id"] == query_lower:
-                    return exec
+            return self._find_execution_by_doc_id(executions, query_lower)
 
-        # "the document" / "the last document" - most recent
-        if "document" in query_lower or "file" in query_lower:
-            if "last" in query_lower or "latest" in query_lower or query_lower == "the document":
-                return executions[-1]
-
-        # "the Excel" / "the spreadsheet"
-        if "excel" in query_lower or "spreadsheet" in query_lower or ".xlsx" in query_lower:
-            for exec in reversed(executions):
-                if exec["file_path"].lower().endswith((".xlsx", ".xls", ".xlsm")):
-                    return exec
-
-        # "the PDF"
-        if "pdf" in query_lower:
-            for exec in reversed(executions):
-                if exec["file_path"].lower().endswith(".pdf"):
-                    return exec
-
-        # "the Word document" / "the DOCX"
-        if "word" in query_lower or "docx" in query_lower or ".docx" in query_lower:
-            for exec in reversed(executions):
-                if exec["file_path"].lower().endswith((".docx", ".doc")):
-                    return exec
-
-        # "the archive" / "the ZIP"
-        if "archive" in query_lower or "zip" in query_lower:
-            for exec in reversed(executions):
-                if exec["tool"] == "archive":
-                    return exec
-
-        # "the OCR" / "the scan"
-        if "ocr" in query_lower or "scan" in query_lower:
-            for exec in reversed(executions):
-                if exec["tool"] == "ocr":
-                    return exec
-
-        # "the first" - first execution
-        if "first" in query_lower:
-            return executions[0]
+        # Use lookup table for different query types
+        query_handlers = {
+            "document": lambda: self._handle_document_reference(executions, query_lower),
+            "file": lambda: self._handle_document_reference(executions, query_lower),
+            "excel": lambda: self._find_by_file_extension(executions, [".xlsx", ".xls", ".xlsm"]),
+            "spreadsheet": lambda: self._find_by_file_extension(executions, [".xlsx", ".xls", ".xlsm"]),
+            "pdf": lambda: self._find_by_file_extension(executions, [".pdf"]),
+            "word": lambda: self._find_by_file_extension(executions, [".docx", ".doc"]),
+            "docx": lambda: self._find_by_file_extension(executions, [".docx", ".doc"]),
+            "archive": lambda: self._find_by_tool_type(executions, "archive"),
+            "zip": lambda: self._find_by_tool_type(executions, "archive"),
+            "ocr": lambda: self._find_by_tool_type(executions, "ocr"),
+            "scan": lambda: self._find_by_tool_type(executions, "ocr"),
+            "first": lambda: executions[0] if executions else None,
+        }
+        
+        # Check for specific query types
+        for key, handler in query_handlers.items():
+            if key in query_lower:
+                result = handler()
+                if result:
+                    return result
 
         # Default: return most recent
         return executions[-1] if executions else None
+        
+    def _find_execution_by_doc_id(self, executions: list, doc_id: str) -> Optional[ToolExecution]:
+        """Find execution by document ID."""
+        for exec in executions:
+            if exec["doc_id"] == doc_id:
+                return exec
+        return None
+        
+    def _handle_document_reference(self, executions: list, query: str) -> Optional[ToolExecution]:
+        """Handle document/file references."""
+        if "last" in query or "latest" in query or query == "the document":
+            return executions[-1] if executions else None
+        return None
+        
+    def _find_by_file_extension(self, executions: list, extensions: list) -> Optional[ToolExecution]:
+        """Find execution by file extension."""
+        for exec in reversed(executions):
+            if any(exec["file_path"].lower().endswith(ext) for ext in extensions):
+                return exec
+        return None
+        
+    def _find_by_tool_type(self, executions: list, tool_type: str) -> Optional[ToolExecution]:
+        """Find execution by tool type."""
+        for exec in reversed(executions):
+            if exec["tool"] == tool_type:
+                return exec
+        return None
 
     def format_tool_memory(
         self,

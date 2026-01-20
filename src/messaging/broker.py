@@ -50,11 +50,15 @@ class RabbitMQBroker(MessageBroker):
             logger.info("RabbitMQ is disabled, skipping connection")
             return
             
+        # Try to import aio_pika
         try:
-            # Try to import aio_pika
             import aio_pika
             from aio_pika import ExchangeType
+        except ImportError:
+            logger.error("aio_pika is not installed. Please install it with: pip install aio-pika")
+            return
             
+        try:
             # Create connection
             self.connection = await aio_pika.connect_robust(
                 host=config.host,
@@ -80,8 +84,6 @@ class RabbitMQBroker(MessageBroker):
             
             logger.info("Connected to RabbitMQ successfully")
             
-        except ImportError:
-            logger.error("aio_pika is not installed. Please install it with: pip install aio-pika")
         except Exception as e:
             logger.error(f"Failed to connect to RabbitMQ: {e}")
             raise
@@ -171,6 +173,30 @@ class RabbitMQBroker(MessageBroker):
         await self.queues["notification"].bind(
             exchange=self.exchanges["fanout"]
         )
+
+    def _get_exchange_info(self, queue: str, message: MessageModel) -> Optional[tuple]:
+        """Get exchange and routing key info for a queue."""
+        queue_mappings = {
+            config.redis_queue: (self.exchanges["direct"], f"redis.{message.payload.operation}"),
+            config.document_queue: (self.exchanges["topic"], f"document.{message.payload.operation}"),
+            config.vector_queue: (self.exchanges["topic"], f"vector.{message.payload.operation}"),
+            config.notification_queue: (self.exchanges["fanout"], ""),
+        }
+        return queue_mappings.get(queue)
+
+    def _get_queue(self, queue: str):
+        """Get queue instance by name."""
+        queue_mappings = {
+            config.redis_queue: self.queues["redis"],
+            config.document_queue: self.queues["document"],
+            config.vector_queue: self.queues["vector"],
+            config.notification_queue: self.queues["notification"],
+        }
+        return queue_mappings.get(queue)
+
+    def _is_successful_result(self, result: any) -> bool:
+        """Check if result indicates successful processing."""
+        return bool(result and isinstance(result, dict) and result.get("success"))
     
     async def publish(self, queue: str, message: MessageModel) -> bool:
         """Publish a message to a queue."""
@@ -185,20 +211,11 @@ class RabbitMQBroker(MessageBroker):
             message_data = json.dumps(message.to_dict())
             
             # Determine exchange and routing key based on queue
-            if queue == config.redis_queue:
-                exchange = self.exchanges["direct"]
-                routing_key = f"redis.{message.payload.operation}"
-            elif queue == config.document_queue:
-                exchange = self.exchanges["topic"]
-                routing_key = f"document.{message.payload.operation}"
-            elif queue == config.vector_queue:
-                exchange = self.exchanges["topic"]
-                routing_key = f"vector.{message.payload.operation}"
-            elif queue == config.notification_queue:
-                exchange = self.exchanges["fanout"]
-                routing_key = ""
-            else:
+            exchange_info = self._get_exchange_info(queue, message)
+            if not exchange_info:
                 raise ValueError(f"Unknown queue: {queue}")
+            
+            exchange, routing_key = exchange_info
             
             # Create RabbitMQ message
             rabbitmq_message = Message(
@@ -235,15 +252,8 @@ class RabbitMQBroker(MessageBroker):
             
         try:
             # Get queue
-            if queue == config.redis_queue:
-                rabbitmq_queue = self.queues["redis"]
-            elif queue == config.document_queue:
-                rabbitmq_queue = self.queues["document"]
-            elif queue == config.vector_queue:
-                rabbitmq_queue = self.queues["vector"]
-            elif queue == config.notification_queue:
-                rabbitmq_queue = self.queues["notification"]
-            else:
+            rabbitmq_queue = self._get_queue(queue)
+            if not rabbitmq_queue:
                 raise ValueError(f"Unknown queue: {queue}")
             
             # Start consuming
@@ -259,7 +269,7 @@ class RabbitMQBroker(MessageBroker):
                             result = await callback(message)
                             
                             # Handle result
-                            if result and isinstance(result, dict) and result.get("success"):
+                            if self._is_successful_result(result):
                                 logger.debug(f"Processed message {message.message_id} successfully")
                             else:
                                 logger.warning(f"Message {message.message_id} processing failed")
