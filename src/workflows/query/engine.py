@@ -132,15 +132,6 @@ class AppConfig(BaseSettings):
     EMBEDDING_DIM: int = Field(default_factory=lambda: settings.EMBEDDING_DIM)
     EMBEDDING_MAX_TOKENS: int = Field(default_factory=lambda: settings.EMBEDDING_MAX_TOKENS)
 
-    # Dual Embeddings System
-    ENABLE_DUAL_EMBEDDINGS: bool = Field(default_factory=lambda: settings.ENABLE_DUAL_EMBEDDINGS)
-    SMALL_EMBEDDING_MODEL: str = Field(default_factory=lambda: settings.SMALL_EMBEDDING_MODEL)
-    LARGE_EMBEDDING_MODEL: str = Field(default_factory=lambda: settings.LARGE_EMBEDDING_MODEL)
-    SMALL_EMBEDDING_DIM: int = Field(default_factory=lambda: settings.SMALL_EMBEDDING_DIM)
-    LARGE_EMBEDDING_DIM: int = Field(default_factory=lambda: settings.LARGE_EMBEDDING_DIM)
-    DUAL_EMBEDDINGS_SMALL_COLLECTION: str = Field(default_factory=lambda: settings.DUAL_EMBEDDINGS_SMALL_COLLECTION)
-    DUAL_EMBEDDINGS_LARGE_COLLECTION: str = Field(default_factory=lambda: settings.DUAL_EMBEDDINGS_LARGE_COLLECTION)
-
     # ===== RAG Configuration =====
     ENABLE_RAG_GATING: bool = Field(default_factory=lambda: settings.ENABLE_RAG_GATING)
     MIN_RELEVANCE_SCORE: float = Field(default_factory=lambda: settings.MIN_RELEVANCE_SCORE)
