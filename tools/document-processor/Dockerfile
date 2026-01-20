@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-calc \
     libreoffice-impress \
     libreoffice-core \
+    # Java for LibreOffice
+    default-jre-headless \
     # Shared dependencies (PDF utilities)
     poppler-utils \
     && apt-get clean \
@@ -38,10 +40,16 @@ USER tooluser
 
 ENV PORT=8000
 ENV WORK_DIR=/tmp/rag-work
+ENV HOME=/home/tooluser
+ENV XDG_RUNTIME_DIR=/tmp/runtime-tooluser
+ENV JAVALD_LIBRARY_PATH=/usr/lib/libreoffice/program
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/healthz', timeout=2)" || exit 1
 
-CMD ["python", "-m", "uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Initialize LibreOffice profile and create runtime directory
+CMD mkdir -p /tmp/runtime-tooluser && chmod 700 /tmp/runtime-tooluser && \
+    libreoffice --headless --terminate_after_init && \
+    python -m uvicorn src.app:app --host 0.0.0.0 --port 8000

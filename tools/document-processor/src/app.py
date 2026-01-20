@@ -430,21 +430,25 @@ async def _pdf_to_images(
 # ============================================================================
 
 def _libreoffice_error_message(return_code: int, input_path: Path) -> str:
+    diagnostic = ""
     if return_code == 1:
-        return (
-            "LibreOffice exit code 1: General error. File may be corrupted, encrypted, "
-            f"or unsupported. File: {input_path}"
-        )
-    if return_code == 5:
-        return f"LibreOffice exit code 5: Memory allocation failure. File may be too large: {input_path}"
-    if return_code == 6:
-        return f"LibreOffice exit code 6: I/O error. Check file permissions: {input_path}"
-    if return_code == 137:
-        return (
-            "LibreOffice exit code 137: Process killed (likely OOM). "
-            f"Try increasing memory limits. File: {input_path}"
-        )
-    return f"LibreOffice exited with code {return_code}. File: {input_path}"
+        # Check common problems
+        if not input_path.exists():
+            diagnostic = f"ERROR: File does not exist ({input_path})"
+        elif os.access(input_path, os.R_OK) is False:
+            diagnostic = f"ERROR: Insufficient permissions ({input_path})"
+        else:
+            diagnostic = "ERROR: General failure (possible environment issue)"
+    elif return_code == 5:
+        diagnostic = f"ERROR: Memory allocation failure. File too large: {input_path}"
+    elif return_code == 6:
+        diagnostic = f"ERROR: I/O error. Check permissions: {input_path}"
+    elif return_code == 137:
+        diagnostic = f"ERROR: Process terminated (likely OOM). Increase memory limits: {input_path}"
+    else:
+        diagnostic = f"ERROR: Unknown exit code: {return_code}"
+    
+    return f"{diagnostic} | Code: {return_code} | File: {input_path}"
 
 
 async def _convert_to_pdf(input_path: Path, output_path: Path) -> dict:
@@ -577,39 +581,60 @@ async def _convert_to_text_direct_libreoffice(input_path: Path, output_path: Pat
         str(input_path),
     ]
 
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate()
+    # Smart retry protocol (3 attempts)
+    for attempt in range(3):
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
 
-        generated_txt = output_path.parent / f"{input_path.stem}.txt"
-        if generated_txt.exists() and generated_txt != output_path:
-            if output_path.exists():
-                output_path.unlink()
-            generated_txt.rename(output_path)
+            generated_txt = output_path.parent / f"{input_path.stem}.txt"
+            if generated_txt.exists() and generated_txt != output_path:
+                if output_path.exists():
+                    output_path.unlink()
+                generated_txt.rename(output_path)
 
-        success = proc.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0
+            success = proc.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0
 
-        error_msg = None
-        if not success:
-            error_msg = _libreoffice_error_message(proc.returncode, input_path)
-            error_msg = f"LibreOffice direct text export failed. {error_msg}"
+            if success:
+                return {
+                    "success": True,
+                    "stdout": stdout.decode("utf-8", errors="replace"),
+                    "stderr": stderr.decode("utf-8", errors="replace"),
+                    "error": None,
+                }
+            
+            # If it fails, wait progressively before retrying
+            if attempt < 2:  # Don't wait after the last attempt
+                await asyncio.sleep(2 ** attempt)  # Exponential wait: 1s, 2s
+                continue
+                
+            # Last attempt failed, generate error message
+            error_msg = _libreoffice_error_message(proc.returncode or 1, input_path)
+            return {
+                "success": False,
+                "stdout": stdout.decode("utf-8", errors="replace"),
+                "stderr": stderr.decode("utf-8", errors="replace"),
+                "error": f"LibreOffice direct text export failed (3 attempts). {error_msg}",
+            }
 
-        return {
-            "success": success,
-            "stdout": stdout.decode("utf-8", errors="replace"),
-            "stderr": stderr.decode("utf-8", errors="replace"),
-            "error": error_msg,
-        }
-
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-        }
+        except Exception as e:
+            if attempt < 2:
+                await asyncio.sleep(2 ** attempt)
+                continue
+            return {
+                "success": False,
+                "error": f"Unexpected error after 3 attempts: {str(e)}",
+            }
+    
+    # Should never reach here, but for safety
+    return {
+        "success": False,
+        "error": "Retry protocol exhausted without success",
+    }
 
 
 async def _convert_spreadsheet_to_text(input_path: Path, output_path: Path) -> dict:
