@@ -15,7 +15,7 @@ def test_config_merges_default_env_and_file(tmp_path, monkeypatch):
     ignore_file = tmp_path / ".ingestignore"
     ignore_file.write_text(
         """
-        # comentarios deben ignorarse
+        # comments should be ignored
         custom-dir
         logs/**
         *.cache

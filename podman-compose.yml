@@ -85,19 +85,31 @@ services:
     restart: "no"
     logging:
       driver: journald
-    # AOF persistence with 1-day session TTL
+    # AOF + RDB persistence with memory limits and eviction policy
+    # - maxmemory 1.2gb: Set memory limit to 1.2GB
+    # - maxmemory-policy allkeys-lru: Evict least recently used keys when memory limit is reached
     # - appendonly yes: Enable AOF (Append-Only File) for durability
     # - appendfsync everysec: Fsync every second (balance durability/performance)
-    # - save "": Disable RDB snapshots (AOF is enough for sessions)
+    # - save 900 1: Save RDB snapshot if at least 1 key changed in 900 seconds (15 minutes)
+    # - save 300 10: Save RDB snapshot if at least 10 keys changed in 300 seconds (5 minutes)
+    # - save 60 10000: Save RDB snapshot if at least 10000 keys changed in 60 seconds
     # - requirepass: Enforce authentication on all connections
     command:
       - redis-server
+      - --maxmemory
+      - "1228m"
+      - --maxmemory-policy
+      - "allkeys-lru"
       - --appendonly
       - "yes"
       - --appendfsync
       - "everysec"
       - --save
-      - ""
+      - "900 1"
+      - --save
+      - "300 10"
+      - --save
+      - "60 10000"
       - --requirepass
       - "${REDIS_PASSWORD:-change-me-redis}"
       - --bind
@@ -249,8 +261,8 @@ services:
       OPENAI_API_KEY: "${OPENAI_API_KEY:-lm-studio}"
 
       MODEL_SELECTION: "${MODEL_SELECTION:-first-active}"
-      LMSTUDIO_CHAT_MODEL: "${LMSTUDIO_CHAT_MODEL:-}"
-      LMSTUDIO_EMBED_MODEL: "${LMSTUDIO_EMBED_MODEL:-}"
+      LMSTUDIO_CHAT_MODEL: "${LMSTUDIO_CHAT_MODEL:-liquid/lfm2-1.2b}"
+      LMSTUDIO_EMBED_MODEL: "${LMSTUDIO_EMBED_MODEL:-text-embedding-nomic-embed-text-v2-moe}"
 
       DOCS_PATH: "${DOCS_PATH:-/mnt/Documents/Documents}"
       CHUNK_SIZE: "${CHUNK_SIZE:-500}"

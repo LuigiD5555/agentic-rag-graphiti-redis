@@ -316,16 +316,16 @@ class RAGOrchestrator:
                 if web_results:
                     log.info("Web search returned %d results", len(web_results))
 
-                    # Fusión: Combinar resultados locales + web
+                    # Fusion: Combine local + web results
                     if retrieved_docs:
-                        # Fusionar: priorizar docs locales, agregar web como suplemento
+                        # Fusion: prioritize local docs, add web as supplement
                         retrieved_docs = retrieved_docs + web_results
                         log.info(
                             "Fused local (%d) + web (%d) = %d total results",
                             len(kb_results), len(web_results), len(retrieved_docs)
                         )
                     else:
-                        # Reemplazar: solo usar web si no hay docs locales
+                        # Replace: use only web if no local docs
                         retrieved_docs = web_results
                         log.info("Using only web results (%d)", len(web_results))
                 else:
@@ -415,8 +415,8 @@ class RAGOrchestrator:
                 # PERSONAL_KB: inform user that no relevant documents were found
                 log.info("PERSONAL_KB: No relevant documents found (max score=%.3f)", max_score)
                 answer = (
-                    "No encontré información relevante en tus documentos para responder esta pregunta. "
-                    "Verifica que los documentos estén indexados correctamente o proporciona más contexto."
+                    "I couldn't find relevant information in your documents to answer this question. "
+                    "Please verify that the documents are indexed correctly or provide more context."
                 )
 
                 return {
@@ -455,8 +455,8 @@ class RAGOrchestrator:
         # (when no local docs were useful and we got results from web)
         if used_web_search and len(kb_results) == 0 and len(web_results) > 0:
             answer = (
-                "No encontre informacion relevante en tus documentos, "
-                "pero busque en internet y encontre lo siguiente:\n\n"
+                "I couldn't find relevant information in your documents, "
+                "but I searched online and found the following:\n\n"
                 + answer
             )
             log.info("Added web search fallback prefix to answer")
