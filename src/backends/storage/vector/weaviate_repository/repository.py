@@ -332,6 +332,46 @@ class WeaviateRepository:
         uuid_id = self._normalize_uuid(point_id)
         return bool(coll.data.exists(uuid=uuid_id))
 
+    @logged("Batch checking existence in Weaviate")
+    @timed()
+    def batch_exists(
+        self,
+        point_ids: List[str],
+        tenant_id: Optional[str] = None,
+    ) -> Dict[str, bool]:
+        """
+        Check existence of multiple records in batch.
+        
+        Args:
+            point_ids: List of point IDs to check
+            tenant_id: Optional tenant ID
+            
+        Returns:
+            Dict mapping point_id -> exists (True/False)
+        """
+        if not point_ids:
+            return {}
+        
+        coll = self._coll(tenant_id)
+        results = {}
+        
+        # Process in batches to avoid overwhelming Weaviate
+        batch_size = 100
+        for i in range(0, len(point_ids), batch_size):
+            batch = point_ids[i:i + batch_size]
+            
+            # Check each ID in the batch
+            for point_id in batch:
+                uuid_id = self._normalize_uuid(point_id)
+                try:
+                    exists = bool(coll.data.exists(uuid=uuid_id))
+                    results[point_id] = exists
+                except Exception as e:
+                    logger.warning("Error checking existence for %s: %s", point_id, e)
+                    results[point_id] = False
+        
+        return results
+
     @staticmethod
     def _normalize_uuid(value: Any) -> str:
         import uuid
