@@ -19,6 +19,12 @@ from .splitters import SplitterStrategy, build_text_splitter
 from .state_helpers import finalize_ingestion_run, record_directory_listing
 from src.utils.text import effective_limit
 
+# Importaciones para type hints de nuevos componentes
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from src.workflows.ingestion.resource_pools import IngestionPools
+    from src.workflows.ingestion.idempotency import IdempotencyManager
+
 
 CATALOG_PATH = os.environ.get(
     "INGESTION_CATALOG_PATH",
@@ -48,6 +54,10 @@ class IngestionPipeline:
         # Checkpoint components for resumable ingestion
         self.ingest_queue = ingest_queue
         self.chunk_registry = chunk_registry
+
+        # Nuevos componentes de optimización
+        self.resource_pools = None
+        self.idempotency_manager = None
 
         self.owner_id = options.owner_id
         self.visibility = options.visibility
