@@ -8,9 +8,6 @@ OnFailure=tool-alert@%n.service
 [Service]
 Type=simple
 
-# Guard: only start tools when RAG API is initialized
-ExecStartPre=/usr/bin/bash -c 'curl -fsS http://127.0.0.1:8000/health | grep -q "\"rag_initialized\": true"'
-
 # 1) Clean up any previous container
 ExecStartPre=/usr/bin/podman rm -f rag-tool-websearch
 

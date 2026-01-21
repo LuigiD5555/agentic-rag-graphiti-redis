@@ -1,0 +1,47 @@
+[Unit]
+Description=RAG Tool Open WebUI (container)
+Documentation=https://github.com/LuigiD5555/agentic-rag-graphiti-redis
+After=network-online.target
+Wants=network-online.target
+OnFailure=tool-alert@%n.service
+
+[Service]
+Type=simple
+
+# 1) Clean up any previous container
+ExecStartPre=/usr/bin/podman rm -f rag-tool-ui
+
+# 2) Start the container (Open WebUI on port 5555)
+ExecStartPre=/usr/bin/podman run -d --name rag-tool-ui \
+  --pull=never \
+  --memory=1g \
+  --cpus=0.5 \
+  -p 127.0.0.1:5555:8080 \
+  --security-opt=no-new-privileges \
+  --cap-drop=all \
+  --read-only \
+  --tmpfs /tmp \
+  -v %h/.cache/rag-tools/webui:/app/backend/data:rw \
+  -e OPENAI_API_BASE_URL="http://127.0.0.1:8000/v1" \
+  -e OPENAI_API_KEY="not-needed" \
+  localhost/open-webui-local:main-slim
+
+# 3) Wait for container to be ready (healthcheck)
+ExecStartPre=/usr/bin/bash -c 'for i in {1..60}; do curl -fsS http://127.0.0.1:5555/health && exit 0; sleep 0.2; done; exit 1'
+
+# 4) Keep container running
+ExecStart=/usr/bin/sleep infinity
+
+# Stop the container when service stops
+ExecStop=/usr/bin/podman stop -t 10 rag-tool-ui
+ExecStopPost=/usr/bin/podman rm -f rag-tool-ui
+
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=5
+TimeoutStartSec=120
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

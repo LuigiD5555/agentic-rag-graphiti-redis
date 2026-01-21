@@ -112,6 +112,12 @@ fi
 
 print_step "Stopping systemd tool sockets/services (if available)..."
 if command -v systemctl >/dev/null 2>&1; then
+    # Stop Open WebUI service
+    systemctl --user stop rag-tool-ui.service 2>/dev/null || true
+    systemctl --user disable rag-tool-ui.service 2>/dev/null || true
+    systemctl --user reset-failed rag-tool-ui.service 2>/dev/null || true
+    
+    # Stop tool sockets and services
     TOOLS=(
         document-processor
         extractor
@@ -147,11 +153,22 @@ if [ -n "$extra_ids" ]; then
 fi
 
 print_step "Removing tool containers (if present)..."
-for tool in rag-tool-document-processor rag-tool-extractor rag-tool-websearch rag-tool-ocr rag-tool-archive; do
+for tool in rag-tool-document-processor rag-tool-extractor rag-tool-websearch rag-tool-ocr rag-tool-archive rag-tool-ui; do
     if podman ps -a --format "{{.Names}}" | grep -q "^${tool}$"; then
         podman rm -f "$tool" || true
     fi
 done
+
+print_step "Checking for orphaned processes..."
+# Kill any remaining processes that might be related to the project
+if command -v pkill >/dev/null 2>&1; then
+    # Look for processes with project-related names
+    for proc_name in weaviate neo4j redis rabbitmq rag-agentic open-webui; do
+        pkill -f "$proc_name" 2>/dev/null || true
+    done
+    # Give processes time to terminate
+    sleep 2
+fi
 
 print_step "Removing project pods (if present)..."
 pod_ids="$(podman pod ps --format "{{.Id}} {{.Name}}" | awk -v p="$name_prefix" '$2 ~ "^"p {print $1}' || true)"

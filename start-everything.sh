@@ -301,13 +301,39 @@ fi
 
 print_step "Waiting for services to initialize..."
 sleep 10
+
+# ============================================================================
+# STEP 5.5: START TOOL SERVICES
+# ============================================================================
+
+print_header "STEP 5.5: Starting Tool Services"
+
+print_step "Starting tool services via systemd..."
+if command -v systemctl >/dev/null 2>&1; then
+    # Start Open WebUI service (independent)
+    if [ -f "/home/luiginorp/.config/systemd/user/rag-tool-ui.service" ]; then
+        print_step "Starting Open WebUI service..."
+        systemctl --user daemon-reload
+        systemctl --user enable --now rag-tool-ui.service || print_warning "Failed to start rag-tool-ui.service"
+    fi
+    
+    # Start tool sockets (will activate services on-demand)
+    print_step "Starting tool sockets..."
+    systemctl --user daemon-reload
+    systemctl --user enable --now tool-extractor.socket || print_warning "Failed to start tool-extractor.socket"
+    systemctl --user enable --now tool-document-processor.socket || print_warning "Failed to start tool-document-processor.socket"
+    systemctl --user enable --now tool-websearch.socket || print_warning "Failed to start tool-websearch.socket"
+    
+    print_success "Tool services configured"
+else
+    print_warning "systemctl not available; tool services must be started manually"
 fi
 
 # ============================================================================
-# STEP 5.5: OPTIONAL DEBUG CONTAINER
+# STEP 5.6: OPTIONAL DEBUG CONTAINER
 # ============================================================================
 
-print_header "STEP 5.5: Optional Debug Container"
+print_header "STEP 5.6: Optional Debug Container"
 
 DEBUG_COMPOSE_FILE="tools/debug/podman-compose.debug.yml"
 if [ -f "$DEBUG_COMPOSE_FILE" ]; then
