@@ -267,15 +267,15 @@ if podman ps | grep -q "weaviate\|neo4j\|redis\|app\|open-webui\|monitoring"; th
             print_info "open-webui service not available (profile not enabled)"
         fi
 
-print_step "Starting all services..."
-if podman-compose config --services | grep -q "open-webui"; then
-    podman-compose --profile webui up -d
-else
-    podman-compose up -d
-fi
+        print_step "Starting all services..."
+        if podman-compose config --services | grep -q "open-webui"; then
+            podman-compose --profile webui up -d
+        else
+            podman-compose up -d
+        fi
 
-print_step "Waiting for services to initialize..."
-sleep 10
+        print_step "Waiting for services to initialize..."
+        sleep 10
     else
         print_info "Using existing services"
     fi
@@ -299,15 +299,16 @@ else
         print_info "open-webui service not available (profile not enabled)"
     fi
 
-print_step "Starting all services (Weaviate, Neo4j, Redis, App, Open WebUI, Monitoring, RabbitMQ)..."
-if podman-compose config --services | grep -q "open-webui"; then
-    podman-compose --profile webui up -d
-else
-    podman-compose up -d
-fi
+    print_step "Starting all services (Weaviate, Neo4j, Redis, App, Open WebUI, Monitoring, RabbitMQ)..."
+    if podman-compose config --services | grep -q "open-webui"; then
+        podman-compose --profile webui up -d
+    else
+        podman-compose up -d
+    fi
 
-print_step "Waiting for services to initialize..."
-sleep 10
+    print_step "Waiting for services to initialize..."
+    sleep 10
+fi
 
 # ============================================================================
 # STEP 5.5: START TOOL SERVICES
