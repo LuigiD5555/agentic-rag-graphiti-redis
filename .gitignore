@@ -108,6 +108,7 @@ build/
 # Other
 # -----------------------------
 ~$*
+tools/generate_try_except_report.py
 
 # -----------------------------
 # Node / Frontend
