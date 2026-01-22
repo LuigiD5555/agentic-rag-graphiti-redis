@@ -379,6 +379,23 @@ WEAVIATE_HNSW_EF_CONSTRUCTION = int(os.getenv("WEAVIATE_HNSW_EF_CONSTRUCTION", "
 WEAVIATE_HNSW_MAX_CONNECTIONS = int(os.getenv("WEAVIATE_HNSW_MAX_CONNECTIONS", "32"))
 WEAVIATE_HNSW_DISTANCE_METRIC = os.getenv("WEAVIATE_HNSW_DISTANCE_METRIC", "cosine")
 
+# ===== Observability and Monitoring =====
+# Disable progress bars in container mode to reduce log noise
+DISABLE_PROGRESS_BARS = os.getenv("DISABLE_PROGRESS_BARS", "false").strip().lower() == "true"
+
+# Heartbeat tracking for container health monitoring
+HEARTBEAT_ENABLED = os.getenv("HEARTBEAT_ENABLED", "true").strip().lower() == "true"
+HEARTBEAT_INTERVAL = int(os.getenv("HEARTBEAT_INTERVAL", "30"))  # seconds
+HEARTBEAT_KEY_PREFIX = "heartbeat:"
+
+# Metrics collection
+ENABLE_METRICS = os.getenv("ENABLE_METRICS", "true").strip().lower() == "true"
+METRICS_PREFIX = "rag:metrics:"
+
+# Logging configuration for containers
+CONTAINER_LOG_LEVEL = os.getenv("CONTAINER_LOG_LEVEL", "INFO")
+JSON_LOGGING = os.getenv("JSON_LOGGING", "false").strip().lower() == "true"
+
 # If provided (via user settings JSON), this list REPLACES _DEFAULT_EXCLUDED_FILES.
 # GUI can manage this list to fully control fast-prune directory basenames.
 DOCS_EXCLUDE_DIRS_BUILTINS_OVERRIDE = None

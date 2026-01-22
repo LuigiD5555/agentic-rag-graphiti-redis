@@ -22,18 +22,15 @@ How it works:
 """Auto-scan scheduler for periodic ingestion scans."""
 import argparse
 import asyncio
-import os
-import sys
 import time
 from datetime import datetime
-from typing import Optional
 
-from src.workflows.query.audit import get_logger
-from src.workflows.ingestion.options import IngestionOptions
-from src.workflows.ingestion.orchestrator import IngestionOrchestrator
-from src.workflows.ingestion.helpers import build_ingestion_options_from_args
+import redis
 from src.backends.storage.cache.ingestion.manager import IngestionCacheManager
 from src.conf import settings as runtime_settings
+from src.workflows.ingestion.helpers import build_ingestion_options_from_args
+from src.workflows.ingestion.orchestrator import IngestionOrchestrator
+from src.workflows.query.audit import get_logger
 
 logger = get_logger(__name__)
 
@@ -50,14 +47,30 @@ class AutoScanScheduler:
         """
         self.config = config
         self.orchestrator = IngestionOrchestrator(config)
-        if hasattr(config, "model_dump"):
-            settings_dict = config.model_dump()
-        else:
+        
+        # Extract settings dictionary from config object
+        settings_dict = {}
+        try:
+            # Try to get settings as dictionary
+            if hasattr(config, "model_dump"):
+                settings_dict = config.model_dump()
+            elif hasattr(config, "dict"):
+                settings_dict = config.dict()
+            else:
+                # Fallback: get all non-private attributes
+                settings_dict = {
+                    k: getattr(config, k)
+                    for k in dir(config)
+                    if not k.startswith("_") and not callable(getattr(config, k))
+                }
+        except Exception:
+            # If all else fails, create minimal settings
             settings_dict = {
-                k: getattr(config, k)
-                for k in dir(config)
-                if not k.startswith("_")
+                "REDIS_HOST": getattr(config, "REDIS_HOST", "127.0.0.1"),
+                "REDIS_PORT": getattr(config, "REDIS_PORT", 6379),
+                "REDIS_PASSWORD": getattr(config, "REDIS_PASSWORD", None),
             }
+        
         self.cache_manager = IngestionCacheManager.from_settings(settings_dict)
 
         # Scheduler configuration
@@ -164,6 +177,42 @@ async def main() -> None:
     """Entry point for running the scheduler."""
     scheduler = AutoScanScheduler(runtime_settings)
     await scheduler.run()
+
+
+def check_health() -> bool:
+    """
+    Health check function for container healthchecks.
+    
+    Returns:
+        True if the scheduler is healthy, False otherwise.
+    """
+    try:
+        # Check if Redis is accessible (basic dependency check)
+        redis_host = getattr(runtime_settings, "REDIS_HOST", "127.0.0.1")
+        redis_port = getattr(runtime_settings, "REDIS_PORT", 6379)
+        redis_password = getattr(runtime_settings, "REDIS_PASSWORD", None)
+        
+        client = redis.Redis(
+            host=redis_host,
+            port=redis_port,
+            password=redis_password,
+            socket_connect_timeout=5,
+            socket_timeout=5
+        )
+        
+        # Test Redis connection
+        client.ping()
+        
+        # Check if we can access the last scan timestamp in Redis
+        last_scan_key = "autoscan:last_heartbeat"
+        client.setex(last_scan_key, 120, int(time.time()))  # 2 minute TTL
+        
+        logger.debug("Health check passed")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return False
 
 
 if __name__ == "__main__":

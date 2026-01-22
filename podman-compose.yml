@@ -8,7 +8,7 @@ services:
   weaviate:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_weaviate_1"
     image: "docker.io/semitechnologies/weaviate:${WEAVIATE_IMAGE_TAG:?WEAVIATE_IMAGE_TAG is required}"
-    restart: "no"
+    restart: "unless-stopped"
     logging:
       driver: journald
     # Bind ONLY to localhost so it's not exposed to LAN
@@ -82,7 +82,7 @@ services:
   redis:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_redis_1"
     image: "docker.io/library/redis:${REDIS_IMAGE_TAG:?REDIS_IMAGE_TAG is required}"
-    restart: "no"
+    restart: "unless-stopped"
     logging:
       driver: journald
     # AOF + RDB persistence with memory limits and eviction policy
@@ -220,7 +220,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: development
-    restart: "no"
+    restart: "unless-stopped"
     logging:
       driver: journald
     depends_on:
@@ -333,7 +333,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runtime
-    restart: "no"
+    restart: "unless-stopped"
     logging:
       driver: journald
     depends_on:
@@ -366,6 +366,12 @@ services:
       - ./src:/app/src:ro,Z
       - ./tests:/app/tests:ro,Z
     command: ["python", "-m", "src.workflows.ingestion.auto_scan.scheduler"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, sys; sys.path.insert(0, '/app'); from src.workflows.ingestion.auto_scan.scheduler import check_health; exit(0 if check_health() else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     stop_grace_period: 20s
     ulimits:
       nofile: { soft: 65536, hard: 65536 }
@@ -380,7 +386,7 @@ services:
     build:
       context: .
       dockerfile: tools/monitoring/Dockerfile
-    restart: "no"
+    restart: "unless-stopped"
     logging:
       driver: journald
     depends_on:

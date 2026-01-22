@@ -1,359 +1,338 @@
+# src/workflows/ingestion/wave_planner.py
 """
-Wave Planner - Fase 3 del plan de optimización
+Wave planning and execution utilities for ingestion workflows.
 
-Implementa el concepto de "waves" (olas) para procesar datasets en lotes acotados por peso,
-evitando explosiones de backlog y saturación de recursos.
+This module provides:
+- A WavePlan data structure.
+- A WavePlanner for splitting candidates into waves based on size/count heuristics.
+- A WaveOrchestrator that executes waves using a pluggable strategy.
+
+The code is defensive about the strategy return types:
+some phases may naturally return a list (e.g., list of processed records),
+while other phases return dictionaries with structured metadata. The orchestrator
+normalizes these results so downstream code can safely summarize progress.
 """
 
 from dataclasses import dataclass
-import os
-from pathlib import Path
-from typing import List, Dict, Any, Optional
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
-from src import logger
-from src.workflows.query.audit.decorators import logged, timed
+from typing import Any, Dict, List, Optional, Protocol, Sequence
 
 
-@dataclass
+@dataclass(frozen=True)
 class WavePlan:
-    """Plan de una ola de procesamiento."""
+    """
+    Represents a single wave execution plan.
+
+    Attributes:
+        wave_id: A stable identifier for the wave, e.g. "wave_001".
+        candidates: The items to be processed in this wave.
+        metadata: Optional metadata about the wave (counts, size estimates, etc.).
+    """
+
     wave_id: str
-    files: List[str]
-    total_mb: float
-    estimated_pages: int
-    max_chunks: int = 10000  # Límite de chunks por ola
-    max_tokens: int = 1000000  # Límite de tokens por ola
+    candidates: List[Any]
+    metadata: Dict[str, Any]
+
+
+class WaveOrchestratorStrategy(Protocol):
+    """
+    Strategy contract for executing ingestion phases.
+
+    Implementations may return either:
+    - dict: structured phase result
+    - list/tuple/sequence: natural payload (e.g., processed items)
+    """
+
+    def preprocess_phase(self, candidates: List[Any], wave_id: str) -> Any:
+        """Run wave-level preprocessing and return phase results."""
+        raise NotImplementedError
+
+    def embedding_phase(self, preprocessed: Any, wave_id: str) -> Any:
+        """Run wave-level embedding and return phase results."""
+        raise NotImplementedError
+
+    def upsert_phase(self, embedded: Any, wave_id: str) -> Any:
+        """Run wave-level upsert and return phase results."""
+        raise NotImplementedError
 
 
 class WavePlanner:
-    """Planificador de olas para procesamiento acotado."""
-    
+    """
+    Plans waves for ingestion based on simple heuristics.
+
+    The current planner groups candidates into waves using target thresholds.
+    """
+
     def __init__(
         self,
-        max_mb_per_wave: float = 500.0,
-        max_files_per_wave: int = 100,
-        max_chunks_per_wave: int = 10000,
-        max_tokens_per_wave: int = 1000000,
-        workers: int = 4
-    ):
+        target_files_per_wave: int = 100,
+        max_waves: Optional[int] = None,
+    ) -> None:
         """
+        Initialize the WavePlanner.
+
         Args:
-            max_mb_per_wave: MB máximos por ola (default: 500 MB)
-            max_files_per_wave: archivos máximos por ola (default: 100)
-            max_chunks_per_wave: chunks máximos por ola (default: 10,000)
-            max_tokens_per_wave: tokens máximos por ola (default: 1,000,000)
-            workers: workers para análisis paralelo
+            target_files_per_wave: Desired number of candidates per wave.
+            max_waves: Optional cap on number of waves.
         """
-        self.max_mb_per_wave = max_mb_per_wave
-        self.max_files_per_wave = max_files_per_wave
-        self.max_chunks_per_wave = max_chunks_per_wave
-        self.max_tokens_per_wave = max_tokens_per_wave
-        self.workers = workers
-    
-    @logged("Planificando olas de procesamiento")
-    @timed()
-    def plan_waves(self, file_paths: List[str]) -> List[WavePlan]:
+        if target_files_per_wave <= 0:
+            raise ValueError("target_files_per_wave must be > 0")
+
+        self._target_files_per_wave = target_files_per_wave
+        self._max_waves = max_waves
+
+    def plan(self, candidates: List[Any]) -> List[WavePlan]:
         """
-        Divide los archivos en olas acotadas por peso y cantidad.
-        
+        Split candidates into WavePlan objects.
+
         Args:
-            file_paths: Lista de rutas de archivos a procesar
-            
+            candidates: Candidate items to process.
+
         Returns:
-            Lista de planes de ola ordenados por tamaño (mayor a menor)
+            A list of WavePlan objects.
         """
-        if not file_paths:
+        if not candidates:
             return []
-        
-        # Analizar archivos en paralelo
-        file_metadata = self._analyze_files_parallel(file_paths)
-        
-        # Ordenar por tamaño (mayor a menor para procesar primero los pesados)
-        sorted_files = sorted(
-            file_metadata.items(),
-            key=lambda x: x[1]['size_mb'],
-            reverse=True
-        )
-        
-        # Crear olas
-        waves = []
-        current_wave_files = []
-        current_wave_mb = 0.0
-        current_wave_estimated_pages = 0
-        wave_id = 1
-        
-        for file_path, metadata in sorted_files:
-            file_mb = metadata['size_mb']
-            estimated_pages = self._estimate_pages(file_path, file_mb)
-            
-            # Verificar si agregar este archivo excedería los límites
-            would_exceed_mb = (current_wave_mb + file_mb) > self.max_mb_per_wave
-            would_exceed_files = (len(current_wave_files) + 1) > self.max_files_per_wave
-            
-            if would_exceed_mb or would_exceed_files or not current_wave_files:
-                # Crear nueva ola si la actual no está vacía
-                if current_wave_files:
-                    waves.append(self._create_wave_plan(
-                        wave_id, current_wave_files, current_wave_mb, current_wave_estimated_pages
-                    ))
-                    wave_id += 1
-                    current_wave_files = []
-                    current_wave_mb = 0.0
-                    current_wave_estimated_pages = 0
-            
-            # Agregar archivo a la ola actual
-            current_wave_files.append(file_path)
-            current_wave_mb += file_mb
-            current_wave_estimated_pages += estimated_pages
-        
-        # Agregar la última ola si tiene archivos
-        if current_wave_files:
-            waves.append(self._create_wave_plan(
-                wave_id, current_wave_files, current_wave_mb, current_wave_estimated_pages
-            ))
-        
-        logger.info(
-            "Planificadas %d olas para %d archivos (%.2f MB total)",
-            len(waves), len(file_paths), sum(w.total_mb for w in waves)
-        )
-        
-        for i, wave in enumerate(waves, 1):
-            logger.info(
-                "Ola %d: %d archivos, %.2f MB, ~%d páginas",
-                i, len(wave.files), wave.total_mb, wave.estimated_pages
-            )
-        
+
+        waves: List[WavePlan] = []
+        current: List[Any] = []
+
+        for candidate in candidates:
+            current.append(candidate)
+            if len(current) >= self._target_files_per_wave:
+                waves.append(self._build_wave_plan(waves_count=len(waves), candidates=current))
+                current = []
+
+                if self._max_waves is not None and len(waves) >= self._max_waves:
+                    break
+
+        if current and (self._max_waves is None or len(waves) < self._max_waves):
+            waves.append(self._build_wave_plan(waves_count=len(waves), candidates=current))
+
         return waves
-    
-    def _analyze_files_parallel(self, file_paths: List[str]) -> Dict[str, Dict[str, Any]]:
-        """Analiza archivos en paralelo para obtener metadatos."""
-        metadata = {}
-        
-        with ThreadPoolExecutor(max_workers=self.workers) as executor:
-            future_to_path = {
-                executor.submit(self._analyze_single_file, path): path
-                for path in file_paths
-            }
-            
-            for future in as_completed(future_to_path):
-                path = future_to_path[future]
-                try:
-                    metadata[path] = future.result()
-                except Exception as e:
-                    logger.warning("Error analizando archivo %s: %s", path, e)
-                    metadata[path] = {'size_mb': 0.0, 'extension': Path(path).suffix}
-        
-        return metadata
-    
-    def _analyze_single_file(self, file_path: str) -> Dict[str, Any]:
-        """Analiza un solo archivo."""
-        try:
-            # Obtener tamaño en MB
-            size_bytes = os.path.getsize(file_path)
-            size_mb = size_bytes / (1024 * 1024)
-            extension = Path(file_path).suffix.lower()
-            
-            return {
-                'size_mb': size_mb,
-                'extension': extension,
-                'path': file_path
-            }
-        except Exception as e:
-            logger.debug("Error obteniendo tamaño de %s: %s", file_path, e)
-            return {'size_mb': 0.0, 'extension': Path(file_path).suffix, 'path': file_path}
-    
-    def _estimate_pages(self, file_path: str, size_mb: float) -> int:
-        """Estima páginas basado en tipo de archivo y tamaño."""
-        extension = Path(file_path).suffix.lower()
-        
-        # Estimaciones aproximadas
-        if extension in ['.pdf', '.docx', '.doc']:
-            # ~50 KB por página para documentos
-            return max(1, int(size_mb * 1024 / 50))
-        elif extension in ['.pptx', '.ppt']:
-            # ~100 KB por slide
-            return max(1, int(size_mb * 1024 / 100))
-        elif extension in ['.xlsx', '.xls']:
-            # ~10 KB por hoja
-            return max(1, int(size_mb * 1024 / 10))
-        elif extension in ['.txt', '.md', '.py', '.js', '.java']:
-            # ~5 KB por "página" de texto
-            return max(1, int(size_mb * 1024 / 5))
-        else:
-            # Estimación conservadora
-            return max(1, int(size_mb * 1024 / 50))
-    
-    def _create_wave_plan(
-        self,
-        wave_id: int,
-        files: List[str],
-        total_mb: float,
-        estimated_pages: int
-    ) -> WavePlan:
-        """Crea un plan de ola."""
-        return WavePlan(
-            wave_id=f"wave_{wave_id:03d}",
-            files=files,
-            total_mb=total_mb,
-            estimated_pages=estimated_pages,
-            max_chunks=self.max_chunks_per_wave,
-            max_tokens=self.max_tokens_per_wave
-        )
-    
-    def get_wave_summary(self, waves: List[WavePlan]) -> Dict[str, Any]:
-        """Obtiene un resumen de las olas planificadas."""
-        total_files = sum(len(w.files) for w in waves)
-        total_mb = sum(w.total_mb for w in waves)
-        total_pages = sum(w.estimated_pages for w in waves)
-        
-        return {
-            'wave_count': len(waves),
-            'total_files': total_files,
-            'total_mb': total_mb,
-            'total_estimated_pages': total_pages,
-            'avg_files_per_wave': total_files / len(waves) if waves else 0,
-            'avg_mb_per_wave': total_mb / len(waves) if waves else 0,
-            'waves': [
-                {
-                    'wave_id': w.wave_id,
-                    'file_count': len(w.files),
-                    'total_mb': w.total_mb,
-                    'estimated_pages': w.estimated_pages
-                }
-                for w in waves
-            ]
+
+    def _build_wave_plan(self, waves_count: int, candidates: List[Any]) -> WavePlan:
+        """
+        Build a WavePlan for the given candidates.
+
+        Args:
+            waves_count: Number of waves already built.
+            candidates: Candidates for this wave.
+
+        Returns:
+            A WavePlan instance.
+        """
+        wave_id = f"wave_{waves_count + 1:03d}"
+        metadata: Dict[str, Any] = {
+            "files_count": len(candidates),
         }
+        return WavePlan(wave_id=wave_id, candidates=list(candidates), metadata=metadata)
 
 
 class WaveOrchestrator:
-    """Orquestador que ejecuta olas secuencialmente."""
-    
-    def __init__(self, planner: WavePlanner):
-        self.planner = planner
-        self.current_wave = 0
-        self.total_waves = 0
-    
-    def execute_waves(
-        self,
-        file_paths: List[str],
-        process_callback,
-        callback_kwargs: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    """
+    Executes waves using a given strategy and returns a structured summary.
+    """
+
+    def __init__(self, strategy: WaveOrchestratorStrategy) -> None:
         """
-        Ejecuta las olas secuencialmente.
-        
+        Initialize the orchestrator.
+
         Args:
-            file_paths: Archivos a procesar
-            process_callback: Función que procesa una lista de archivos
-            callback_kwargs: Argumentos adicionales para el callback
-            
-        Returns:
-            Resumen de ejecución
+            strategy: The wave execution strategy.
         """
-        callback_kwargs = callback_kwargs or {}
-        
-        # Planificar olas
-        waves = self.planner.plan_waves(file_paths)
-        self.total_waves = len(waves)
-        
-        if not waves:
-            return {'status': 'no_files', 'waves_processed': 0}
-        
-        results = []
-        wave_summaries = []
-        
-        for i, wave in enumerate(waves, 1):
-            self.current_wave = i
-            
-            logger.info(
-                "=== Ejecutando Ola %d/%d: %s ===",
-                i, self.total_waves, wave.wave_id
-            )
-            logger.info(
-                "Archivos: %d, Tamaño: %.2f MB, Páginas estimadas: %d",
-                len(wave.files), wave.total_mb, wave.estimated_pages
-            )
-            
+        self._strategy = strategy
+
+    def execute_waves(self, wave_plans: List[WavePlan]) -> Dict[str, Any]:
+        """
+        Execute all waves and return a summary.
+
+        This method is intentionally defensive about strategy return types.
+
+        Args:
+            wave_plans: Planned waves.
+
+        Returns:
+            A dictionary summary containing per-wave results and aggregates.
+        """
+        wave_results: List[Dict[str, Any]] = []
+        for wave_index, wave_plan in enumerate(wave_plans, start=1):
             try:
-                # Ejecutar callback con los archivos de esta ola
-                wave_result = process_callback(wave.files, **callback_kwargs)
-                
-                # Agregar metadatos de la ola al resultado
-                wave_summary = {
-                    'wave_id': wave.wave_id,
-                    'wave_index': i,
-                    'file_count': len(wave.files),
-                    'total_mb': wave.total_mb,
-                    'estimated_pages': wave.estimated_pages,
-                    'result': wave_result
-                }
-                
-                wave_summaries.append(wave_summary)
-                results.append(wave_result)
-                
-                logger.info(
-                    "✓ Ola %d/%d completada: %s",
-                    i, self.total_waves, wave.wave_id
+                preprocess_result = self._strategy.preprocess_phase(
+                    candidates=wave_plan.candidates,
+                    wave_id=wave_plan.wave_id,
                 )
-                
-            except Exception as e:
-                logger.error(
-                    "✗ Error en ola %d/%d (%s): %s",
-                    i, self.total_waves, wave.wave_id, e
+                normalized_preprocess = self._normalize_phase_result(preprocess_result)
+
+                embedding_result = self._strategy.embedding_phase(
+                    preprocessed=normalized_preprocess,
+                    wave_id=wave_plan.wave_id,
                 )
-                
-                wave_summary = {
-                    'wave_id': wave.wave_id,
-                    'wave_index': i,
-                    'file_count': len(wave.files),
-                    'total_mb': wave.total_mb,
-                    'estimated_pages': wave.estimated_pages,
-                    'error': str(e),
-                    'result': None
-                }
-                
-                wave_summaries.append(wave_summary)
-        
-        # Resumen final
-        successful_waves = sum(1 for w in wave_summaries if w.get('error') is None)
-        total_files_processed = sum(
-            len(w['result'].get('files', [])) 
-            for w in wave_summaries if w.get('result')
-        )
-        
+                normalized_embedding = self._normalize_phase_result(embedding_result)
+
+                upsert_result = self._strategy.upsert_phase(
+                    embedded=normalized_embedding,
+                    wave_id=wave_plan.wave_id,
+                )
+                normalized_upsert = self._normalize_phase_result(upsert_result)
+
+                wave_results.append(
+                    {
+                        "wave_id": wave_plan.wave_id,
+                        "index": wave_index,
+                        "metadata": wave_plan.metadata,
+                        "preprocess": normalized_preprocess,
+                        "embedding": normalized_embedding,
+                        "upsert": normalized_upsert,
+                        "error": None,
+                    }
+                )
+            except ValueError as exc:
+                wave_results.append(
+                    {
+                        "wave_id": wave_plan.wave_id,
+                        "index": wave_index,
+                        "metadata": wave_plan.metadata,
+                        "preprocess": {},
+                        "embedding": {},
+                        "upsert": {},
+                        "error": f"ValueError: {exc}",
+                    }
+                )
+            except RuntimeError as exc:
+                wave_results.append(
+                    {
+                        "wave_id": wave_plan.wave_id,
+                        "index": wave_index,
+                        "metadata": wave_plan.metadata,
+                        "preprocess": {},
+                        "embedding": {},
+                        "upsert": {},
+                        "error": f"RuntimeError: {exc}",
+                    }
+                )
+
+        total_files_processed = self._count_total_files_processed(wave_results)
+
+        successful_waves = sum(1 for w in wave_results if w.get("error") is None)
+        failed_waves = sum(1 for w in wave_results if w.get("error") is not None)
+
         return {
-            'status': 'completed',
-            'total_waves': self.total_waves,
-            'successful_waves': successful_waves,
-            'failed_waves': self.total_waves - successful_waves,
-            'total_files_processed': total_files_processed,
-            'wave_summaries': wave_summaries,
-            'planner_summary': self.planner.get_wave_summary(waves)
+            "waves": wave_results,
+            "total_waves": len(wave_results),
+            "successful_waves": successful_waves,
+            "failed_waves": failed_waves,
+            "total_files_processed": total_files_processed,
         }
 
+    def _normalize_phase_result(self, result: Any) -> Dict[str, Any]:
+        """
+        Normalize a phase result into a dictionary.
 
-# Configuración por defecto desde variables de entorno
-def create_default_wave_planner() -> WavePlanner:
-    """Crea un WavePlanner con configuración por defecto."""
-    import os
-    
-    max_mb = float(os.getenv('WAVE_MAX_MB', '500'))
-    max_files = int(os.getenv('WAVE_MAX_FILES', '100'))
-    max_chunks = int(os.getenv('WAVE_MAX_CHUNKS', '10000'))
-    max_tokens = int(os.getenv('WAVE_MAX_TOKENS', '1000000'))
-    workers = int(os.getenv('WAVE_PLANNER_WORKERS', '4'))
-    
-    return WavePlanner(
-        max_mb_per_wave=max_mb,
-        max_files_per_wave=max_files,
-        max_chunks_per_wave=max_chunks,
-        max_tokens_per_wave=max_tokens,
-        workers=workers
-    )
+        Strategy phases are allowed to return lists/tuples/sequences naturally.
+        We wrap those into {"payload": ...} so downstream summarization is safe.
+
+        Args:
+            result: Any phase result returned by the strategy.
+
+        Returns:
+            A dict representation of the phase result.
+        """
+        if result is None:
+            return {}
+
+        if isinstance(result, dict):
+            return result
+
+        # Natural list/tuple payload.
+        if isinstance(result, (list, tuple)):
+            return {"payload": list(result)}
+
+        # Generic sequence (but not string/bytes).
+        if isinstance(result, Sequence) and not isinstance(result, (str, bytes)):
+            return {"payload": list(result)}
+
+        return {"payload": result}
+
+    def _count_total_files_processed(self, wave_results: List[Dict[str, Any]]) -> int:
+        """
+        Count the total files processed across waves.
+
+        We try in this order:
+        - explicit "files" list in preprocess/embedding/upsert dict
+        - explicit "files_count" in wave metadata
+        - length of "payload" if it's a list
+
+        Args:
+            wave_results: Per-wave results.
+
+        Returns:
+            Total processed files count estimate.
+        """
+        total = 0
+        for wave in wave_results:
+            if wave.get("error") is not None:
+                continue
+
+            # Prefer the most concrete signal available.
+            phase_dicts = [
+                wave.get("preprocess", {}),
+                wave.get("embedding", {}),
+                wave.get("upsert", {}),
+            ]
+
+            counted = False
+            for phase_data in phase_dicts:
+                phase_count = self._count_files_in_phase(phase_data)
+                if phase_count is not None:
+                    total += phase_count
+                    counted = True
+                    break
+
+            if counted:
+                continue
+
+            metadata = wave.get("metadata", {})
+            if isinstance(metadata, dict) and isinstance(metadata.get("files_count"), int):
+                total += int(metadata["files_count"])
+
+        return total
+
+    def _count_files_in_phase(self, phase_data: Any) -> Optional[int]:
+        """
+        Try to infer a file count from a phase dictionary.
+
+        Args:
+            phase_data: Phase data.
+
+        Returns:
+            An integer count if it can be inferred, otherwise None.
+        """
+        if not isinstance(phase_data, dict):
+            return None
+
+        files_value = phase_data.get("files")
+        if isinstance(files_value, list):
+            return len(files_value)
+
+        payload_value = phase_data.get("payload")
+        if isinstance(payload_value, list):
+            return len(payload_value)
+
+        files_count_value = phase_data.get("files_count")
+        if isinstance(files_count_value, int):
+            return int(files_count_value)
+
+        return None
 
 
-def create_default_wave_orchestrator() -> WaveOrchestrator:
-    """Crea un WaveOrchestrator con configuración por defecto."""
-    planner = create_default_wave_planner()
-    return WaveOrchestrator(planner)
+def create_default_wave_orchestrator(strategy: WaveOrchestratorStrategy) -> WaveOrchestrator:
+    """
+    Factory function for creating a default WaveOrchestrator.
+
+    Args:
+        strategy: The wave execution strategy.
+
+    Returns:
+        A WaveOrchestrator instance.
+    """
+    return WaveOrchestrator(strategy=strategy)
