@@ -16,6 +16,11 @@ from src.workflows.query.pipeline.rag_orchestrator import RAGOrchestrator
 from src.conf import settings as rag_config
 from src.workflows.ingestion.orchestrator import IngestionOrchestrator
 from src.backends.llm.api_factory import get_api_router_family
+from src.api.files.router import router as files_router
+from src.api.routes.volumes import router as volumes_router
+from src.api.routes.exclusions import router as exclusions_router
+from src.api.routes.stats import router as stats_router
+from src.api.routes.system import router as system_router
 
 
 # Configure logging
@@ -146,22 +151,22 @@ app.dependency_overrides[get_ingestion_orchestrator] = get_ingestion_instance
 app.include_router(rag.router)
 
 # Include files router for temporal RAG (OpenAI-compatible)
-from src.api.files.router import router as files_router
 app.include_router(files_router)
 logger.info("Files router (/v1/files) included")
 
 # Include volumes router for external volume management
-from src.api.routes.volumes import router as volumes_router
-from src.api.routes.exclusions import router as exclusions_router
 app.include_router(volumes_router)
 logger.info("Volumes router (/volumes) included")
 app.include_router(exclusions_router)
 logger.info("Exclusions router (/exclusions) included")
 
 # Include stats router for monitoring and dashboards
-from src.api.routes.stats import router as stats_router
 app.include_router(stats_router)
 logger.info("Stats router (/api/stats) included")
+
+# Include system router for system management
+app.include_router(system_router)
+logger.info("System router (/api/system) included")
 
 
 # Exception handlers
