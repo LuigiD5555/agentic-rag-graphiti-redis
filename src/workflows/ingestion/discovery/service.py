@@ -12,6 +12,7 @@ from .cache import DiscoveryCacheManager
 from .pattern_matching import PatternMatcher
 from .filters import build_filters
 from .scanner import DirectoryScanner
+from .adaptive_scanner import AdaptiveHybridScanner, SchedulerPolicy
 
 log = get_logger(__name__)
 

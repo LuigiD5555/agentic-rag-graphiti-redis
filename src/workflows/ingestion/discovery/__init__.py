@@ -16,6 +16,7 @@ from .filters import (
 from .pattern_matching import PatternMatcher
 from .path_tree import PathTree, PathNode
 from .scanner import DirectoryScanner
+from .adaptive_scanner import AdaptiveHybridScanner, SchedulerPolicy, ScanMetrics, DirectoryState
 from .service import FileDiscoveryService
 
 __all__ = [
@@ -42,4 +43,10 @@ __all__ = [
 
     # Scanner
     "DirectoryScanner",
+
+    # Adaptive scanner
+    "AdaptiveHybridScanner",
+    "SchedulerPolicy",
+    "ScanMetrics",
+    "DirectoryState",
 ]
