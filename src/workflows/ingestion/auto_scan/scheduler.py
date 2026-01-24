@@ -2,21 +2,21 @@
 Auto-Ingestion Scheduler - Periodically scans directories and triggers ingestion for changed files.
 
 This service runs in the background and periodically executes the ingestion scanner,
-which uses Redis cache to efficiently detect only files that have changed (based on
+which uses SQLite control plane to efficiently detect only files that have changed (based on
 mtime, size, and optionally content hash).
 
 This approach is more efficient than file system watchers because:
-- Reuses existing cache infrastructure (Redis-based)
+- Reuses existing SQLite control plane infrastructure
 - Scales better with large directories
 - More reliable (no missed events)
 - Lower resource usage (no inotify watchers)
 - Handles batch changes efficiently
 
 How it works:
-1. Scanner reads file metadata from Redis cache
-2. Compares current mtime/size with cached values
+1. Scanner reads file metadata from SQLite control plane
+2. Compares current mtime/size with stored values
 3. Only processes files that changed
-4. Updates cache after successful ingestion
+4. Updates SQLite after successful ingestion
 """
 
 """Auto-scan scheduler for periodic ingestion scans."""
@@ -25,8 +25,7 @@ import asyncio
 import time
 from datetime import datetime
 
-import redis
-from src.backends.storage.cache.ingestion.manager import IngestionCacheManager
+from src.backends.storage.sqlite.manager import get_sqlite_manager
 from src.conf import settings as runtime_settings
 from src.workflows.ingestion.helpers import build_ingestion_options_from_args
 from src.workflows.ingestion.orchestrator import IngestionOrchestrator
@@ -48,30 +47,10 @@ class AutoScanScheduler:
         self.config = config
         self.orchestrator = IngestionOrchestrator(config)
         
-        # Extract settings dictionary from config object
-        settings_dict = {}
-        try:
-            # Try to get settings as dictionary
-            if hasattr(config, "model_dump"):
-                settings_dict = config.model_dump()
-            elif hasattr(config, "dict"):
-                settings_dict = config.dict()
-            else:
-                # Fallback: get all non-private attributes
-                settings_dict = {
-                    k: getattr(config, k)
-                    for k in dir(config)
-                    if not k.startswith("_") and not callable(getattr(config, k))
-                }
-        except Exception:
-            # If all else fails, create minimal settings
-            settings_dict = {
-                "REDIS_HOST": getattr(config, "REDIS_HOST", "127.0.0.1"),
-                "REDIS_PORT": getattr(config, "REDIS_PORT", 6379),
-                "REDIS_PASSWORD": getattr(config, "REDIS_PASSWORD", None),
-            }
-        
-        self.cache_manager = IngestionCacheManager.from_settings(settings_dict)
+        # Get SQLite control plane manager
+        self.sqlite_manager = get_sqlite_manager()
+        self.scan_checkpoint_store = self.sqlite_manager.get_scan_checkpoint_store()
+        self.file_metadata_store = self.sqlite_manager.get_file_metadata_store()
 
         # Scheduler configuration
         self.scan_interval = getattr(config, "AUTO_SCAN_INTERVAL", 300)
@@ -85,7 +64,7 @@ class AutoScanScheduler:
         logger.info("Auto-Scan Scheduler Starting")
         logger.info("=" * 60)
         logger.info("")
-        logger.info("This scheduler uses Redis cache to efficiently detect")
+        logger.info("This scheduler uses SQLite control plane to efficiently detect")
         logger.info("changed files without watching the filesystem.")
         logger.info("")
         logger.info("Scheduler configuration:")
@@ -187,25 +166,31 @@ def check_health() -> bool:
         True if the scheduler is healthy, False otherwise.
     """
     try:
-        # Check if Redis is accessible (basic dependency check)
-        redis_host = getattr(runtime_settings, "REDIS_HOST", "127.0.0.1")
-        redis_port = getattr(runtime_settings, "REDIS_PORT", 6379)
-        redis_password = getattr(runtime_settings, "REDIS_PASSWORD", None)
+        # Check if SQLite control plane is accessible
+        sqlite_manager = get_sqlite_manager()
         
-        client = redis.Redis(
-            host=redis_host,
-            port=redis_port,
-            password=redis_password,
-            socket_connect_timeout=5,
-            socket_timeout=5
-        )
+        # Test SQLite connection by checking if we can query the database
+        with sqlite_manager.control_plane.get_connection() as conn:
+            cursor = conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
+            table_count = cursor.fetchone()[0]
+            
+            if table_count == 0:
+                logger.error("SQLite control plane has no tables")
+                return False
         
-        # Test Redis connection
-        client.ping()
-        
-        # Check if we can access the last scan timestamp in Redis
-        last_scan_key = "autoscan:last_heartbeat"
-        client.setex(last_scan_key, 120, int(time.time()))  # 2 minute TTL
+        # Update last heartbeat in SQLite
+        with sqlite_manager.control_plane.get_connection() as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO audit_events 
+                (event_id, session_id, event_type, event_at, metadata_json)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                f"heartbeat_{int(time.time())}",
+                "autoscan",
+                "HEARTBEAT",
+                int(time.time()),
+                '{"service": "autoscan"}'
+            ))
         
         logger.debug("Health check passed")
         return True

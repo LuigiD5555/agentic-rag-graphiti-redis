@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -61,12 +62,11 @@ GRAPH_STORES = {
 }
 
 # Cache backend registry (aliases -> cache backend config dict).
-# Note: LOCATION is intentionally left empty here because it will be resolved
-# from environment variables (REDIS_HOST/REDIS_PORT or REDIS_URL) at runtime.
-# See src/storage/cache/__init__.py:_resolve_redis_endpoint for the resolution logic.
-CACHES = {
+# Note: Redis cache is being removed in favor of SQLite control plane.
+# This is kept for backward compatibility during migration.
+CACHES: dict[str, dict[str, Any]] = {
     "default": {
-        "BACKEND": "redis",
+        "BACKEND": "null",  # Using SQLite control plane instead
         "LOCATION": "",
         "TIMEOUT": None,
         "KEY_PREFIX": "",
@@ -75,12 +75,22 @@ CACHES = {
     }
 }
 
-# Redis configuration (centralized like Django settings)
-REDIS_URL: str = ""  # If set, overrides REDIS_HOST/PORT
-REDIS_HOST: str = "localhost"
-REDIS_PORT: int = 6379
-REDIS_DB: int = 0
-REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
+# SQLite control plane configuration
+CONTROL_PLANE_DB_PATH: str = os.getenv("CONTROL_PLANE_DB_PATH", "./data/control_plane.db")
+CONVERSATION_PERSISTENCE_ENABLED: bool = os.getenv("CONVERSATION_PERSISTENCE_ENABLED", "false").strip().lower() == "true"
+
+# Privacy and sanitizer configuration
+SANITIZER_ENABLED: bool = os.getenv("SANITIZER_ENABLED", "true").strip().lower() == "true"
+SECRETS_STRIP_ALWAYS: bool = os.getenv("SECRETS_STRIP_ALWAYS", "true").strip().lower() == "true"
+PII_MASKING_DEFAULT: str = os.getenv("PII_MASKING_DEFAULT", "OFF")  # ON|OFF
+
+# Rerank configuration
+RERANK_ENABLED: bool = os.getenv("RERANK_ENABLED", "false").strip().lower() == "true"
+RERANK_MAX_CANDIDATES: int = int(os.getenv("RERANK_MAX_CANDIDATES", "20"))
+RERANK_TOP_N: int = int(os.getenv("RERANK_TOP_N", "8"))
+# none|mmr|cross_encoder|mmr_then_cross_encoder
+RERANK_MODE: str = os.getenv("RERANK_MODE", "mmr")
+RETRIEVE_TOP_K_CANDIDATES: int = int(os.getenv("RETRIEVE_TOP_K_CANDIDATES", "30"))
 
 # Provider adapters registry (aliases -> provider config dict).
 PROVIDERS = {

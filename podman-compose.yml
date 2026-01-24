@@ -79,63 +79,8 @@ services:
           cpus: "${NEO4J_CPUS:-2.0}"
           memory: "${NEO4J_MEMORY:-3g}"
 
-  redis:
-    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_redis_1"
-    image: "docker.io/library/redis:${REDIS_IMAGE_TAG:?REDIS_IMAGE_TAG is required}"
-    restart: "unless-stopped"
-    logging:
-      driver: journald
-    # AOF + RDB persistence with memory limits and eviction policy
-    # - maxmemory 1.2gb: Set memory limit to 1.2GB
-    # - maxmemory-policy allkeys-lru: Evict least recently used keys when memory limit is reached
-    # - appendonly yes: Enable AOF (Append-Only File) for durability
-    # - appendfsync everysec: Fsync every second (balance durability/performance)
-    # - save 900 1: Save RDB snapshot if at least 1 key changed in 900 seconds (15 minutes)
-    # - save 300 10: Save RDB snapshot if at least 10 keys changed in 300 seconds (5 minutes)
-    # - save 60 10000: Save RDB snapshot if at least 10000 keys changed in 60 seconds
-    # - requirepass: Enforce authentication on all connections
-    command:
-      - redis-server
-      - --maxmemory
-      - "1228m"
-      - --maxmemory-policy
-      - "allkeys-lru"
-      - --appendonly
-      - "yes"
-      - --appendfsync
-      - "everysec"
-      - --save
-      - "900 1"
-      - --save
-      - "300 10"
-      - --save
-      - "60 10000"
-      - --requirepass
-      - "${REDIS_PASSWORD:-change-me-redis}"
-      - --bind
-      - "127.0.0.1"
-      - --protected-mode
-      - "yes"
-    environment:
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-change-me-redis}
-    network_mode: "host"
-    volumes:
-      - ${HOST_REDIS_DATA:-redis_data}:/data:Z
-    hostname: redis
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-change-me-redis} ping | grep -q '^PONG$' || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
-      start_period: 60s
-    stop_grace_period: 20s
-    ulimits:
-      nofile: { soft: 65536, hard: 65536 }
-    deploy:
-      resources:
-        limits:
-          cpus: "${REDIS_CPUS:-1.0}"
-          memory: "${REDIS_MEMORY:-1g}"
+  # Redis has been removed in favor of SQLite control plane
+  # SQLite database file will be stored in ./data/control_plane.db
 
   open-webui:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_open-webui_1"
@@ -226,8 +171,6 @@ services:
     depends_on:
       weaviate:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     env_file: .env
 
     # Share the host network namespace so 127.0.0.1 == host loopback
@@ -247,8 +190,17 @@ services:
       EMBEDDING_DIM: "${EMBEDDING_DIM:-768}"
       WEAVIATE_LOG_LEVEL: "${WEAVIATE_LOG_LEVEL:-INFO}"
 
-      REDIS_HOST: "127.0.0.1"
-      REDIS_PORT: "${HOST_REDIS_TCP_PORT:-6379}"
+      # SQLite control plane configuration
+      CONTROL_PLANE_DB_PATH: "${CONTROL_PLANE_DB_PATH:-/app/data/control_plane.db}"
+      CONVERSATION_PERSISTENCE_ENABLED: "${CONVERSATION_PERSISTENCE_ENABLED:-false}"
+      SANITIZER_ENABLED: "${SANITIZER_ENABLED:-true}"
+      SECRETS_STRIP_ALWAYS: "${SECRETS_STRIP_ALWAYS:-true}"
+      PII_MASKING_DEFAULT: "${PII_MASKING_DEFAULT:-OFF}"
+      RERANK_ENABLED: "${RERANK_ENABLED:-false}"
+      RERANK_MAX_CANDIDATES: "${RERANK_MAX_CANDIDATES:-20}"
+      RERANK_TOP_N: "${RERANK_TOP_N:-8}"
+      RERANK_MODE: "${RERANK_MODE:-mmr}"
+      RETRIEVE_TOP_K_CANDIDATES: "${RETRIEVE_TOP_K_CANDIDATES:-30}"
 
       NEO4J_URI: "bolt://127.0.0.1:${HOST_NEO4J_BOLT_PORT:-7687}"
       NEO4J_USER: "${NEO4J_USER:-neo4j}"
@@ -339,13 +291,10 @@ services:
     depends_on:
       weaviate:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     env_file: .env
     environment:
       - AUTO_SCAN_ENABLED=true
-      - REDIS_HOST=127.0.0.1
-      - REDIS_PORT=${HOST_REDIS_TCP_PORT:-6379}
+      - CONTROL_PLANE_DB_PATH=/app/data/control_plane.db
       - WEAVIATE_URL=http://127.0.0.1:${HOST_WEAVIATE_HTTP_PORT:-8080}
       - WEAVIATE_GRPC_PORT=${HOST_WEAVIATE_GRPC_PORT:-50051}
       - WEAVIATE_TIMEOUT=${WEAVIATE_TIMEOUT:-60}
@@ -394,8 +343,6 @@ services:
         condition: service_healthy
       weaviate:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     env_file: 
       - ./.env
 
@@ -422,8 +369,6 @@ services:
       LOG_LEVEL: "${MONITORING_LOG_LEVEL:-INFO}"
 
       # Service endpoints (via host network)
-      REDIS_HOST: "127.0.0.1"
-      REDIS_PORT: "${HOST_REDIS_TCP_PORT:-6379}"
       WEAVIATE_URL: "http://127.0.0.1:${HOST_WEAVIATE_HTTP_PORT:-8080}"
       WEAVIATE_GRPC_PORT: "${HOST_WEAVIATE_GRPC_PORT:-50051}"
       NEO4J_URI: "bolt://127.0.0.1:${HOST_NEO4J_BOLT_PORT:-7687}"
