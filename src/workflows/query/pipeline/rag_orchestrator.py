@@ -7,6 +7,8 @@ from src.workflows.query.audit import get_logger
 from src.workflows.query.temporal.retriever import MultiTenantRetriever
 from src.apps.websearch import SearXNGClient
 from src.workflows.query.intent import IntentClassifier
+from src.workflows.query.sanitizer import get_sanitizer
+from src.workflows.query.reranker import get_reranker
 from src.conf import settings
 
 log = get_logger(__name__)
@@ -106,6 +108,7 @@ class RAGOrchestrator:
         user_id: Optional[str] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         thread_id: Optional[str] = None,
+        session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Execute full RAG pipeline for a question.
 
@@ -120,6 +123,7 @@ class RAGOrchestrator:
             user_id: Optional user ID for cross-chat memory retrieval.
             conversation_history: Full conversation history for context-aware responses.
             thread_id: Optional thread ID for temporal file retrieval.
+            session_id: Optional session ID for privacy and reranking context.
 
         Returns:
             Dictionary with 'answer', 'sources', and 'metadata'.
@@ -128,8 +132,8 @@ class RAGOrchestrator:
         temperature = temperature if temperature is not None else settings.RAG_DEFAULT_TEMPERATURE
         max_tokens = max_tokens if max_tokens is not None else settings.RAG_DEFAULT_MAX_TOKENS
 
-        log.info("Processing RAG query with model=%s, thread_id=%s: %s",
-                 model or "default", thread_id or "none", question[:100])
+        log.info("Processing RAG query with model=%s, thread_id=%s, session_id=%s: %s",
+                 model or "default", thread_id or "none", session_id or "none", question[:100])
 
         # Step 0: Intent classification for RAG gating
         intent = None
@@ -153,6 +157,7 @@ class RAGOrchestrator:
                     system_prompt=system_prompt,
                     model=model,
                     conversation_history=conversation_history,
+                    session_id=session_id,
                 )
 
                 return {
@@ -172,7 +177,7 @@ class RAGOrchestrator:
         # Step 1: Retrieve relevant documents (KB + temporal if thread_id provided)
         temporal_results = []
         kb_results = []
-        retrieval_metadata = {}
+        retrieval_metadata: Dict[str, Any] = {}
         retrieval_error = None
 
         if self.multi_tenant_retriever and thread_id:
@@ -204,19 +209,27 @@ class RAGOrchestrator:
                 )
         else:
             # Standard single-tenant retrieval with new signature
-            retrieved_docs, retrieval_metadata = self.retriever.retrieve(
+            retrieval_result = self.retriever.retrieve(
                 query=question, top_k=top_k, filters=filters
             )
+            
+            # Handle the return type which could be tuple or different structure
+            if isinstance(retrieval_result, tuple) and len(retrieval_result) == 2:
+                retrieved_docs, retrieval_metadata = retrieval_result
+            else:
+                # Assume it's just the documents
+                retrieved_docs = retrieval_result
+                retrieval_metadata = {}
 
             # Check if retrieval failed
             if retrieved_docs is None:
-                retrieval_error = retrieval_metadata.get("error_type", "unknown")
+                retrieval_error = retrieval_metadata.get("error_type", "unknown") if retrieval_metadata else "unknown"
                 log.error(
                     "Retrieval failed: error_type=%s, error=%s, retries=%d, time=%.2fms",
                     retrieval_error,
-                    retrieval_metadata.get("error"),
-                    retrieval_metadata.get("retries", 0),
-                    retrieval_metadata.get("total_time_ms", 0)
+                    retrieval_metadata.get("error") if retrieval_metadata else "unknown",
+                    retrieval_metadata.get("retries", 0) if retrieval_metadata else 0,
+                    retrieval_metadata.get("total_time_ms", 0) if retrieval_metadata else 0
                 )
                 retrieved_docs = []  # Set to empty list for downstream processing
             else:
@@ -396,6 +409,7 @@ class RAGOrchestrator:
                     system_prompt=system_prompt,
                     model=model,
                     conversation_history=conversation_history,
+                    session_id=session_id,
                 )
 
                 return {
@@ -433,6 +447,31 @@ class RAGOrchestrator:
                     },
                 }
 
+        # Step 2.9: Apply reranking if enabled
+        used_reranking = False
+        if session_id and retrieved_docs:
+            try:
+                reranker = get_reranker()
+                # Determine if this is pure chat (no RAG context needed)
+                is_pure_chat = bool(skip_rag or (intent and intent in ["SMALL_TALK", "PERSONAL_CHAT", "CONTROL"]))
+                
+                # Apply reranking
+                reranked_docs = reranker.rerank(
+                    query=question,
+                    documents=retrieved_docs,
+                    query_vector=None,  # Could be extracted from retrieval if available
+                    intent=intent,
+                    is_pure_chat=is_pure_chat,
+                    session_id=session_id,
+                )
+                
+                if reranked_docs and len(reranked_docs) > 0:
+                    retrieved_docs = reranked_docs
+                    used_reranking = True
+                    log.info("Applied reranking: %d documents reranked", len(retrieved_docs))
+            except Exception as e:
+                log.warning("Reranking failed, continuing without it: %s", e)
+
         # Step 2: Build context from retrieved documents
         context = self._build_context(retrieved_docs)
 
@@ -449,6 +488,7 @@ class RAGOrchestrator:
             system_prompt=system_prompt,
             model=model,
             conversation_history=conversation_history,
+            session_id=session_id,
         )
 
         # Step 3.5: Add prefix if we used web search as primary source
@@ -478,6 +518,7 @@ class RAGOrchestrator:
                 "used_chat_memory": used_chat_memory,
                 "used_temporal_rag": len(temporal_results) > 0,
                 "used_web_search": used_web_search,
+                "used_reranking": used_reranking,
                 "retrieval_error": retrieval_error,
                 "thread_id": thread_id,
                 "retrieval_metadata": retrieval_metadata,
@@ -519,6 +560,7 @@ class RAGOrchestrator:
         system_prompt: Optional[str] = None,
         model: Optional[str] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
+        session_id: Optional[str] = None,
     ) -> str:
         """Generate answer using LLM with retrieved context.
 
@@ -530,6 +572,7 @@ class RAGOrchestrator:
             system_prompt: Override system prompt.
             model: Override default model.
             conversation_history: Full conversation history for context.
+            session_id: Optional session ID for privacy context.
 
         Returns:
             Generated answer.
@@ -537,9 +580,25 @@ class RAGOrchestrator:
         # Determine if this is a conversational query (no RAG context)
         is_conversational = not context or len(context.strip()) == 0
 
+        # Apply sanitization if session_id provided and PII masking is enabled
+        sanitized_question = question
+        sanitized_context = context
+        
+        if session_id:
+            try:
+                sanitizer = get_sanitizer(session_id)
+                # Sanitize question
+                sanitized_question, _, _ = sanitizer.sanitize_query(question)
+                
+                # Sanitize context if not conversational
+                if not is_conversational and context:
+                    sanitized_context, _ = sanitizer.sanitize_context(context)
+            except Exception as e:
+                log.debug("Could not sanitize for privacy: %s", e)
+        
         # Detect language and adapt system prompt if multilingual is enabled
         if self.enable_multilingual and not system_prompt:
-            detected_lang = self.language_detector.detect_language(question)
+            detected_lang = self.language_detector.detect_language(sanitized_question)
             lang_name = self.language_detector.get_language_name(detected_lang)
             log.info("Detected query language: %s (%s)", lang_name, detected_lang)
 
@@ -579,16 +638,16 @@ class RAGOrchestrator:
             # Simple conversational message without context formatting
             messages.append({
                 "role": "user",
-                "content": question
+                "content": sanitized_question
             })
         else:
             # RAG-style message with context
             messages.append({
                 "role": "user",
                 "content": f"""Context:
-{context}
+{sanitized_context}
 
-Question: {question}
+Question: {sanitized_question}
 
 Answer:"""
             })
