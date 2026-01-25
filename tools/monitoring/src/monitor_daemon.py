@@ -262,46 +262,6 @@ class MonitoringDaemon:
 
             time.sleep(self.memory_monitor_interval)
 
-    def check_redis_health(self) -> Dict[str, Any]:
-        """Check Redis connectivity and stats."""
-        try:
-            import redis
-
-            redis_host = os.environ.get("REDIS_HOST", "127.0.0.1")
-            redis_port = int(os.environ.get("REDIS_PORT", 6379))
-            redis_password = (os.environ.get("REDIS_PASSWORD") or "").strip() or None
-
-            client = redis.Redis(
-                host=redis_host,
-                port=redis_port,
-                password=redis_password,
-                socket_connect_timeout=5,
-                socket_timeout=5
-            )
-
-            # Ping test
-            client.ping()
-
-            # Get info
-            info = client.info()
-            memory_used = info.get("used_memory_human", "unknown")
-            connected_clients = info.get("connected_clients", 0)
-            total_keys = client.dbsize()
-
-            return {
-                "status": "healthy",
-                "memory_used": memory_used,
-                "connected_clients": connected_clients,
-                "total_keys": total_keys
-            }
-
-        except Exception as e:
-            logger.error(f"Redis health check failed: {e}")
-            return {
-                "status": "unhealthy",
-                "error": str(e)
-            }
-
     def check_weaviate_health(self) -> Dict[str, Any]:
         """Check Weaviate connectivity and stats."""
         try:
@@ -382,7 +342,6 @@ class MonitoringDaemon:
         }
 
         if self.enable_health_checks:
-            results["services"]["redis"] = self.check_redis_health()
             results["services"]["weaviate"] = self.check_weaviate_health()
 
             # Only check Neo4j if explicitly enabled

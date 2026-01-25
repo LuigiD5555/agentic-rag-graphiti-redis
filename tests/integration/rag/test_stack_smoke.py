@@ -37,7 +37,7 @@ def test_podman_compose_stack_smoke():
         )
         output = ps.stdout + ps.stderr
 
-        expected = ["weaviate", "redis", "neo4j", "app"]
+        expected = ["weaviate", "neo4j", "app"]
         missing = [name for name in expected if name not in output]
         assert not missing, f"Missing services in compose output: {missing}\n{output}"
 

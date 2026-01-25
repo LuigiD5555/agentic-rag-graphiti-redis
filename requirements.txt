@@ -6,10 +6,10 @@ langchain-experimental
 
 # LangGraph for memory/state management
 langgraph
-langgraph-checkpoint-redis
+# Note: SQLite control plane handles checkpoint persistence
 
 # Storage / graph / cache
-redis
+# External cache removed - using SQLite control plane instead
 neo4j
 weaviate-client>=4,<5
 grpcio

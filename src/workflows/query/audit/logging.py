@@ -16,7 +16,7 @@ def resolve_level(level: str | int | None) -> int:
 def configure_logging(level: str | int | None = None, fmt: str = DEFAULT_FORMAT) -> logging.Logger:
     """Configure logging with a consistent format and sensible defaults.
 
-    This project runs in containers and talks to multiple services (Weaviate, Redis,
+    This project runs in containers and talks to multiple services (Weaviate,
     Neo4j, LM Studio). Some third-party libraries (notably `httpx`) can be very
     chatty at INFO level. We keep the application logger at the requested level,
     while lowering noisy dependencies unless the user explicitly raises them.

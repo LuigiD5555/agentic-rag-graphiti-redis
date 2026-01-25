@@ -148,7 +148,7 @@ def process_code_document(pipeline: Any, code_loader: object) -> None:
 
     finalize_file_ingestion(pipeline, file_info, chunk_total=1)
 
-    # Update Redis cache with processing results
+    # Update cache with processing results
     from .file_processor import _update_file_cache
     _update_file_cache(
         pipeline=pipeline,

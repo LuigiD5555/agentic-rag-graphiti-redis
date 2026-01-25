@@ -20,7 +20,7 @@ server:
   bind_address: "0.0.0.0"
   port: 8080
   public_instance: false  # This is a private local instance
-  limiter: false  # Disabled - requires Redis/Valkey
+  limiter: false  # Disabled - requires external limiter backend
   image_proxy: false
   http_protocol_version: "1.1"
 

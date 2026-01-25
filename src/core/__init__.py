@@ -25,7 +25,6 @@ from .result import (
 from .mappers import (
     BaseMapper,
     HttpErrorMapper,
-    RedisErrorMapper,
     WeaviateErrorMapper,
     FilesystemErrorMapper,
     PythonRuntimeMapper,
@@ -45,7 +44,6 @@ from .adapters import (
     AdapterBase,
     adapter_method,
     WeaviateAdapter,
-    RedisAdapter,
     FilesystemAdapter,
 )
 
@@ -88,7 +86,6 @@ __all__ = [
     # Mappers
     'BaseMapper',
     'HttpErrorMapper',
-    'RedisErrorMapper',
     'WeaviateErrorMapper',
     'FilesystemErrorMapper',
     'PythonRuntimeMapper',
@@ -106,7 +103,6 @@ __all__ = [
     'AdapterBase',
     'adapter_method',
     'WeaviateAdapter',
-    'RedisAdapter',
     'FilesystemAdapter',
     
     # Policy

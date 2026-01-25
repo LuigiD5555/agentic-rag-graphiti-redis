@@ -48,7 +48,7 @@ class ConversationState(MessagesState):
     - Tool memory: References to tools used
     - Context: Current conversation state
 
-    This is the core data structure that gets persisted to Redis
+    This is the core data structure that gets persisted to the control plane
     and loaded on each request.
 
     Example:

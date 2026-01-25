@@ -47,7 +47,7 @@ def _update_file_cache(
     status: str = "processed",
     error_message: str | None = None,
 ) -> None:
-    """Update Redis cache with processed file metadata."""
+    """Update cache with processed file metadata."""
     cache_manager = getattr(pipeline, "cache_manager", None)
     if not cache_manager:
         logger.warning("Cache manager not available for pipeline, skipping cache update for %s", full_path)
@@ -133,7 +133,7 @@ def process_candidate_file(
     file_info = gather_file_metadata(full_path)
     register_observed_file(pipeline, full_path)
 
-    # Check Redis cache if available
+    # Check cache if available
     cache_manager = getattr(pipeline, "cache_manager", None)
     if cache_manager and cache_manager.enabled:
         # Check if file is unchanged using content hash
@@ -273,11 +273,11 @@ def process_candidate_file(
 
     for extensions, loader_cls in TEXT_LOADER_SPECS:
         if full_path.endswith(extensions):
-            # Pass Redis client to PDFLoader for content caching
+            # Pass cache client to PDFLoader for content caching
             if loader_cls.__name__ == "PDFLoader":
                 cache_manager = getattr(pipeline, "cache_manager", None)
-                redis_client = getattr(cache_manager, "redis_client", None) if cache_manager else None
-                loader = loader_cls(full_path, redis_client=redis_client)
+                cache_client = getattr(cache_manager, "cache_client", None) if cache_manager else None
+                loader = loader_cls(full_path, cache_client=cache_client)
             else:
                 loader = loader_cls(full_path)
             process_text_document(pipeline, loader)

@@ -4,10 +4,11 @@ Temporal tenants have a TTL and are automatically cleaned up.
 Each thread gets its own isolated tenant: temp_{thread_id}
 """
 import logging
-import time
 from typing import List, Optional, Dict, Any
 import weaviate
 from weaviate.classes.tenants import Tenant, TenantActivityStatus
+
+from src.workflows.query.temporal.store import TemporalStore
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ class TemporalTenantManager:
         weaviate_client: weaviate.WeaviateClient,
         collection_name: str,
         ttl_seconds: int = 86400,  # 24 hours default
+        store: Optional[TemporalStore] = None,
     ):
         """Initialize temporal tenant manager.
 
@@ -31,6 +33,7 @@ class TemporalTenantManager:
         self.client = weaviate_client
         self.collection_name = collection_name
         self.ttl_seconds = ttl_seconds
+        self.store = store or TemporalStore()
 
         logger.info(
             f"TemporalTenantManager initialized: collection={collection_name}, ttl={ttl_seconds}s"
@@ -67,6 +70,7 @@ class TemporalTenantManager:
                 ]
             )
 
+            self.store.ensure_tenant(tenant_name, ttl_seconds=self.ttl_seconds)
             logger.info(f"Created temporal tenant: {tenant_name}")
             return tenant_name
 
@@ -92,6 +96,7 @@ class TemporalTenantManager:
             # Check if exists (handle both str and object with .name attribute)
             tenant_names = [t if isinstance(t, str) else t.name for t in existing_tenants]
             if tenant_name in tenant_names:
+                self.store.ensure_tenant(tenant_name, ttl_seconds=self.ttl_seconds)
                 logger.debug(f"Using existing temporal tenant: {tenant_name}")
                 return tenant_name
 
@@ -117,6 +122,7 @@ class TemporalTenantManager:
             collection = self.client.collections.get(self.collection_name)
             collection.tenants.remove(tenants=[tenant_name])
 
+            self.store.delete_tenant_record(tenant_name)
             logger.info(f"Deleted temporal tenant: {tenant_name}")
             return True
 
@@ -149,46 +155,20 @@ class TemporalTenantManager:
             logger.error(f"Failed to list temporal tenants: {e}")
             return []
 
-    def cleanup_expired_tenants(self, redis_client, tenant_ttl_key_prefix: str = "tenant_created:") -> int:
+    def cleanup_expired_tenants(self) -> int:
         """Cleanup temporal tenants that have exceeded their TTL.
-
-        Args:
-            redis_client: Redis client for tracking tenant creation times
-            tenant_ttl_key_prefix: Redis key prefix for tenant timestamps
 
         Returns:
             Number of tenants deleted
         """
         deleted_count = 0
-        current_time = time.time()
+        expired_tenants = self.store.list_expired_tenants()
 
-        temporal_tenants = self.list_temporal_tenants()
-
-        for tenant_name in temporal_tenants:
-            # Get creation time from Redis
-            creation_time_key = f"{tenant_ttl_key_prefix}{tenant_name}"
-            creation_time = redis_client.get(creation_time_key)
-
-            if creation_time is None:
-                # No timestamp found, set it now (grace period)
-                redis_client.setex(creation_time_key, self.ttl_seconds, current_time)
-                logger.warning(f"No creation time for {tenant_name}, setting grace period")
-                continue
-
-            creation_time = float(creation_time)
-            age = current_time - creation_time
-
-            # Check if expired
-            if age > self.ttl_seconds:
-                logger.info(
-                    f"Deleting expired tenant {tenant_name} (age: {age:.0f}s, ttl: {self.ttl_seconds}s)"
-                )
-
-                # Delete tenant
-                if self.delete_temporal_tenant(tenant_name.replace("temp_", "")):
-                    # Delete Redis tracking key
-                    redis_client.delete(creation_time_key)
-                    deleted_count += 1
+        for tenant_name in expired_tenants:
+            logger.info("Deleting expired tenant %s (ttl: %ss)", tenant_name, self.ttl_seconds)
+            if self.delete_temporal_tenant(tenant_name.replace("temp_", "")):
+                self.store.delete_tenant_record(tenant_name)
+                deleted_count += 1
 
         if deleted_count > 0:
             logger.info(f"Cleanup completed: deleted {deleted_count} expired tenants")
@@ -230,6 +210,7 @@ def create_temporal_tenant_manager(
     weaviate_client: weaviate.WeaviateClient,
     collection_name: str,
     ttl_seconds: int = 86400,
+    store: Optional[TemporalStore] = None,
 ) -> TemporalTenantManager:
     """Factory function to create TemporalTenantManager.
 
@@ -245,4 +226,5 @@ def create_temporal_tenant_manager(
         weaviate_client=weaviate_client,
         collection_name=collection_name,
         ttl_seconds=ttl_seconds,
+        store=store,
     )

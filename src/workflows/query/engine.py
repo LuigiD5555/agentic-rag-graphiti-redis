@@ -100,11 +100,7 @@ class AppConfig(BaseSettings):
     NEO4J_USER: str = Field(default_factory=lambda: settings.NEO4J_USER)
     NEO4J_PASSWORD: str = Field(default_factory=lambda: settings.NEO4J_PASSWORD)
 
-    # ===== Cache (Redis) =====
-    REDIS_HOST: str = Field(default_factory=lambda: settings.REDIS_HOST)
-    REDIS_PORT: int = Field(default_factory=lambda: settings.REDIS_PORT)
-    REDIS_DB: int = Field(default_factory=lambda: settings.REDIS_DB)
-    REDIS_PASSWORD: str = Field(default_factory=lambda: settings.REDIS_PASSWORD)
+    # ===== Cache =====
     CACHE_TTL: int = Field(default_factory=lambda: settings.CACHE_TTL)
 
     # ===== API Configuration =====

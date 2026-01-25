@@ -33,14 +33,14 @@ class DiscoveryCacheManager:
         cache_file: Optional[str] = None,
         cache_manager: Optional[IngestionCacheManager] = None
     ):
-        # Redis-based cache manager (preferred)
+        # Cache manager for persisted metadata (preferred)
         self.cache_manager = cache_manager
 
         # Legacy: Cache file for persistent storage (fallback)
         self._cache_file = cache_file or ".file_discovery_cache.json"
         self._dir_cache: Dict[str, DirectoryScanCache] = {}
 
-        # Only load file cache if no Redis cache manager
+        # Only load file cache if no cache manager is provided
         if not self.cache_manager:
             self._load_cache()
 
@@ -96,7 +96,7 @@ class DiscoveryCacheManager:
 
     def is_dir_unchanged(self, dirpath: str, options_hash: str) -> Optional[DirectoryScanCache]:
         """Check if directory hasn't changed since last scan."""
-        # Try Redis cache first
+        # Try cache manager first
         if self.cache_manager:
             try:
                 dir_meta = self.cache_manager.get_directory_metadata(dirpath)
@@ -114,7 +114,7 @@ class DiscoveryCacheManager:
                             options_hash=options_hash
                         )
             except Exception as e:
-                log.debug("Error checking Redis cache for directory %s: %s", dirpath, e)
+                log.debug("Error checking cache for directory %s: %s", dirpath, e)
 
         # Fallback to file-based cache
         if dirpath not in self._dir_cache:
@@ -165,7 +165,7 @@ class DiscoveryCacheManager:
                 options_hash=options_hash
             )
 
-            # Save to Redis cache if available
+            # Save to cache manager if available
             if self.cache_manager:
                 total_size = sum(
                     os.path.getsize(f) for f in files if os.path.exists(f)
@@ -184,7 +184,7 @@ class DiscoveryCacheManager:
 
     def clear_cache(self) -> None:
         """Clear all cached data."""
-        # Clear Redis cache
+        # Clear cache manager
         if self.cache_manager:
             self.cache_manager.clear_all()
 
@@ -215,10 +215,10 @@ class DiscoveryCacheManager:
                 if (self._cache_hits + self._cache_misses) > 0 else 0.0
         }
 
-        # Add Redis cache stats if available
+        # Add cache stats if available
         if self.cache_manager:
-            redis_stats = self.cache_manager.get_stats()
-            stats['redis'] = redis_stats
+            cache_stats = self.cache_manager.get_stats()
+            stats['cache'] = cache_stats
 
         return stats
 

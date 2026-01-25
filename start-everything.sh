@@ -7,7 +7,7 @@
 # 2. Build tool images (if missing)
 # 3. Install and enable systemd sockets
 # 4. Check and prepare volumes
-# 5. Build and start all services (Weaviate, Neo4j, Redis, App, Open WebUI, Monitoring)
+# 5. Build and start all services (Weaviate, Neo4j, App, Open WebUI, Monitoring, RabbitMQ)
 # 6. Verify everything is running and run pre-flight checks
 # 7. Display summary and next steps
 # ============================================================================
@@ -241,7 +241,7 @@ print_header "STEP 5: Building and Starting All Services"
 
 print_step "Checking if services are already running..."
 
-if podman ps | grep -q "weaviate\|neo4j\|redis\|app\|open-webui\|monitoring"; then
+if podman ps | grep -q "weaviate\|neo4j\|app\|open-webui\|monitoring"; then
     print_success "Services are already running"
     read -p "Rebuild and restart all services? (y/N): " restart
     if [[ "$restart" =~ ^[yY]$ ]]; then
@@ -299,7 +299,7 @@ else
         print_info "open-webui service not available (profile not enabled)"
     fi
 
-    print_step "Starting all services (Weaviate, Neo4j, Redis, App, Open WebUI, Monitoring, RabbitMQ)..."
+    print_step "Starting all services (Weaviate, Neo4j, App, Open WebUI, Monitoring, RabbitMQ)..."
     if podman-compose config --services | grep -q "open-webui"; then
         podman-compose --profile webui up -d
     else
@@ -432,7 +432,6 @@ check_service() {
 print_info "Waiting up to ${SERVICE_WAIT_SECONDS}s for services..."
 check_service "Weaviate  " "8080"
 check_service "Neo4j     " "7474"
-check_service "Redis     " "6379" "no" "tcp" || print_info "Redis has no HTTP endpoint (normal)"
 check_service "RAG API   " "8000"
 
 if curl -s -f -m 2 "http://localhost:5555/health" >/dev/null 2>&1; then
@@ -509,8 +508,8 @@ echo ""
 echo -e "${BOLD}Database Services:${NC}"
 echo "  - Weaviate:    http://localhost:8080 (Vector DB)"
 echo "  - Neo4j:       http://localhost:7474 (Graph DB, user: neo4j)"
-echo "  - Redis:       localhost:6379 (Cache)"
 echo "  - RabbitMQ:    http://localhost:15672 (Message Queue, user: admin/change-me-rabbitmq)"
+echo "  - SQLite:      ./data/control_plane.db (Control Plane)"
 echo ""
 echo -e "${BOLD}Preprocessing Tools (Socket-Activated):${NC}"
 echo "  - tool-extractor (extractor): http://127.0.0.1:9101 (ZIP/7z/tar extraction)"

@@ -1,6 +1,6 @@
 [Unit]
 Description=Alert handler for %i failure
-Documentation=https://github.com/LuigiD5555/agentic-rag-graphiti-redis
+Documentation=https://github.com/LuigiD5555/agentic-rag-graphiti
 
 [Service]
 Type=oneshot

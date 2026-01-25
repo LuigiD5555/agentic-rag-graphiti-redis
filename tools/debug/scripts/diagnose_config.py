@@ -4,11 +4,9 @@ Configuration Diagnostic Script
 
 This script verifies that all critical configurations are correct for the RAG ingestion pipeline.
 It checks:
-1. Redis connectivity for embedding cache
-2. Redis connectivity for PDF cache
-3. Embedding dimension configuration
-4. LM Studio connectivity and available models
-5. Weaviate connectivity and schema
+1. Embedding dimension configuration
+2. LM Studio connectivity and available models
+3. Weaviate connectivity and schema
 """
 
 import os
@@ -22,50 +20,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 pytestmark = pytest.mark.integration
-
-def check_redis_connection():
-    """Check Redis connectivity."""
-    print("\n" + "="*60)
-    print("CHECKING REDIS CONNECTIVITY")
-    print("="*60)
-
-    try:
-        import redis
-
-        redis_host = os.environ.get("REDIS_HOST", "127.0.0.1")
-        redis_port = int(os.environ.get("REDIS_PORT", 6379))
-
-        print(f"Connecting to Redis at {redis_host}:{redis_port}...")
-
-        client = redis.Redis(
-            host=redis_host,
-            port=redis_port,
-            db=0,
-            decode_responses=False,
-            socket_connect_timeout=2,
-            socket_timeout=2,
-        )
-
-        # Test connection
-        client.ping()
-        print("Redis connection successful")
-
-        # Check cache keys
-        embed_keys = len(client.keys("embed:*"))
-        pdf_keys = len(client.keys("pdf_content:*"))
-
-        print(f"   - Embedding cache keys: {embed_keys}")
-        print(f"   - PDF cache keys: {pdf_keys}")
-
-        return True
-
-    except ImportError:
-        print("ERROR: redis-py not installed")
-        return False
-    except Exception as e:
-        print(f"ERROR: Redis connection failed: {e}")
-        return False
-
 
 def check_embedding_config():
     """Check embedding dimension configuration."""
@@ -219,12 +173,8 @@ def check_environment_variables():
     print("="*60)
 
     critical_vars = {
-        "REDIS_HOST": "127.0.0.1",
-        "REDIS_PORT": "6379",
         "WEAVIATE_URL": "http://weaviate:8080",
         "LMSTUDIO_HOST": "127.0.0.1",
-        "RAG_EMBED_CACHE_ENABLED": "true",
-        "RAG_PDF_CACHE_ENABLED": "true",
         "RAG_PIPELINE_WORKERS": "8",
     }
 
@@ -245,7 +195,6 @@ def main():
     print("=" * 60)
 
     results = {
-        "Redis": check_redis_connection(),
         "Embedding Config": check_embedding_config(),
         "LM Studio": check_lmstudio_connectivity(),
         "Weaviate": check_weaviate_connectivity(),
@@ -275,7 +224,6 @@ def main():
 def test_diagnose_config_checks():
     assert check_environment_variables()
     assert check_embedding_config()
-    assert check_redis_connection()
     assert check_lmstudio_connectivity()
     assert check_weaviate_connectivity()
 

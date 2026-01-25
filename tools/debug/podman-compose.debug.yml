@@ -31,8 +31,6 @@ services:
 
       # Access to RAG services via localhost (host network)
       - WEAVIATE_URL=http://127.0.0.1:8080
-      - REDIS_HOST=127.0.0.1
-      - REDIS_PORT=6379
       - API_URL=http://127.0.0.1:8000
 
     # Keep container running for exec commands

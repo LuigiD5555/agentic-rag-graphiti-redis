@@ -82,7 +82,7 @@ def test_podman_compose_defines_required_services():
     """
     compose = _load_compose()
     services = compose.get("services", {})
-    for service_name in ("weaviate", "redis", "neo4j", "app"):
+    for service_name in ("weaviate", "neo4j", "app"):
         assert service_name in services, f"{service_name} service must be defined."
 
     weaviate = services["weaviate"]
@@ -91,10 +91,6 @@ def test_podman_compose_defines_required_services():
     assert any(
         env.startswith("PERSISTENCE_DATA_PATH=") for env in weaviate.get("environment", [])
     )
-
-    redis = services["redis"]
-    assert redis["image"].startswith("docker.io/library/redis")
-    assert _ports_include_literal_or_env(redis["ports"], 6379, 6379)
 
     neo4j = services["neo4j"]
     assert neo4j["image"].startswith("docker.io/library/neo4j")

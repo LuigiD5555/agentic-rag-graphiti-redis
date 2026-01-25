@@ -17,18 +17,15 @@ class RabbitMQConfig(BaseSettings):
     management_port: int = 15672
     
     # Queue configurations
-    redis_queue: str = "redis-operations"
     document_queue: str = "document-processing"
     vector_queue: str = "vector-storage"
     notification_queue: str = "system-notifications"
     
     # Exchange configurations
-    direct_exchange: str = "redis.direct"
     topic_exchange: str = "processing.topic"
     fanout_exchange: str = "notifications.fanout"
     
     # Dead letter exchanges
-    redis_dlx: str = "redis.dlx"
     processing_dlx: str = "processing.dlx"
     storage_dlx: str = "storage.dlx"
     

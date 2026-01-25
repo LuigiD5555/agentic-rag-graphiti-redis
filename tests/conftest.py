@@ -63,10 +63,6 @@ def pytest_configure(config):
     # External dependency markers
     config.addinivalue_line(
         'markers',
-        'requires_redis: Tests requiring Redis to be running'
-    )
-    config.addinivalue_line(
-        'markers',
         'requires_weaviate: Tests requiring Weaviate to be running'
     )
     config.addinivalue_line(

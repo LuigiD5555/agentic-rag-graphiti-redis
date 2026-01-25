@@ -4,11 +4,7 @@ Periodically cleans up expired temporal tenants based on TTL.
 """
 import logging
 import threading
-import time
 from typing import Optional
-
-import redis
-import weaviate
 
 from src.workflows.query.temporal.tenant_manager import TemporalTenantManager
 
@@ -21,22 +17,16 @@ class TemporalCleanupScheduler:
     def __init__(
         self,
         tenant_manager: TemporalTenantManager,
-        redis_client: redis.Redis,
         cleanup_interval: int = 3600,
-        tenant_ttl_key_prefix: str = "tenant_created:",
     ):
         """Initialize cleanup scheduler.
 
         Args:
             tenant_manager: TemporalTenantManager instance
-            redis_client: Redis client for timestamp tracking
             cleanup_interval: Cleanup interval in seconds (default: 1 hour)
-            tenant_ttl_key_prefix: Redis key prefix for tenant timestamps
         """
         self.tenant_manager = tenant_manager
-        self.redis_client = redis_client
         self.cleanup_interval = cleanup_interval
-        self.tenant_ttl_key_prefix = tenant_ttl_key_prefix
 
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
@@ -75,10 +65,7 @@ class TemporalCleanupScheduler:
         while not self._stop_event.is_set():
             try:
                 # Run cleanup
-                deleted_count = self.tenant_manager.cleanup_expired_tenants(
-                    redis_client=self.redis_client,
-                    tenant_ttl_key_prefix=self.tenant_ttl_key_prefix,
-                )
+                deleted_count = self.tenant_manager.cleanup_expired_tenants()
 
                 if deleted_count > 0:
                     logger.info(f"Cleanup: deleted {deleted_count} expired tenants")
@@ -96,14 +83,12 @@ class TemporalCleanupScheduler:
 
 def create_temporal_cleanup_scheduler(
     tenant_manager: TemporalTenantManager,
-    redis_client: redis.Redis,
     cleanup_interval: int = 3600,
 ) -> TemporalCleanupScheduler:
     """Factory function to create TemporalCleanupScheduler.
 
     Args:
         tenant_manager: TemporalTenantManager instance
-        redis_client: Redis client
         cleanup_interval: Cleanup interval in seconds
 
     Returns:
@@ -111,6 +96,5 @@ def create_temporal_cleanup_scheduler(
     """
     return TemporalCleanupScheduler(
         tenant_manager=tenant_manager,
-        redis_client=redis_client,
         cleanup_interval=cleanup_interval,
     )

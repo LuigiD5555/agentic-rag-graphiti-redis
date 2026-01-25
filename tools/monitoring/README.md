@@ -180,10 +180,10 @@ Note: vulture scans require the workspace to be mounted read-only at `/workspace
 
 The container uses `host` network mode to access services:
 
-- Redis: `127.0.0.1:6379`
 - Weaviate: `http://127.0.0.1:8080`
 - Neo4j: `bolt://127.0.0.1:7687`
 - LM Studio: `http://127.0.0.1:1234`
+- SQLite control plane: `data/control_plane.db` (context checkpoint compaction and cache metadata, no external cache service)
 
 ## Reports
 
@@ -212,11 +212,10 @@ cat ./monitoring_reports/logs_*.json | jq .
 
 The daemon runs periodic health checks:
 
-### Redis
-- Connectivity
-- Memory usage
-- Connected clients
-- Total keys
+### SQLite control plane
+- Connectivity enough to open `data/control_plane.db`
+- Context checkpoint compaction status (size + WAL freshness)
+- Embedded cache metadata stability (recent writes, vacuum hints)
 
 ### Weaviate
 - Connectivity
@@ -266,6 +265,6 @@ journalctl --user -u rag-monitoring.service
 
 1. Uncomment the ports section in `podman-compose.yml`
 2. Make sure the container uses `network_mode: "host"` and services are running:
-   - Redis on 6379
+   - SQLite control plane accessible at `data/control_plane.db`
    - Weaviate on 8080
    - Neo4j on 7687

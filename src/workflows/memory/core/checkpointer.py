@@ -1,203 +1,145 @@
-"""Redis checkpointer with intelligent TTL management.
+"""SQLite checkpointer with intelligent TTL management."""
 
-Provides LangGraph checkpoint persistence with automatic TTL:
-- Saves checkpoints with configurable TTL (default 48h)
-- Extends TTL on access (touch on read)
-- Automatic cleanup via Redis expiration
-"""
+import json
 import logging
+import time
 from typing import Any, Optional
-from urllib.parse import quote_plus
 
-from langgraph.checkpoint.redis import RedisSaver
-
+from src.backends.storage.sqlite.manager import get_sqlite_manager
 
 logger = logging.getLogger(__name__)
 
 
-class TTLRedisSaver(RedisSaver):
-    """Redis checkpoint saver with intelligent TTL management.
-
-    Extends RedisSaver to add automatic TTL handling:
-    - put(): Saves checkpoint and sets TTL
-    - get(): Retrieves checkpoint and extends TTL (touch)
-
-    This enables "touch on access" behavior where active conversations
-    stay alive indefinitely (as long as accessed within TTL window).
-
-    Example:
-        >>> saver = TTLRedisSaver(
-        ...     redis_url="redis://127.0.0.1:6379/0",
-        ...     ttl_seconds=172800  # 48 hours
-        ... )
-        >>> # Save checkpoint - TTL starts
-        >>> saver.put(config, checkpoint, metadata)
-        >>> # Access checkpoint - TTL resets to 48h
-        >>> checkpoint = saver.get(config)
-    """
+class SQLiteCheckpointer:
+    """SQLite-backed checkpointer with TTL refresh on access."""
 
     def __init__(
         self,
-        redis_url: str,
-        ttl_seconds: int = 172800,  # 48 hours default
-        **kwargs: Any
+        ttl_seconds: int = 172800,
     ):
-        """Initialize TTL Redis saver.
-
-        Args:
-            redis_url: Redis connection URL (e.g., "redis://127.0.0.1:6379/0")
-            ttl_seconds: Time-to-live in seconds (default: 172800 = 48h)
-            **kwargs: Additional arguments for RedisSaver
-        """
-        super().__init__(redis_url=redis_url, **kwargs)
         self.ttl = ttl_seconds
+        self.sqlite_manager = get_sqlite_manager()
+
         logger.info(
-            f"TTLRedisSaver initialized with TTL={ttl_seconds}s "
-            f"({ttl_seconds / 3600:.1f}h)"
+            "SQLiteCheckpointer initialized with TTL=%ss (%.1fh)",
+            ttl_seconds,
+            ttl_seconds / 3600,
         )
+
+    def _extract_keys(self, config: dict) -> Optional[tuple[str, str]]:
+        configurable = config.get("configurable", {}) if isinstance(config, dict) else {}
+        thread_id = configurable.get("thread_id")
+        checkpoint_ns = configurable.get("checkpoint_ns", "default")
+        if not thread_id:
+            return None
+        return str(thread_id), str(checkpoint_ns)
 
     def put(
         self,
         config: dict,
         checkpoint: dict,
         metadata: dict,
-        new_versions: Optional[dict] = None
+        new_versions: Optional[dict] = None,
     ) -> dict:
-        """Save checkpoint with TTL.
+        """Save checkpoint with TTL."""
+        keys = self._extract_keys(config)
+        if not keys:
+            logger.warning("Missing thread_id in checkpoint config")
+            return config
 
-        Args:
-            config: LangGraph config (contains thread_id)
-            checkpoint: Checkpoint data to save
-            metadata: Checkpoint metadata
-            new_versions: Optional version information
+        thread_id, checkpoint_ns = keys
+        now_ts = int(time.time())
+        expires_at = now_ts + self.ttl
 
-        Returns:
-            Updated config
+        payload_json = json.dumps(checkpoint)
+        metadata_json = json.dumps(metadata)
 
-        Note:
-            After saving, sets TTL on the Redis key. If conversation is
-            never accessed again, it will auto-expire after TTL.
-        """
-        # Save checkpoint using parent implementation
-        result = super().put(config, checkpoint, metadata, new_versions)
+        with self.sqlite_manager.control_plane.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO memory_checkpoints
+                (thread_id, checkpoint_ns, payload_json, metadata_json, version, updated_at, expires_at)
+                VALUES (?, ?, ?, ?, 1, ?, ?)
+                ON CONFLICT(thread_id, checkpoint_ns) DO UPDATE SET
+                    payload_json = excluded.payload_json,
+                    metadata_json = excluded.metadata_json,
+                    updated_at = excluded.updated_at,
+                    expires_at = excluded.expires_at
+                """,
+                (thread_id, checkpoint_ns, payload_json, metadata_json, now_ts, expires_at),
+            )
 
-        # Apply TTL to checkpoint keys
-        # RedisSaver uses keys like: langgraph:checkpoint:{thread_id}:*
-        try:
-            thread_id = config.get("configurable", {}).get("thread_id")
-            if thread_id:
-                # Set TTL on all keys for this thread
-                pattern = f"langgraph:checkpoint:{thread_id}:*"
-                keys = self._redis.keys(pattern)
-
-                for key in keys:
-                    self._redis.expire(key, self.ttl)
-
-                logger.debug(
-                    f"Set TTL={self.ttl}s on {len(keys)} keys for "
-                    f"thread_id={thread_id[:8]}..."
-                )
-        except Exception as e:
-            logger.error(f"Failed to set TTL: {e}", exc_info=True)
-
-        return result
+        return config
 
     def get(self, config: dict) -> Optional[dict]:
-        """Retrieve checkpoint and extend TTL (touch on access).
+        """Retrieve checkpoint and extend TTL."""
+        keys = self._extract_keys(config)
+        if not keys:
+            logger.warning("Missing thread_id in checkpoint config")
+            return None
 
-        Args:
-            config: LangGraph config (contains thread_id)
+        thread_id, checkpoint_ns = keys
+        now_ts = int(time.time())
+        with self.sqlite_manager.control_plane.get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT payload_json, expires_at
+                FROM memory_checkpoints
+                WHERE thread_id = ? AND checkpoint_ns = ?
+                """,
+                (thread_id, checkpoint_ns),
+            ).fetchone()
 
-        Returns:
-            Checkpoint data or None if not found
-
-        Note:
-            If checkpoint exists, this resets TTL to full duration.
-            This implements "touch on access" - active conversations
-            stay alive indefinitely.
-        """
-        # Retrieve checkpoint using parent implementation
-        checkpoint = super().get(config)
-
-        if checkpoint:
-            # Extend TTL: reset to full duration
-            try:
-                thread_id = config.get("configurable", {}).get("thread_id")
-                if thread_id:
-                    pattern = f"langgraph:checkpoint:{thread_id}:*"
-                    keys = self._redis.keys(pattern)
-
-                    for key in keys:
-                        self._redis.expire(key, self.ttl)
-
-                    logger.debug(
-                        f"Extended TTL={self.ttl}s on {len(keys)} keys for "
-                        f"thread_id={thread_id[:8]}... (touch on access)"
-                    )
-            except Exception as e:
-                logger.error(f"Failed to extend TTL: {e}", exc_info=True)
-
-        return checkpoint
-
-    def get_ttl(self, thread_id: str) -> Optional[int]:
-        """Get remaining TTL for a thread.
-
-        Args:
-            thread_id: Thread ID to check
-
-        Returns:
-            Remaining TTL in seconds, or None if thread not found
-
-        Example:
-            >>> ttl = saver.get_ttl("abc123...")
-            >>> if ttl:
-            ...     print(f"Thread expires in {ttl / 3600:.1f} hours")
-        """
-        try:
-            pattern = f"langgraph:checkpoint:{thread_id}:*"
-            keys = self._redis.keys(pattern)
-
-            if not keys:
+            if not row:
                 return None
 
-            # Return TTL of first key (all should have same TTL)
-            ttl = self._redis.ttl(keys[0])
-            return ttl if ttl > 0 else None
+            payload_json, expires_at = row
+            if int(expires_at) < now_ts:
+                conn.execute(
+                    "DELETE FROM memory_checkpoints WHERE thread_id = ? AND checkpoint_ns = ?",
+                    (thread_id, checkpoint_ns),
+                )
+                return None
 
-        except Exception as e:
-            logger.error(f"Failed to get TTL: {e}", exc_info=True)
+            # Extend TTL (touch)
+            new_expires_at = now_ts + self.ttl
+            conn.execute(
+                """
+                UPDATE memory_checkpoints
+                SET expires_at = ?, updated_at = ?
+                WHERE thread_id = ? AND checkpoint_ns = ?
+                """,
+                (new_expires_at, now_ts, thread_id, checkpoint_ns),
+            )
+
+        try:
+            return json.loads(payload_json)
+        except Exception as exc:
+            logger.error("Failed to decode checkpoint JSON: %s", exc)
             return None
+
+    def get_ttl(self, thread_id: str, checkpoint_ns: str = "default") -> Optional[int]:
+        """Get remaining TTL for a thread."""
+        now_ts = int(time.time())
+        with self.sqlite_manager.control_plane.get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT expires_at FROM memory_checkpoints
+                WHERE thread_id = ? AND checkpoint_ns = ?
+                """,
+                (thread_id, checkpoint_ns),
+            ).fetchone()
+
+        if not row:
+            return None
+
+        expires_at = int(row[0])
+        remaining = expires_at - now_ts
+        return remaining if remaining > 0 else None
 
 
 def create_checkpointer(
-    redis_host: str = "127.0.0.1",
-    redis_port: int = 6379,
-    redis_password: str | None = None,
-    redis_db: int = 0,
-    ttl_seconds: int = 172800
-) -> TTLRedisSaver:
-    """Factory function to create TTL Redis checkpointer.
-
-    Args:
-        redis_host: Redis hostname
-        redis_port: Redis port
-        redis_password: Optional password used for AUTH
-        redis_db: Redis database number
-        ttl_seconds: TTL in seconds (default: 48h)
-
-    Returns:
-        Configured TTLRedisSaver instance
-
-    Example:
-        >>> checkpointer = create_checkpointer(
-        ...     redis_host="127.0.0.1",
-        ...     redis_port=6379,
-        ...     ttl_seconds=172800
-        ... )
-    """
-    auth_segment = ""
-    if redis_password:
-        auth_segment = f":{quote_plus(redis_password)}@"
-    redis_url = f"redis://{auth_segment}{redis_host}:{redis_port}/{redis_db}"
-    logger.info(f"Creating Redis checkpointer with URL: redis://{auth_segment}{redis_host}:{redis_port}/{redis_db}")
-    return TTLRedisSaver(redis_url=redis_url, ttl_seconds=ttl_seconds)
+    ttl_seconds: int = 172800,
+) -> SQLiteCheckpointer:
+    """Factory function to create SQLite checkpointer."""
+    return SQLiteCheckpointer(ttl_seconds=ttl_seconds)

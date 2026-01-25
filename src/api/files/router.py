@@ -6,7 +6,6 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Header
-import redis
 import weaviate
 
 from src.api.files.models import (
@@ -21,6 +20,7 @@ from src.workflows.query.temporal.tenant_manager import (
     TemporalTenantManager,
     create_temporal_tenant_manager,
 )
+from src.workflows.query.temporal.store import TemporalStore
 from src.workflows.ingestion.orchestrator import IngestionOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,6 @@ _file_tracker: Optional[FileTracker] = None
 _tenant_manager: Optional[TemporalTenantManager] = None
 _ingestion_orchestrator: Optional[IngestionOrchestrator] = None
 _weaviate_client: Optional[weaviate.WeaviateClient] = None
-_redis_client: Optional[redis.Redis] = None
 _file_promoter = None
 _pareto_analyzer = None
 
@@ -255,10 +254,8 @@ async def delete_file(
         if not file_info:
             raise HTTPException(status_code=404, detail="File not found")
 
-        temp_file_key = f"temp_file:{thread_id}:{file_id}"
-        _redis_client.delete(temp_file_key)
-        _redis_client.delete(f"{temp_file_key}:chunk_scores")
-        _redis_client.srem(f"temp_files:{thread_id}", file_id)
+        if hasattr(tracker, "store"):
+            tracker.store.delete_temporal_file(thread_id, file_id)
 
         logger.info(f"Deleted file {file_id} from thread {thread_id}")
 
@@ -334,7 +331,6 @@ async def promote_file(
 
 def initialize_files_router(
     weaviate_client: weaviate.WeaviateClient,
-    redis_client: redis.Redis,
     ingestion_orchestrator: IngestionOrchestrator,
     collection_name: str,
     default_tenant: Optional[str] = None,
@@ -343,15 +339,15 @@ def initialize_files_router(
 
     Args:
         weaviate_client: Weaviate client instance
-        redis_client: Redis client instance
         ingestion_orchestrator: IngestionOrchestrator instance
         collection_name: Weaviate collection name
         default_tenant: Default (permanent) tenant name
     """
-    global _file_tracker, _tenant_manager, _ingestion_orchestrator, _weaviate_client, _redis_client, _file_promoter, _pareto_analyzer
+    global _file_tracker, _tenant_manager, _ingestion_orchestrator, _weaviate_client, _file_promoter, _pareto_analyzer
 
+    store = TemporalStore()
     _file_tracker = create_file_tracker(
-        redis_client=redis_client,
+        store=store,
         promotion_threshold=_config.TEMPORAL_PROMOTION_THRESHOLD,
         pareto_min_queries=_config.TEMPORAL_PARETO_MIN_QUERIES,
     )
@@ -360,11 +356,12 @@ def initialize_files_router(
         weaviate_client=weaviate_client,
         collection_name=collection_name,
         ttl_seconds=_config.TEMPORAL_TENANT_TTL,
+        store=store,
     )
 
     from src.workflows.query.temporal.pareto import create_pareto_analyzer
     _pareto_analyzer = create_pareto_analyzer(
-        redis_client=redis_client,
+        store=store,
         top_percent=_config.TEMPORAL_PARETO_TOP_PERCENT,
         min_queries=_config.TEMPORAL_PARETO_MIN_QUERIES,
     )
@@ -372,7 +369,7 @@ def initialize_files_router(
     from src.workflows.query.temporal.promotion import create_file_promoter
     _file_promoter = create_file_promoter(
         weaviate_client=weaviate_client,
-        redis_client=redis_client,
+        store=store,
         collection_name=collection_name,
         default_tenant=default_tenant,
         pareto_analyzer=_pareto_analyzer,
@@ -380,6 +377,5 @@ def initialize_files_router(
 
     _ingestion_orchestrator = ingestion_orchestrator
     _weaviate_client = weaviate_client
-    _redis_client = redis_client
 
     logger.info("Files router initialized successfully (with Pareto analysis and promotion)")

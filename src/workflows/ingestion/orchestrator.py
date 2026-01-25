@@ -40,13 +40,13 @@ class IngestionOrchestrator:
         """
         self._config = config or runtime_settings
 
-        # Initialize Redis cache manager
+        # Initialize cache manager (SQLite-only control plane)
         self._cache_manager = IngestionCacheManager.from_settings(self._export_settings_dict(self._config))
 
-        # Initialize discovery service (uses Redis cache internally)
+        # Initialize discovery service (uses cache internally)
         self._discovery = FileDiscoveryService(cache_manager=self._cache_manager)
 
-        logger.info("IngestionOrchestrator initialized with Redis caching.")
+        logger.info("IngestionOrchestrator initialized with control-plane caching.")
 
     @staticmethod
     def _export_settings_dict(config: Any) -> Dict[str, Any]:
@@ -153,7 +153,7 @@ class IngestionOrchestrator:
 
     def run_incremental_scan(self, options: IngestionOptions) -> dict:
         """
-        Run an incremental scan using Redis cache to detect changes and process only changed files.
+        Run an incremental scan using cached metadata to detect changes and process only changed files.
 
         Args:
             options: Ingestion options controlling scan behavior.
@@ -449,24 +449,10 @@ class IngestionOrchestrator:
         # Early returns for guard conditions
         if not getattr(self._config, "INGESTION_RESUMABLE_ENABLED", False):
             return
-        
-        if not self._cache_manager:
-            logger.warning("Resumable ingestion requested but cache manager is unavailable.")
-            return
-            
-        redis_client = getattr(self._cache_manager, "redis", None)
-        if not redis_client:
-            logger.warning("Resumable ingestion requested but Redis client is unavailable.")
-            return
 
-        try:
-            from src.workflows.ingestion.checkpoint import IngestQueue, ChunkRegistry
-
-            pipeline.ingest_queue = IngestQueue(redis_client)
-            pipeline.chunk_registry = ChunkRegistry(redis_client)
-            logger.info("Resumable ingestion enabled (IngestQueue + ChunkRegistry)")
-        except Exception as exc:  # pragma: no cover - best-effort
-            logger.warning("Failed to enable resumable ingestion: %s", exc)
+        logger.warning(
+            "Resumable ingestion is disabled (external cache removed). Use non-resumable ingestion or RabbitMQ pipeline."
+        )
 
     def _cleanup_preprocessed_outputs(self, records: List[Any], result: dict) -> None:
         # Early returns for guard conditions

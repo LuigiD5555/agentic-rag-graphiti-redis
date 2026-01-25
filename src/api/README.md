@@ -5,7 +5,7 @@ An Ollama-like API to expose the RAG system as a REST service. This API prioriti
 ## Requirements
 
 - **Python 3.12** (to stay consistent with the rest of the project)
-- Backend services running (Weaviate, Neo4j, Redis, LM Studio)
+- Backend services running (Weaviate, Neo4j, LM Studio) plus the SQLite control plane (`data/control_plane.db`) that now owns cache/checkpoint tasks (context checkpoint compaction, metadata, resumability).
 
 ## Features
 
@@ -129,8 +129,8 @@ pip install -r requirements.txt
 2. Make sure services are running:
    - Weaviate (vector store)
    - Neo4j (graph store)
-   - Redis (cache)
    - LM Studio (LLM)
+   - SQLite control plane (data/control_plane.db) for cache/checkpoint metadata
 
 3. Configure environment variables in `.env` (see `src/settings.py`)
 

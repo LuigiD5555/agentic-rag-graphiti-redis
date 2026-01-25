@@ -97,14 +97,7 @@ class RabbitMQBroker(MessageBroker):
     async def _declare_exchanges(self) -> None:
         """Declare all required exchanges."""
         from aio_pika import ExchangeType
-        
-        # Direct exchange for Redis operations
-        self.exchanges["direct"] = await self.channel.declare_exchange(
-            name=config.direct_exchange,
-            type=ExchangeType.DIRECT,
-            durable=True
-        )
-        
+
         # Topic exchange for processing
         self.exchanges["topic"] = await self.channel.declare_exchange(
             name=config.topic_exchange,
@@ -121,19 +114,6 @@ class RabbitMQBroker(MessageBroker):
     
     async def _declare_queues(self) -> None:
         """Declare all required queues."""
-        # Redis operations queue
-        self.queues["redis"] = await self.channel.declare_queue(
-            name=config.redis_queue,
-            durable=True,
-            arguments={
-                "x-max-priority": 10
-            }
-        )
-        await self.queues["redis"].bind(
-            exchange=self.exchanges["direct"],
-            routing_key="redis.*"
-        )
-        
         # Document processing queue
         self.queues["document"] = await self.channel.declare_queue(
             name=config.document_queue,
@@ -177,7 +157,6 @@ class RabbitMQBroker(MessageBroker):
     def _get_exchange_info(self, queue: str, message: MessageModel) -> Optional[tuple]:
         """Get exchange and routing key info for a queue."""
         queue_mappings = {
-            config.redis_queue: (self.exchanges["direct"], f"redis.{message.payload.operation}"),
             config.document_queue: (self.exchanges["topic"], f"document.{message.payload.operation}"),
             config.vector_queue: (self.exchanges["topic"], f"vector.{message.payload.operation}"),
             config.notification_queue: (self.exchanges["fanout"], ""),
@@ -187,7 +166,6 @@ class RabbitMQBroker(MessageBroker):
     def _get_queue(self, queue: str):
         """Get queue instance by name."""
         queue_mappings = {
-            config.redis_queue: self.queues["redis"],
             config.document_queue: self.queues["document"],
             config.vector_queue: self.queues["vector"],
             config.notification_queue: self.queues["notification"],

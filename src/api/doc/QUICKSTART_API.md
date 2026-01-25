@@ -9,11 +9,10 @@ A quick guide to start the Ollama-like REST API in minutes.
 **Python 3.12** (to stay consistent with the rest of the project)
 
 Make sure you have these running:
-
 1. **Weaviate** (vector store) - Port 8080
 2. **Neo4j** (graph store) - Port 7687
-3. **Redis** (cache) - Port 6379
-4. **LM Studio** (LLM) - Port 1234 with a model loaded
+3. **LM Studio** (LLM) - Port 1234 with a model loaded
+4. **SQLite control plane** (`data/control_plane.db`) as the cache/checkpoint backend (context checkpoint compaction, ingestion metadata, resumability).
 
 ### Start services with Docker/Podman Compose
 
@@ -150,9 +149,8 @@ NEO4J_URI=bolt://neo4j:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=your-password
 
-# Cache
-REDIS_HOST=localhost
-REDIS_PORT=6379
+# Cache (SQLite control plane)
+CONTROL_PLANE_DB_PATH=./data/control_plane.db
 
 # LM Studio (LLM)
 LMSTUDIO_HOST=localhost
@@ -169,16 +167,13 @@ PROVIDER=lmstudio
 **Cause**: Services are not running or are not reachable.
 
 **Solution**:
-1. Verify Weaviate, Redis, Neo4j, and LM Studio are running
+1. Verify Weaviate, Neo4j, and LM Studio are running
 2. Check the API logs: `uvicorn src.api.app:app --log-level debug`
 3. Test individual connections:
 
 ```bash
 # Weaviate
 curl http://localhost:8080/v1/.well-known/ready
-
-# Redis
-redis-cli ping
 
 # Neo4j
 curl http://localhost:7474

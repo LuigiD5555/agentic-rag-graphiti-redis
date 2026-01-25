@@ -162,16 +162,6 @@ class DefaultErrorPolicy(BaseErrorPolicy):
                 "backoff_base": 2.0,
                 "max_retries": 3,
             },
-            ServiceType.REDIS: {
-                "retryable_errors": {
-                    ErrorKind.TIMEOUT: True,
-                    ErrorKind.RATE_LIMIT: True,
-                    ErrorKind.UPSTREAM_UNAVAILABLE: True,
-                    ErrorKind.NETWORK: True,
-                },
-                "backoff_base": 1.5,
-                "max_retries": 5,
-            },
             ServiceType.HTTP_PROVIDER: {
                 "retryable_errors": {
                     ErrorKind.TIMEOUT: True,

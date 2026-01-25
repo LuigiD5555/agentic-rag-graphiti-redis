@@ -721,7 +721,7 @@ Answer:"""
             # We need to map source back to file_id - for now we'll extract from source path
             # This is a simplification - in production you'd want better file_id tracking
             for source, chunks in chunks_by_file.items():
-                # Try to extract file_id from Redis using source path
+                # Try to extract file_id from cached metadata using source path
                 file_ids = self.file_tracker.list_temporal_files(thread_id)
 
                 for file_id in file_ids:

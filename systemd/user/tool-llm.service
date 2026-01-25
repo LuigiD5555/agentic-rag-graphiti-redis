@@ -1,6 +1,6 @@
 [Unit]
 Description=RAG Tool LLM Server
-Documentation=https://github.com/LuigiD5555/agentic-rag-graphiti-redis
+Documentation=https://github.com/LuigiD5555/agentic-rag-graphiti
 Requires=tool-llm.socket
 After=tool-llm.socket
 

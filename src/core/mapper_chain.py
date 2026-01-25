@@ -8,7 +8,7 @@ converting them to standardized ErrorEvent or PressureEvent objects.
 from typing import Any, Dict, List, Optional, Union
 from .result import ErrorEvent, PressureEvent, Result
 from .mappers import (
-    BaseMapper, HttpErrorMapper, RedisErrorMapper, WeaviateErrorMapper,
+    BaseMapper, HttpErrorMapper, WeaviateErrorMapper,
     FilesystemErrorMapper, PythonRuntimeMapper, PressureMapper, FallbackUnknownMapper
 )
 
@@ -31,7 +31,6 @@ class MapperChain:
         if mappers is None:
             mappers = [
                 HttpErrorMapper(),
-                RedisErrorMapper(),
                 WeaviateErrorMapper(),
                 FilesystemErrorMapper(),
                 PythonRuntimeMapper(),

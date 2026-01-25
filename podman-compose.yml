@@ -79,8 +79,7 @@ services:
           cpus: "${NEO4J_CPUS:-2.0}"
           memory: "${NEO4J_MEMORY:-3g}"
 
-  # Redis has been removed in favor of SQLite control plane
-  # SQLite database file will be stored in ./data/control_plane.db
+  # SQLite control plane stores metadata in ./data/control_plane.db
 
   open-webui:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_open-webui_1"
@@ -442,7 +441,6 @@ volumes:
   neo4j_data: {}
   neo4j_logs: {}
   weaviate_data: {}
-  redis_data: {}
   open-webui_data: {}
   monitoring_logs: {}
   monitoring_reports: {}

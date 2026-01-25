@@ -303,7 +303,7 @@ class AdaptiveHybridScanner:
         self._stop_event = threading.Event()
         self._lock = threading.RLock()
         
-        # Directory state store (in-memory for now, could be Redis)
+        # Directory state store (in-memory for now, could be persisted)
         self.dir_state_store: Dict[str, DirectoryState] = {}
         
         log.info(

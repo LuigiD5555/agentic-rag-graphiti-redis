@@ -16,7 +16,7 @@
 
 ## 3. Correlated Logs
 
-- Redis was healthy (no errors/timeouts).
+- SQLite control plane (context checkpoint compaction) was healthy (no errors/timeouts).
 - Weaviate was healthy (no errors).
 - LM Studio did not receive embedding requests after initialization, suggesting the pipeline stalled before embedding.
 

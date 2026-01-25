@@ -48,7 +48,7 @@ class IngestionPipeline:
         self.vector_store = vector_store
         self.options = options
 
-        # Redis-based cache for incremental ingestion
+        # Cache manager for incremental ingestion
         self.cache_manager = cache_manager
 
         # Checkpoint components for resumable ingestion
@@ -452,13 +452,11 @@ class IngestionPipeline:
         """Process a single ingestion job.
 
         Args:
-            job: IngestJob instance
+            job: Ingestion job instance
 
         Returns:
             Tuple of (success, error_message)
         """
-        from src.workflows.ingestion.checkpoint.ingest_queue import IngestJob
-
         try:
             # Process the file
             _, success, error = self._process_single_file_safe(

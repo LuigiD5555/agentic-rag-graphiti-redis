@@ -100,7 +100,6 @@ Los tests están organizados usando marcadores de pytest:
 - `slow`: Tests que toman tiempo significativo
 
 ### Dependencias externas
-- `requires_redis`: Tests que requieren Redis (algunos marcados como skip)
 - `requires_weaviate`: Tests que requieren Weaviate
 - `requires_neo4j`: Tests que requieren Neo4J (algunos marcados como skip)
 - `requires_lmstudio`: Tests que requieren LM Studio
@@ -127,7 +126,7 @@ El archivo `pytest.ini` en la raíz del proyecto configura:
 Algunos tests están marcados como `skip` por las siguientes razones:
 
 1. **NER functionality not currently configured**: Tests que dependen de Named Entity Recognition
-2. **Redis migration tests require Redis which is no longer used**: Tests de migración de Redis
+2. **External cache migration tests are obsolete**: The SQLite control plane now handles cache/checkpoint behavior, so those tests remain skipped until a SQLite-focused suite replaces them
 3. **Memory integration tests require ChatMemory functionality which may not be configured**: Tests de integración de memoria
 
 Para habilitar estos tests en el futuro, simplemente remover el decorador `@pytest.mark.skip`.

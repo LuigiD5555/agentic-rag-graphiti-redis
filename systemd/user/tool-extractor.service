@@ -1,6 +1,6 @@
 [Unit]
 Description=RAG Tool File Extractor (container + proxy)
-Documentation=https://github.com/LuigiD5555/agentic-rag-graphiti-redis
+Documentation=https://github.com/LuigiD5555/agentic-rag-graphiti
 After=network-online.target
 Wants=network-online.target
 OnFailure=tool-alert@%n.service

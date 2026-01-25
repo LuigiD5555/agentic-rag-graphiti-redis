@@ -1,20 +1,11 @@
-"""Resumable directory scanning using Redis-backed checkpoints.
+"""Resumable directory scanning using SQLite-backed checkpoints."""
 
-This module implements the ScanCheckpointer which enables:
-- Resumable directory scanning after interruptions
-- Persistent queue of pending directories in Redis
-- Tracking of visited directories to avoid re-scanning
-- run_id based isolation for multiple concurrent scans
-"""
-
-import time
-import uuid
-from typing import TYPE_CHECKING, Optional, Set, Dict, Any
 from dataclasses import dataclass
+import time
+from typing import List, Optional, Dict, Any
 
-if TYPE_CHECKING:
-    import redis
-
+from src.backends.storage.sqlite.manager import get_sqlite_manager
+from src.backends.storage.sqlite import ScanRunStatus
 from src.workflows.query.audit import get_logger
 
 log = get_logger(__name__)
@@ -22,370 +13,157 @@ log = get_logger(__name__)
 
 @dataclass
 class ScanRun:
-    """Metadata for a scan run."""
+    """Represents a scan run and its persisted state."""
     run_id: str
-    root_paths: list[str]
+    root_paths: List[str]
     options_hash: str
-    started_at: float
-    status: str  # 'running', 'completed', 'failed', 'interrupted'
-    dirs_scanned: int = 0
+    status: ScanRunStatus
+    started_at: int
+    updated_at: int
+    dirs_visited: int = 0
     files_found: int = 0
-    last_updated: Optional[float] = None
+    last_error: Optional[str] = None
+    pending_dirs: Optional[List[str]] = None
+    visited_dirs: Optional[List[str]] = None
+    discovered_files: Optional[List[str]] = None
 
 
 class ScanCheckpointer:
-    """Manages resumable directory scanning with Redis-backed persistence.
+    """SQLite-backed checkpointer for resumable directory scans."""
 
-    Redis Key Schema:
-        scan:run:{run_id}:pending       LIST - Queue of pending directories
-        scan:run:{run_id}:visited       SET - Set of visited directory paths
-        scan:run:{run_id}:files         LIST - Discovered file paths (chunked)
-        scan:run:{run_id}:meta          HASH - Run metadata (status, stats, etc.)
-        scan:runs:active                ZSET - Active runs sorted by start time
-
-    Workflow:
-        1. Start new run or resume existing: get run_id
-        2. Push root directories to pending queue
-        3. Pop directories from queue, scan them
-        4. Mark directories as visited
-        5. Push subdirectories to pending queue
-        6. Repeat until queue is empty
-        7. Mark run as completed
-    """
-
-    # Redis key patterns
-    PENDING_KEY_PATTERN = "scan:run:{run_id}:pending"
-    VISITED_KEY_PATTERN = "scan:run:{run_id}:visited"
-    FILES_KEY_PATTERN = "scan:run:{run_id}:files"
-    META_KEY_PATTERN = "scan:run:{run_id}:meta"
-    ACTIVE_RUNS_KEY = "scan:runs:active"
-
-    # Configuration
-    DEFAULT_TTL = 7 * 24 * 60 * 60  # 7 days
-    FILES_CHUNK_SIZE = 1000  # Write files in chunks to avoid huge lists
-
-    def __init__(self, redis_client: "redis.Redis", ttl: int = DEFAULT_TTL):
-        """Initialize checkpointer with Redis client.
-
-        Args:
-            redis_client: Redis client instance
-            ttl: Time-to-live for checkpoint data in seconds
-        """
-        self.redis = redis_client
+    def __init__(self, ttl: int = 30 * 24 * 60 * 60):
         self.ttl = ttl
-        log.info("ScanCheckpointer initialized (TTL=%d seconds)", ttl)
+        self.sqlite_manager = get_sqlite_manager()
+        self.store = self.sqlite_manager.get_scan_checkpoint_store()
 
-    def start_new_run(
-        self,
-        root_paths: list[str],
-        options_hash: str,
-        run_id: Optional[str] = None
-    ) -> str:
-        """Start a new scan run.
-
-        Args:
-            root_paths: List of root directories to scan
-            options_hash: Hash of discovery options (for cache validation)
-            run_id: Optional explicit run_id (useful for resuming)
-
-        Returns:
-            The run_id for this scan
-        """
-        if not run_id:
-            run_id = f"scan_{uuid.uuid4().hex[:12]}_{int(time.time())}"
-
-        now = time.time()
-
-        # Initialize metadata
-        meta = {
-            "run_id": run_id,
-            "root_paths": ",".join(root_paths),
-            "options_hash": options_hash,
-            "started_at": str(now),
-            "status": "running",
-            "dirs_scanned": "0",
-            "files_found": "0",
-            "last_updated": str(now)
-        }
-
-        meta_key = self.META_KEY_PATTERN.format(run_id=run_id)
-        pending_key = self.PENDING_KEY_PATTERN.format(run_id=run_id)
-
-        # Store metadata
-        self.redis.hset(meta_key, mapping=meta)
-        self.redis.expire(meta_key, self.ttl)
-
-        # Initialize pending queue with root directories
-        if root_paths:
-            # Each entry: "dirpath|rel_dirpath"
-            entries = [f"{path}|" for path in root_paths]
-            self.redis.rpush(pending_key, *entries)
-            self.redis.expire(pending_key, self.ttl)
-
-        # Add to active runs
-        self.redis.zadd(self.ACTIVE_RUNS_KEY, {run_id: now})
-        self.redis.expire(self.ACTIVE_RUNS_KEY, self.ttl)
-
-        log.info(
-            "Started scan run %s with %d root path(s): %s",
-            run_id, len(root_paths), root_paths
-        )
-
+    def start_new_run(self, root_paths: List[str], options_hash: str) -> str:
+        now_ts = int(time.time())
+        run_id = self.store.create_run(root_paths, options_hash, now_ts)
+        for root in root_paths:
+            self.store.enqueue_dir(run_id, root, now_ts)
+        self.store.set_run_status(run_id, ScanRunStatus.RUNNING, now_ts)
         return run_id
 
     def resume_run(self, run_id: str) -> Optional[ScanRun]:
-        """Resume an interrupted scan run.
-
-        Args:
-            run_id: The run to resume
-
-        Returns:
-            ScanRun metadata if run exists and can be resumed, None otherwise
-        """
-        meta_key = self.META_KEY_PATTERN.format(run_id=run_id)
-        meta = self.redis.hgetall(meta_key)
-
-        if not meta:
-            log.warning("Cannot resume run %s: metadata not found", run_id)
-            return None
-
-        status = meta.get("status", "unknown")
-        if status == "completed":
-            log.info("Run %s already completed", run_id)
-            return None
-
-        # Update status to running
-        self.redis.hset(meta_key, "status", "running")
-        self.redis.hset(meta_key, "last_updated", str(time.time()))
-
-        scan_run = ScanRun(
-            run_id=run_id,
-            root_paths=meta.get("root_paths", "").split(","),
-            options_hash=meta.get("options_hash", ""),
-            started_at=float(meta.get("started_at", 0)),
-            status="running",
-            dirs_scanned=int(meta.get("dirs_scanned", 0)),
-            files_found=int(meta.get("files_found", 0)),
-            last_updated=float(meta.get("last_updated", 0))
-        )
-
-        log.info(
-            "Resumed scan run %s (dirs_scanned=%d, files_found=%d)",
-            run_id, scan_run.dirs_scanned, scan_run.files_found
-        )
-
-        return scan_run
-
-    def pop_pending_directory(self, run_id: str) -> Optional[tuple[str, str]]:
-        """Pop next pending directory from queue.
-
-        Args:
-            run_id: The scan run
-
-        Returns:
-            Tuple of (dirpath, rel_dirpath) or None if queue is empty
-        """
-        pending_key = self.PENDING_KEY_PATTERN.format(run_id=run_id)
-        entry = self.redis.lpop(pending_key)
-
-        if not entry:
-            return None
-
-        # Parse "dirpath|rel_dirpath"
-        parts = entry.split("|", 1)
-        dirpath = parts[0]
-        rel_dirpath = parts[1] if len(parts) > 1 else ""
-
-        return dirpath, rel_dirpath
-
-    def push_pending_directories(
-        self,
-        run_id: str,
-        directories: list[tuple[str, str]]
-    ) -> None:
-        """Add subdirectories to pending queue.
-
-        Args:
-            run_id: The scan run
-            directories: List of (dirpath, rel_dirpath) tuples
-        """
-        if not directories:
-            return
-
-        pending_key = self.PENDING_KEY_PATTERN.format(run_id=run_id)
-
-        # Format entries as "dirpath|rel_dirpath"
-        entries = [f"{dirpath}|{rel_dirpath}" for dirpath, rel_dirpath in directories]
-
-        self.redis.rpush(pending_key, *entries)
-        self.redis.expire(pending_key, self.ttl)
-
-    def mark_directory_visited(self, run_id: str, dirpath: str) -> None:
-        """Mark a directory as visited.
-
-        Args:
-            run_id: The scan run
-            dirpath: Directory path to mark as visited
-        """
-        visited_key = self.VISITED_KEY_PATTERN.format(run_id=run_id)
-        self.redis.sadd(visited_key, dirpath)
-        self.redis.expire(visited_key, self.ttl)
-
-    def is_directory_visited(self, run_id: str, dirpath: str) -> bool:
-        """Check if directory has been visited.
-
-        Args:
-            run_id: The scan run
-            dirpath: Directory path to check
-
-        Returns:
-            True if directory was already visited
-        """
-        visited_key = self.VISITED_KEY_PATTERN.format(run_id=run_id)
-        return bool(self.redis.sismember(visited_key, dirpath))
-
-    def add_discovered_files(self, run_id: str, file_paths: list[str]) -> None:
-        """Add discovered files to the run's file list.
-
-        Args:
-            run_id: The scan run
-            file_paths: List of file paths discovered
-        """
-        if not file_paths:
-            return
-
-        files_key = self.FILES_KEY_PATTERN.format(run_id=run_id)
-
-        # Write in chunks to avoid huge single operations
-        for i in range(0, len(file_paths), self.FILES_CHUNK_SIZE):
-            chunk = file_paths[i:i + self.FILES_CHUNK_SIZE]
-            self.redis.rpush(files_key, *chunk)
-
-        self.redis.expire(files_key, self.ttl)
-
-    def get_discovered_files(self, run_id: str) -> list[str]:
-        """Get all discovered files for a run.
-
-        Args:
-            run_id: The scan run
-
-        Returns:
-            List of file paths
-        """
-        files_key = self.FILES_KEY_PATTERN.format(run_id=run_id)
-        return self.redis.lrange(files_key, 0, -1)
-
-    def update_stats(
-        self,
-        run_id: str,
-        dirs_scanned: Optional[int] = None,
-        files_found: Optional[int] = None
-    ) -> None:
-        """Update scan statistics.
-
-        Args:
-            run_id: The scan run
-            dirs_scanned: Number of directories scanned (incremental)
-            files_found: Number of files found (incremental)
-        """
-        meta_key = self.META_KEY_PATTERN.format(run_id=run_id)
-
-        updates = {"last_updated": str(time.time())}
-
-        if dirs_scanned is not None:
-            # Increment counter
-            current = int(self.redis.hget(meta_key, "dirs_scanned") or 0)
-            updates["dirs_scanned"] = str(current + dirs_scanned)
-
-        if files_found is not None:
-            current = int(self.redis.hget(meta_key, "files_found") or 0)
-            updates["files_found"] = str(current + files_found)
-
-        self.redis.hset(meta_key, mapping=updates)
-
-    def complete_run(self, run_id: str, status: str = "completed") -> None:
-        """Mark scan run as completed or failed.
-
-        Args:
-            run_id: The scan run
-            status: Final status ('completed', 'failed', 'interrupted')
-        """
-        meta_key = self.META_KEY_PATTERN.format(run_id=run_id)
-
-        self.redis.hset(meta_key, mapping={
-            "status": status,
-            "last_updated": str(time.time()),
-            "completed_at": str(time.time())
-        })
-
-        # Remove from active runs
-        self.redis.zrem(self.ACTIVE_RUNS_KEY, run_id)
-
-        log.info("Scan run %s marked as %s", run_id, status)
-
-    def get_run_metadata(self, run_id: str) -> Optional[ScanRun]:
-        """Get metadata for a scan run.
-
-        Args:
-            run_id: The scan run
-
-        Returns:
-            ScanRun metadata or None if not found
-        """
-        meta_key = self.META_KEY_PATTERN.format(run_id=run_id)
-        meta = self.redis.hgetall(meta_key)
-
-        if not meta:
+        try:
+            data = self.store.resume_run(run_id)
+        except Exception as exc:
+            log.warning("Failed to resume scan run %s: %s", run_id, exc)
             return None
 
         return ScanRun(
-            run_id=run_id,
-            root_paths=meta.get("root_paths", "").split(","),
-            options_hash=meta.get("options_hash", ""),
-            started_at=float(meta.get("started_at", 0)),
-            status=meta.get("status", "unknown"),
-            dirs_scanned=int(meta.get("dirs_scanned", 0)),
-            files_found=int(meta.get("files_found", 0)),
-            last_updated=float(meta.get("last_updated", 0))
+            run_id=data["run_id"],
+            root_paths=data.get("root_paths", []),
+            options_hash=data.get("options_hash", ""),
+            status=data.get("status", ScanRunStatus.NEW),
+            started_at=int(data.get("started_at", 0)),
+            updated_at=int(data.get("updated_at", 0)),
+            dirs_visited=int(data.get("dirs_visited", 0)),
+            files_found=int(data.get("files_found", 0)),
+            last_error=data.get("last_error"),
+            pending_dirs=data.get("pending_dirs", []),
+            visited_dirs=data.get("visited_dirs", []),
+            discovered_files=data.get("discovered_files", []),
         )
 
+    def complete_run(self, run_id: str, status: str = "completed") -> None:
+        now_ts = int(time.time())
+        status_value = ScanRunStatus.COMPLETED if status == "completed" else ScanRunStatus.CANCELLED
+        if status == "failed":
+            status_value = ScanRunStatus.FAILED
+        self.store.set_run_status(run_id, status_value, now_ts)
+
+    def list_runs(self) -> List[Dict[str, Any]]:
+        with self.sqlite_manager.control_plane.get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT run_id, root_paths_json, options_hash, status, started_at, updated_at,
+                       dirs_visited, files_found, last_error
+                FROM scan_runs
+                ORDER BY started_at DESC
+                """
+            ).fetchall()
+
+        runs = []
+        for row in rows:
+            runs.append(
+                {
+                    "run_id": row[0],
+                    "root_paths": row[1],
+                    "options_hash": row[2],
+                    "status": row[3],
+                    "created_at": int(row[4]),
+                    "updated_at": int(row[5]),
+                    "dirs_visited": int(row[6]),
+                    "files_found": int(row[7]),
+                    "last_error": row[8],
+                }
+            )
+        return runs
+
+    def push_pending_directories(self, run_id: str, dirs: List[str]) -> None:
+        now_ts = int(time.time())
+        for dir_path in dirs:
+            self.store.enqueue_dir(run_id, dir_path, now_ts)
+
+    def pop_pending_directory(self, run_id: str) -> Optional[str]:
+        return self.store.dequeue_dir(run_id)
+
+    def is_directory_visited(self, run_id: str, dir_path: str) -> bool:
+        with self.sqlite_manager.control_plane.get_connection() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM scan_visited WHERE run_id = ? AND dir_path = ?",
+                (run_id, dir_path),
+            ).fetchone()
+        return bool(row)
+
+    def mark_directory_visited(self, run_id: str, dir_path: str) -> None:
+        self.store.mark_visited(run_id, dir_path, int(time.time()))
+
+    def add_discovered_files(self, run_id: str, files: List[str]) -> None:
+        now_ts = int(time.time())
+        for file_path in files:
+            self.store.add_found_file(run_id, file_path, now_ts)
+
     def get_pending_count(self, run_id: str) -> int:
-        """Get number of pending directories.
+        with self.sqlite_manager.control_plane.get_connection() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM scan_pending WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+        return int(row[0]) if row else 0
 
-        Args:
-            run_id: The scan run
+    def get_visited_directories(self, run_id: str) -> List[str]:
+        with self.sqlite_manager.control_plane.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT dir_path FROM scan_visited WHERE run_id = ?",
+                (run_id,),
+            ).fetchall()
+        return [row[0] for row in rows]
 
-        Returns:
-            Number of directories in pending queue
-        """
-        pending_key = self.PENDING_KEY_PATTERN.format(run_id=run_id)
-        return self.redis.llen(pending_key)
+    def get_discovered_files(self, run_id: str) -> List[str]:
+        with self.sqlite_manager.control_plane.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT file_path FROM scan_files WHERE run_id = ? ORDER BY seq",
+                (run_id,),
+            ).fetchall()
+        return [row[0] for row in rows]
 
-    def list_active_runs(self) -> list[str]:
-        """List all active scan runs.
-
-        Returns:
-            List of run_ids sorted by start time
-        """
-        return self.redis.zrange(self.ACTIVE_RUNS_KEY, 0, -1)
-
-    def cleanup_run(self, run_id: str) -> None:
-        """Delete all data for a scan run.
-
-        Args:
-            run_id: The scan run to clean up
-        """
-        keys = [
-            self.PENDING_KEY_PATTERN.format(run_id=run_id),
-            self.VISITED_KEY_PATTERN.format(run_id=run_id),
-            self.FILES_KEY_PATTERN.format(run_id=run_id),
-            self.META_KEY_PATTERN.format(run_id=run_id)
-        ]
-
-        self.redis.delete(*keys)
-        self.redis.zrem(self.ACTIVE_RUNS_KEY, run_id)
-
-        log.info("Cleaned up scan run %s", run_id)
+    def update_stats(self, run_id: str, dirs_visited_delta: int = 0, files_found_delta: int = 0) -> None:
+        if dirs_visited_delta == 0 and files_found_delta == 0:
+            return
+        now_ts = int(time.time())
+        with self.sqlite_manager.control_plane.get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE scan_runs
+                SET dirs_visited = dirs_visited + ?,
+                    files_found = files_found + ?,
+                    updated_at = ?
+                WHERE run_id = ?
+                """,
+                (dirs_visited_delta, files_found_delta, now_ts, run_id),
+            )
 
 
 __all__ = ["ScanCheckpointer", "ScanRun"]

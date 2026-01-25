@@ -58,11 +58,6 @@ log_analysis:
 health_checks:
   # Services to monitor
   services:
-    redis:
-      enabled: true
-      timeout: 5
-      critical: true  # Alert if fails
-
     weaviate:
       enabled: true
       timeout: 10
@@ -80,10 +75,6 @@ health_checks:
 
   # Alert thresholds
   thresholds:
-    redis:
-      max_memory_usage_mb: 1024
-      max_clients: 100
-
     weaviate:
       min_classes: 1
 

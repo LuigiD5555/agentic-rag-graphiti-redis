@@ -26,15 +26,12 @@ def get_checkpointer():
     """Get or create global checkpointer instance.
 
     Returns:
-        TTLRedisSaver instance
+        SQLiteCheckpointer instance
     """
     global _checkpointer
 
     if _checkpointer is None:
         _checkpointer = create_checkpointer(
-            redis_host=settings.REDIS_HOST,
-            redis_port=settings.REDIS_PORT,
-            redis_password=settings.REDIS_PASSWORD or None,
             ttl_seconds=settings.MEMORY_TTL
         )
         logger.info("Checkpointer initialized")
@@ -83,7 +80,7 @@ def save_state(
     state: ConversationState,
     thread_id: str
 ) -> None:
-    """Save state to Redis with TTL.
+    """Save state to the control plane with TTL.
 
     Args:
         state: Conversation state to save

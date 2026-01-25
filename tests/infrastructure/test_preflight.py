@@ -189,7 +189,7 @@ class TestConfigurationFiles:
         content = yaml.safe_load(COMPOSE_FILE.read_text())
         services = content.get("services", {})
 
-        required_services = ["weaviate", "neo4j", "redis", "rag-api"]
+        required_services = ["weaviate", "neo4j", "rag-api"]
         missing_services = [s for s in required_services if s not in services]
 
         assert not missing_services, (
@@ -279,7 +279,6 @@ class TestPythonEnvironment:
     @pytest.mark.parametrize("package", [
         "weaviate",
         "neo4j",
-        "redis",
         "fastapi",
         "langchain",
         "pydantic",
@@ -370,6 +369,21 @@ class TestDirectoryStructure:
         else:
             print(f"\n✓ .volumes/ directory exists")
 
+    def test_control_plane_db_ready(self):
+        """Ensure the control plane SQLite file is reachable or can be created."""
+        control_plane_db = PROJECT_ROOT / "data" / "control_plane.db"
+
+        if not control_plane_db.exists():
+            assert control_plane_db.parent.exists(), (
+                f"Control plane directory {control_plane_db.parent} should exist"
+            )
+            print(
+                f"\n⚠ {control_plane_db} not found yet (it will be created on first run)"
+            )
+        else:
+            assert control_plane_db.is_file(), f"{control_plane_db} must be a file"
+            print(f"\n✓ Control plane SQLite ready at {control_plane_db}")
+
 
 # ============================================================================
 # Test: Port Availability
@@ -383,7 +397,6 @@ class TestPortAvailability:
         (8080, "Weaviate"),
         (7474, "Neo4j HTTP"),
         (7687, "Neo4j Bolt"),
-        (6379, "Redis"),
         (8000, "RAG API"),
         (5555, "Open WebUI"),
     ]

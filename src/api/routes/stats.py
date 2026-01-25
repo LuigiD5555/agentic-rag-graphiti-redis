@@ -34,7 +34,6 @@ class RAGStats(BaseModel):
     active_tenants: int
     graph_nodes: int
     graph_relations: int
-    redis_memory_mb: float
     weaviate_objects: int
 
 
@@ -55,18 +54,9 @@ async def get_weaviate_client():
     return _weaviate_client
 
 
-async def get_redis_client():
-    """Get Redis client instance."""
-    from src.api.app import _redis_client
-    if _redis_client is None:
-        raise HTTPException(status_code=500, detail="Redis client not initialized")
-    return _redis_client
-
-
 @router.get("/rag", response_model=RAGStats)
 async def get_rag_stats(
     weaviate_client = Depends(get_weaviate_client),
-    redis_client = Depends(get_redis_client),
 ) -> RAGStats:
     """Get overall RAG system statistics."""
     try:
@@ -108,15 +98,6 @@ async def get_rag_stats(
             total_objects = 0
             tenants = []
 
-        # Get Redis memory usage
-        redis_memory_mb = 0.0
-        try:
-            info = redis_client.info("memory")
-            redis_memory_bytes = info.get("used_memory", 0)
-            redis_memory_mb = redis_memory_bytes / (1024 * 1024)
-        except Exception as e:
-            logger.warning(f"Could not get Redis memory stats: {e}")
-
         # TODO: Get Neo4j graph stats (placeholder for now)
         graph_nodes = 0
         graph_relations = 0
@@ -127,7 +108,6 @@ async def get_rag_stats(
             active_tenants=len(tenants),
             graph_nodes=graph_nodes,
             graph_relations=graph_relations,
-            redis_memory_mb=round(redis_memory_mb, 2),
             weaviate_objects=total_objects,
         )
     except Exception as e:
@@ -241,10 +221,8 @@ async def get_vector_stats(
 
 
 @router.get("/metrics", response_model=QueryMetrics)
-async def get_query_metrics(
-    redis_client = Depends(get_redis_client),
-) -> QueryMetrics:
-    """Get recent query metrics from Redis."""
+async def get_query_metrics() -> QueryMetrics:
+    """Get recent query metrics (placeholder)."""
     try:
         # This is a placeholder - you would implement actual metrics tracking
         # For now, return dummy data

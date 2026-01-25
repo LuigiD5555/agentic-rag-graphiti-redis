@@ -62,28 +62,6 @@ class Message(BaseModel):
         return cls(**data)
 
 
-class RedisOperationMessage(Message):
-    """Message for Redis operations."""
-    
-    def __init__(
-        self,
-        operation: str,
-        data: Dict[str, Any],
-        source: str = "redis-client",
-        priority: int = 5
-    ):
-        """Initialize Redis operation message."""
-        super().__init__(
-            source=source,
-            destination="redis-operations",
-            priority=priority,
-            payload=MessagePayload(
-                operation=operation,
-                data=data
-            )
-        )
-
-
 class DocumentProcessingMessage(Message):
     """Message for document processing."""
     

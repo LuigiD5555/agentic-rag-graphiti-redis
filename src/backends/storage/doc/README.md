@@ -17,8 +17,8 @@ This directory contains documentation for storage backends.
 - Location: [src/storage/graph/neo4j_repository.py](../graph/neo4j_repository.py)
 
 ### Cache
-- **Redis**: Caching layer
-- Location: [src/storage/cache/](../cache/)
+- **SQLite control plane**: Local cache/checkpoint storage (context checkpoint compaction, metadata, resumable scans, no external cache dependency).
+- Location: [src/backends/storage/sqlite/](../sqlite/)
 
 ## Related Documentation
 

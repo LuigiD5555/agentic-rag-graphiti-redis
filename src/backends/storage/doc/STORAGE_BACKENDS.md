@@ -17,10 +17,11 @@ The RAG system uses a multi-backend storage architecture to leverage the strengt
                       │
     ┌─────────────────┼─────────────────┬─────────────┐
     │                 │                 │             │
-┌───▼────┐     ┌─────▼──────┐    ┌────▼─────┐
-│Weaviate│     │   Neo4j    │    │ Redis    │
-│(Vector)│     │  (Graph)   │    │(Cache)   │
-└────────┘     └────────────┘    └──────────┘
+┌───▼────┐     ┌─────▼──────┐    ┌────▼──────────┐
+│Weaviate│     │   Neo4j    │    │ SQLite control│
+│(Vector)│     │  (Graph)   │    │ plane (cache/ │
+└────────┘     └────────────┘    │ checkpoint)   │
+                                 └───────────────┘
 ```
 
 ## 1. Vector Store - Weaviate
@@ -88,43 +89,23 @@ NER (Named Entity Recognition) pipeline (legacy/experimental):
 - [src/storage/graph/neo4j_repository.py](../graph/neo4j_repository.py)
 - [src/storage/graph/null_repository.py](../graph/null_repository.py) (stub for testing)
 
-## 3. Cache - Redis
+## 3. Cache - SQLite Control Plane
 
-**Purpose**: High-performance caching layer
+**Purpose**: Lightweight persistence for operational metadata (no external cache).
 
-**Location**: [src/storage/cache/](../cache/)
+**Location**: [src/backends/storage/sqlite/](../sqlite/)
 
 ### Features
-- Embedding cache (avoid re-computing embeddings)
-- Ingestion cache (file discovery, hash tracking)
-- Session cache
-- Rate limiting
+- Scan checkpointing and resumibility
+- File metadata and processing status
+- Chunk registry and idempotence
+- Temporal file tracking
+- Memory checkpoints
 
 ### Configuration
 ```bash
-REDIS_HOST=127.0.0.1
-REDIS_PORT=6379
-REDIS_DB=0
+CONTROL_PLANE_DB_PATH=./data/control_plane.db
 ```
-
-### Cache Types
-
-#### Embedding Cache
-- Location: [src/storage/cache/redis_cache.py](../cache/redis_cache.py)
-- TTL: 7 days (configurable via `RAG_EMBED_CACHE_TTL`)
-- Prefix: `embed:` (configurable via `RAG_EMBED_CACHE_PREFIX`)
-
-#### Ingestion Cache
-- Location: [src/storage/cache/ingestion/](../cache/ingestion/)
-- Components:
-  - [file_cache.py](../cache/ingestion/file_cache.py): File hash tracking
-  - [directory_cache.py](../cache/ingestion/directory_cache.py): Directory discovery cache
-  - [manager.py](../cache/ingestion/manager.py): Cache coordination
-
-### Related Files
-- [src/storage/cache/redis_connection.py](../cache/redis_connection.py)
-- [src/storage/cache/redis_cache.py](../cache/redis_cache.py)
-- [src/storage/cache/ingestion/](../cache/ingestion/)
 
 ## Storage Interfaces
 
@@ -142,15 +123,13 @@ Typical ingestion flow through storage backends:
 ```
 1. Document uploaded
    ↓
-2. Check Redis cache (file hash)
-   ↓ (cache miss)
-3. Process document
+2. Process document
    ↓
 4. Extract entities → Neo4j (graph)
    ↓
-5. Generate embeddings → Check Redis (embedding cache)
+5. Generate embeddings → Check SQLite control plane (embedding cache metadata, context checkpoint compaction)
    ↓ (cache miss)
-6. Compute embeddings → Store in Redis
+6. Compute embeddings → Store metadata/results in SQLite
    ↓
 7. Store embeddings → Weaviate (vector)
 ```
@@ -167,22 +146,22 @@ Typical ingestion flow through storage backends:
 - **Index**: Automatic indexing on node properties
 - **Scaling**: Causal clustering for read replicas
 
-### Redis
-- **Optimal for**: Sub-millisecond reads/writes
-- **Persistence**: RDB snapshots + AOF
-- **Scaling**: Redis Cluster for partitioning
+### SQLite control plane
+- **Optimal for**: Local metadata, context checkpoint compaction, and lightweight cache emulation
+- **Persistence**: Built-in WAL-mode durability of `data/control_plane.db`
+- **Scaling**: Single-node durability; rely on SQLite tooling for backups and vacuum
 
 ## Monitoring and Maintenance
 
 ### Health Checks
 - Weaviate: `GET /v1/.well-known/ready`
 - Neo4j: `CALL dbms.components()`
-- Redis: `PING`
+- SQLite control plane: `sqlite3 data/control_plane.db "PRAGMA quick_check;"`
 
 ### Backup Strategies
 - **Weaviate**: Snapshot-based backups
 - **Neo4j**: `neo4j-admin backup`
-- **Redis**: RDB + AOF persistence
+- **SQLite control plane**: Copy `data/control_plane.db` (and its WAL files) to your archive location; run `sqlite3 data/control_plane.db "VACUUM;"` before the copy when compaction is needed
 
 ## Related Documentation
 

@@ -1,6 +1,6 @@
 # RAG Agentic Graphiti
 
-**RAG Agentic Graphiti** is a hybrid Retrieval-Augmented Generation (RAG) engine combining **vector search** (Weaviate) and **graph search** (Neo4j), with **Redis caching** for faster responses. It is designed to integrate seamlessly with local Large Language Models (LLMs) via **LM Studio** using an OpenAI-compatible API.
+**RAG Agentic Graphiti** is a hybrid Retrieval-Augmented Generation (RAG) engine combining **vector search** (Weaviate) and **graph search** (Neo4j), with a **SQLite control plane** for operational metadata. It is designed to integrate seamlessly with local Large Language Models (LLMs) via **LM Studio** using an OpenAI-compatible API.
 
 This system is built for scenarios that require **document ingestion**, **code indexing**, and **semantic relationship mapping** between entities — enabling detailed, context-rich answers.
 
@@ -17,7 +17,7 @@ This system is built for scenarios that require **document ingestion**, **code i
 
 - **Hybrid retrieval:** Combines semantic similarity search with graph-based relationship queries.
 - **LM Studio integration:** Uses local embedding and language models via API endpoints.
-- **Caching layer:** Speeds up repeat queries using Redis.
+- **Control plane:** Persists operational metadata for resumable scans and runtime state.
 - **Document & code ingestion:** Processes text, markdown, and source code with automatic entity/relation extraction.
 - **Socket server option:** Enables network-based queries from external clients.
 - **Modular architecture:** Each service (vector store, graph store, cache, LLM) can be replaced or extended without affecting the rest of the pipeline.
@@ -30,7 +30,7 @@ This system is built for scenarios that require **document ingestion**, **code i
 - **LM Studio** running locally with:
 	- At least one **embedding model** loaded
 	- At least one **language model** loaded
-- **Docker** or **Podman** (for Weaviate, Redis, Neo4j)
+- **Docker** or **Podman** (for Weaviate, Neo4j)
 - Dependencies listed in `requirements.txt`
 
 ---
@@ -53,13 +53,13 @@ Key `.env` entries you may need to adjust:
 - `WEAVIATE_CLASS` – Target collection name (defaults to `RAGDocument`).
 - `WEAVIATE_CONNECT_RETRIES` / `WEAVIATE_CONNECT_BACKOFF` – How long the app should keep trying while Weaviate boots.
 - `LMSTUDIO_HOST` / `LMSTUDIO_PORT` – LM Studio HTTP server host/port.
-- `REDIS_HOST`, `NEO4J_URI`, etc. – Service endpoints when running remotely.
+- `NEO4J_URI`, etc. – Service endpoints when running remotely.
 
 ---
 
 ## Starting Required Services
 
-You can run **all services** (Weaviate, Neo4j, Redis, and RAG API) using the provided **Podman Compose** file:
+You can run **all services** (Weaviate, Neo4j, and RAG API) using the provided **Podman Compose** file:
 
 ```bash
 podman-compose up --build -d
@@ -68,7 +68,6 @@ podman-compose up --build -d
 This will start:
 - **Weaviate** (vector store) on port 8080
 - **Neo4j** (graph store) on port 7687
-- **Redis** (cache) on port 6379
 - **RAG API** (OpenAI-compatible REST API) on port 5555
 
 **Note:** Make sure LM Studio is running on your host machine (port 1234) with both an embedding model and a chat model loaded.
@@ -228,7 +227,7 @@ Connect from another machine:
 If another machine has **LM Studio** and similar specs:
 
 1. Clone this repository.
-2. Configure `.env` with the **remote** Weaviate, Redis, and Neo4j URLs.
+2. Configure `.env` with the **remote** Weaviate and Neo4j URLs (the cache/checkpointing layer now relies on the local SQLite control plane).
 3. Run:
 	or connect via the socket server.
 

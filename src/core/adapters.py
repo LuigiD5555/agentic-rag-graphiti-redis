@@ -247,23 +247,6 @@ class WeaviateAdapter(AdapterBase):
         return self.execute(_operation, "batch_upsert", ProcessingStage.UPSERT, context, records)
 
 
-class RedisAdapter(AdapterBase):
-    """Adapter for Redis operations."""
-    
-    def __init__(self, client, mapper_chain=None):
-        super().__init__(
-            service_type=ServiceType.REDIS,
-            default_stage=ProcessingStage.IDEMPOTENCY,
-            mapper_chain=mapper_chain
-        )
-        self.client = client
-    
-    def _execute_operation(self, operation: Callable[..., T], *args, **kwargs) -> T:
-        """Execute Redis operation with connection handling."""
-        # Add Redis-specific logic here (connection pooling, etc.)
-        return operation(*args, **kwargs)
-
-
 class FilesystemAdapter(AdapterBase):
     """Adapter for filesystem operations."""
     

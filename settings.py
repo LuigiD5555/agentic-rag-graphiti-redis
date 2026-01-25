@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Any
 
 # Base path for resolving project-relative files (.env, data/settings.json, etc.).
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -57,12 +58,11 @@ GRAPH_STORES = {
 }
 
 # Cache backend registry (aliases -> cache backend config dict).
-# Note: LOCATION is intentionally left empty here because it will be resolved
-# from environment variables (REDIS_HOST/REDIS_PORT or REDIS_URL) at runtime.
-# See src/storage/cache/__init__.py:_resolve_redis_endpoint for the resolution logic.
-CACHES = {
+# Note: external cache has been removed in favor of SQLite control plane.
+# This configuration is kept for compatibility but will not be used.
+CACHES: dict[str, dict[str, Any]] = {
     "default": {
-        "BACKEND": "redis",
+        "BACKEND": "null",  # External cache removed, using null cache
         "LOCATION": "",
         "TIMEOUT": None,
         "KEY_PREFIX": "",
@@ -71,12 +71,17 @@ CACHES = {
     }
 }
 
-# Redis configuration (centralized like Django settings)
-REDIS_URL: str = ""  # If set, overrides REDIS_HOST/PORT
-REDIS_HOST: str = "localhost"
-REDIS_PORT: int = 6379
-REDIS_DB: int = 0
-REDIS_PASSWORD: str = ""
+# SQLite control plane configuration
+CONTROL_PLANE_DB_PATH: str = "./data/control_plane.db"
+CONVERSATION_PERSISTENCE_ENABLED: bool = False
+SANITIZER_ENABLED: bool = True
+SECRETS_STRIP_ALWAYS: bool = True
+PII_MASKING_DEFAULT: str = "OFF"  # "ON" or "OFF"
+RERANK_ENABLED: bool = False
+RERANK_MAX_CANDIDATES: int = 20
+RERANK_TOP_N: int = 8
+RERANK_MODE: str = "mmr"  # "none", "mmr", "cross_encoder", "mmr_then_cross_encoder"
+RETRIEVE_TOP_K_CANDIDATES: int = 30
 
 # Provider adapters registry (aliases -> provider config dict).
 PROVIDERS = {
@@ -217,7 +222,7 @@ INGESTION_PHASE_TTL_SECONDS = 24 * 60 * 60
 INGESTION_PREPROCESS_WORKERS = 3
 INGESTION_LOW_MEMORY_BATCH_SIZE = 1
 MAX_RAM_USAGE_PERCENT = 80
-INGESTION_RESUMABLE_ENABLED = True
+INGESTION_RESUMABLE_ENABLED = False
 INGESTION_CLEANUP_PREPROCESSED = True
 INGESTION_PREPROCESS_RETRY_FAILED = True
 

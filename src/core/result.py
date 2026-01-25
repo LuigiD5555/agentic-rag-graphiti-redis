@@ -33,7 +33,6 @@ class ErrorKind(Enum):
 class ServiceType(Enum):
     """Service or component where error occurred."""
     WEAVIATE = "weaviate"
-    REDIS = "redis"
     OFFICE = "office"
     FILESYSTEM = "filesystem"
     HTTP_PROVIDER = "http_provider"

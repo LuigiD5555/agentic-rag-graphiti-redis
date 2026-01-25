@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 import os
 import time
@@ -62,7 +60,7 @@ class PhaseManager:
         self.run_id = run_id or str(uuid4())
         self.ttl = ttl
         self.cache_manager = cache_manager
-        self.redis = getattr(cache_manager, "redis", None) if cache_manager else None
+        self._memory_store: Dict[str, str] = {}
 
     def _key(self, phase: str) -> str:
         return f"ingestion:phase:{self.run_id}:{phase}"
@@ -72,24 +70,10 @@ class PhaseManager:
 
     def _persist(self, phase: str, value: Any) -> None:
         payload = json.dumps(value)
-        if self.redis:
-            try:
-                self.redis.setex(self._key(phase), self.ttl, payload)
-            except Exception as exc:  # pragma: no cover - best-effort logging
-                log.debug("Failed to persist phase %s: %s", phase, exc)
-        else:
-            log.debug("Phase persistence skipped (Redis unavailable) for stage %s", phase)
+        self._memory_store[self._key(phase)] = payload
 
     def _load(self, phase: str) -> Optional[Dict[str, Any]]:
-        if not self.redis:
-            log.debug("Phase load skipped (Redis unavailable) for stage %s", phase)
-            return None
-
-        try:
-            raw = self.redis.get(self._key(phase))
-        except Exception as exc:
-            log.debug("Failed to load phase %s: %s", phase, exc)
-            return None
+        raw = self._memory_store.get(self._key(phase))
 
         if not raw:
             return None
@@ -142,35 +126,29 @@ class PhaseManager:
         processed_path: Optional[str] = None,
         error: Optional[str] = None,
     ) -> None:
-        if not self.redis:
-            return
-
         payload = {
             "status": status,
             "processed_path": processed_path,
             "error": error,
             "timestamp": time.time(),
         }
+        raw = self._memory_store.get(self._preprocess_status_key(), "{}")
         try:
-            self.redis.hset(self._preprocess_status_key(), original_path, json.dumps(payload))
-            self.redis.expire(self._preprocess_status_key(), self.ttl)
-        except Exception as exc:  # pragma: no cover - best-effort
-            log.debug("Failed to set preprocess status for %s: %s", original_path, exc)
+            current = json.loads(raw)
+        except json.JSONDecodeError:
+            current = {}
+        current[original_path] = payload
+        self._memory_store[self._preprocess_status_key()] = json.dumps(current)
 
     def get_preprocess_status(self, original_path: str) -> Optional[Dict[str, Any]]:
-        if not self.redis:
-            return None
-        try:
-            raw = self.redis.hget(self._preprocess_status_key(), original_path)
-        except Exception as exc:
-            log.debug("Failed to get preprocess status for %s: %s", original_path, exc)
-            return None
+        raw = self._memory_store.get(self._preprocess_status_key())
         if not raw:
             return None
         try:
-            return json.loads(raw)
+            current = json.loads(raw)
         except json.JSONDecodeError:
             return None
+        return current.get(original_path)
 
     def record_ingestion_summary(self, summary: Dict[str, Any]) -> None:
         """Persist ingestion summary for debugging or resume."""

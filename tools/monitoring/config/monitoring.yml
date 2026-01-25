@@ -65,13 +65,6 @@ health_checks:
 
   # Services to monitor
   services:
-    redis:
-      enabled: true
-      host: "127.0.0.1"
-      port: 6379
-      timeout: 5
-      critical: true
-
     weaviate:
       enabled: true
       url: "http://127.0.0.1:8080"

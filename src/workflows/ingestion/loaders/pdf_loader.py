@@ -20,12 +20,12 @@ class PDFLoader:
     """
     PDF document loader with optional content caching, timeout, and incremental loading.
 
-    This loader can cache extracted PDF text in Redis to avoid expensive
+    This loader can cache extracted PDF text to avoid expensive
     re-extraction on subsequent runs. The cache key is based on file path
     and modification time.
 
     Features:
-    - Redis caching for extracted content
+    - Cache client for extracted content
     - Timeout protection for large/complex PDFs
     - Incremental page loading for very large PDFs (reduces memory pressure)
     - Detection of scanned PDFs (image-based, no extractable text)
@@ -44,25 +44,25 @@ class PDFLoader:
     def __init__(
         self,
         path: str,
-        redis_client: Optional[any] = None,
+        cache_client: Optional[any] = None,
         cache_ttl: int = 2592000,
         load_timeout: Optional[int] = None
     ):
         """
-        Initialize PDF loader with optional Redis cache.
+        Initialize PDF loader with optional cache client.
 
         Args:
             path: Path to PDF file
-            redis_client: Optional Redis client for caching extracted content
+            cache_client: Optional cache client for caching extracted content
             cache_ttl: Cache TTL in seconds (default: 30 days)
             load_timeout: Timeout in seconds for PDF loading (default: 300s)
         """
         self._path = path
-        self.redis_client = redis_client
+        self.cache_client = cache_client
         self.cache_ttl = cache_ttl
         self.cache_enabled = (
-            redis_client is not None
-            and os.environ.get("RAG_PDF_CACHE_ENABLED", "true").lower()
+            cache_client is not None
+            and os.environ.get("RAG_PDF_CACHE_ENABLED", "false").lower()
             in ("true", "1", "yes")
         )
         self.load_timeout = load_timeout or self.LOAD_TIMEOUT_SECONDS
@@ -89,7 +89,7 @@ class PDFLoader:
             return None
 
         try:
-            cached_data = self.redis_client.get(cache_key)
+            cached_data = self.cache_client.get(cache_key)
             if cached_data is None:
                 return None
 
@@ -124,7 +124,7 @@ class PDFLoader:
                 for doc in documents
             ]
             cached_data = json.dumps(doc_dicts)
-            self.redis_client.setex(cache_key, self.cache_ttl, cached_data)
+            self.cache_client.setex(cache_key, self.cache_ttl, cached_data)
             logger.info(
                 "PDF CACHE STORE: Cached %d pages for %s (ttl=%ds)",
                 len(documents),

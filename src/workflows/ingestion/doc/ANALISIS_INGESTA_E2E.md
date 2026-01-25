@@ -41,7 +41,7 @@ Observed risks:
 | `RAG_EMBED_BATCH_SIZE` | 16 | text_processor.py | Embedding batch size |
 | `RAG_SPLIT_BATCH_SIZE` | 128 | text_processor.py | Split batch size |
 | `RAG_MAX_DOCS_PER_FILE` | 200000 | text_processor.py | Max documents per file |
-| `REDIS_HOST/PORT` | redis:6379 | engine.py | Redis connection |
+| `CONTROL_PLANE_DB_PATH` | ./data/control_plane.db | sqlite manager | SQLite control plane |
 
 ## 6. Recommendations
 

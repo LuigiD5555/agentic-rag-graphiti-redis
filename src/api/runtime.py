@@ -28,7 +28,6 @@ class RuntimeResources:
     snapshot_scheduler: Optional[Any]
     cleanup_scheduler: Optional[Any]
     temporal_cleanup_scheduler: Optional[Any]
-    redis_client: Optional[Any]
     web_search_client: Optional[SearXNGClient]
 
 
@@ -151,33 +150,25 @@ class RuntimeFactory:
         temporal_scheduler = None
         if cfg.TEMPORAL_CLEANUP_ENABLED:
             try:
-                from src.workflows.query.temporal.cleanup_scheduler import TemporalCleanupScheduler
+                from src.workflows.query.temporal.cleanup_scheduler import create_temporal_cleanup_scheduler
+                from src.workflows.query.temporal.tenant_manager import create_temporal_tenant_manager
+                from src.workflows.query.temporal.store import TemporalStore
 
-                temporal_scheduler = TemporalCleanupScheduler(
-                    interval_hours=cfg.TEMPORAL_CLEANUP_INTERVAL_HOURS,
+                store = TemporalStore()
+                tenant_manager = create_temporal_tenant_manager(
+                    weaviate_client=weaviate_client,
+                    collection_name=cfg.WEAVIATE_CLASS,
+                    ttl_seconds=cfg.TEMPORAL_TENANT_TTL,
+                    store=store,
+                )
+                temporal_scheduler = create_temporal_cleanup_scheduler(
+                    tenant_manager=tenant_manager,
+                    cleanup_interval=cfg.TEMPORAL_CLEANUP_INTERVAL_HOURS * 3600,
                 )
                 temporal_scheduler.start()
                 log.info("Temporal cleanup scheduler started")
             except Exception as exc:  # pragma: no cover - optional
                 log.error("Failed to initialize temporal cleanup scheduler: %s", exc)
-
-        redis_client = None
-        try:
-            if getattr(cfg, "REDIS_ENABLED", True):
-                import redis
-
-                redis_client = redis.Redis(
-                    host=cfg.REDIS_HOST,
-                    port=cfg.REDIS_PORT,
-                    db=cfg.REDIS_DB,
-                    password=cfg.REDIS_PASSWORD if cfg.REDIS_PASSWORD else None,
-                    decode_responses=True,
-                )
-                redis_client.ping()
-                log.info("Redis client initialized at %s:%s (db=%s)", cfg.REDIS_HOST, cfg.REDIS_PORT, cfg.REDIS_DB)
-        except Exception as exc:  # pragma: no cover - optional
-            log.error("Failed to initialize Redis client: %s", exc)
-            redis_client = None
 
         web_search_client = None
         if getattr(cfg, "WEB_SEARCH_ENABLED", False):
@@ -203,7 +194,6 @@ class RuntimeFactory:
             snapshot_scheduler=snapshot_scheduler,
             cleanup_scheduler=cleanup_scheduler,
             temporal_cleanup_scheduler=temporal_scheduler,
-            redis_client=redis_client,
             web_search_client=web_search_client,
         )
 

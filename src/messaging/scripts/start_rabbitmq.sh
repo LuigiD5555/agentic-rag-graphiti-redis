@@ -1,7 +1,7 @@
 #!/bin/bash
 # Script to start RabbitMQ and test the integration
 
-echo "Starting RabbitMQ Redis Queue Integration..."
+echo "Starting RabbitMQ Queue Integration..."
 echo "=============================================="
 
 # Check if podman-compose is available
@@ -32,25 +32,19 @@ fi
 echo "4. Installing Python dependencies..."
 pip install -r requirements.txt
 
-# Test the integration
-echo "5. Testing RabbitMQ integration..."
-python test_rabbitmq_redis.py
+echo "5. RabbitMQ is ready."
 
 echo ""
 echo "=============================================="
-echo "RabbitMQ Redis Queue Integration Complete!"
+echo "RabbitMQ Queue Integration Complete!"
 echo ""
 echo "Next steps:"
 echo "1. Review the test output above"
-echo "2. Start using RedisProducer in your code:"
+echo "2. Publish messages using the broker in your code:"
 echo ""
-echo "   # Instead of direct Redis calls:"
-echo "   # redis_client.set('key', 'value')"
-echo ""
-echo "   # Use the queue-based approach:"
-echo "   from src.messaging.producers.redis_producer import get_redis_producer"
-echo "   producer = await get_redis_producer()"
-echo "   await producer.set_key('key', 'value', ttl=3600)"
+echo "   from src.messaging.broker import get_broker"
+echo "   broker = await get_broker()"
+echo "   await broker.publish('document-processing', message)"
 echo ""
 echo "3. Monitor RabbitMQ queues:"
 echo "   http://localhost:15672 (admin/change-me-rabbitmq)"

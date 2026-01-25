@@ -16,7 +16,7 @@ Defaults:
 - Port: `9009`
 - Open WebUI port: `5555`
 - Idle timeout: `300s`
-- Managed services: `app`, `autoscan`, `weaviate`, `neo4j`, `redis`, `monitoring`
+- Managed services: `app`, `autoscan`, `weaviate`, `neo4j`, `monitoring`
 
 ## API
 

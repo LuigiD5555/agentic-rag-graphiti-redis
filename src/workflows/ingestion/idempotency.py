@@ -51,7 +51,7 @@ class IdempotencyManager:
     ):
         """
         Args:
-            storage_backend: Backend de almacenamiento (Redis, SQLite, etc.)
+            storage_backend: Backend de almacenamiento (SQLite, archivo, etc.)
             ttl_seconds: TTL para estados en segundos
             workers: Workers para operaciones paralelas
         """
@@ -459,7 +459,7 @@ class IdempotencyManager:
     def _save_to_backend(self, state: FileProcessingState) -> None:
         """Guarda estado en backend (implementación básica)."""
         if hasattr(self.storage_backend, 'set'):
-            # Redis-like interface
+            # Cache-like interface
             key = f"idempotency:{state.file_hash}"
             value = json.dumps(self._serialize_state(state))
             self.storage_backend.set(key, value, ex=self.ttl_seconds)
@@ -475,7 +475,7 @@ class IdempotencyManager:
     def _load_from_backend(self, file_path: str, file_hash: str) -> Optional[Dict[str, Any]]:
         """Carga estado desde backend."""
         if hasattr(self.storage_backend, 'get'):
-            # Redis-like interface
+            # Cache-like interface
             key = f"idempotency:{file_hash}"
             value = self.storage_backend.get(key)
             if value:
@@ -496,7 +496,7 @@ class IdempotencyManager:
         cleaned = 0
         
         if hasattr(self.storage_backend, 'scan_iter'):
-            # Redis-like interface
+            # Cache-like interface
             for key in self.storage_backend.scan_iter("idempotency:*"):
                 try:
                     value = self.storage_backend.get(key)
@@ -568,25 +568,9 @@ def create_default_idempotency_manager(config: Optional[Any] = None) -> Idempote
     """Crea un IdempotencyManager con configuración por defecto."""
     import os
     
-    # Intentar usar Redis si está disponible
+    # External cache removed: always use in-memory backend
     storage_backend = None
-    try:
-        import redis
-        redis_host = os.getenv('REDIS_HOST', 'localhost')
-        redis_port = int(os.getenv('REDIS_PORT', '6379'))
-        redis_db = int(os.getenv('REDIS_DB', '0'))
-        
-        storage_backend = redis.Redis(
-            host=redis_host,
-            port=redis_port,
-            db=redis_db,
-            decode_responses=False
-        )
-        logger.info("IdempotencyManager usando Redis backend")
-    except ImportError:
-        logger.info("Redis no disponible, usando cache en memoria")
-    except Exception as e:
-        logger.warning("Error conectando a Redis: %s, usando cache en memoria", e)
+    logger.info("IdempotencyManager usando cache en memoria (SQLite control plane)")
     
     ttl = int(os.getenv('IDEMPOTENCY_TTL_SECONDS', '86400'))
     workers = int(os.getenv('IDEMPOTENCY_WORKERS', '4'))

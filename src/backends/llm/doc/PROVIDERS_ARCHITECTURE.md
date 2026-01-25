@@ -47,7 +47,6 @@ The embedding functionality is abstracted through `EmbeddingInterface` defined i
 **Location**: [src/providers/lmstudio/](../lmstudio/)
 
 - Local LLM provider with OpenAI-compatible API
-- Includes caching support via `CachedEmbeddingService`
 - Configured via `LMSTUDIO_BASE_URL` (default: http://localhost:1234)
 - Adapter: [src/providers/adapters/lmstudio_adapter.py](../adapters/lmstudio_adapter.py)
 
@@ -85,17 +84,6 @@ The [src/providers/registry.py](../registry.py) and [src/providers/app_registry.
 - Provider registration
 - Provider discovery
 - Provider instantiation with configuration
-
-## Caching Layer
-
-Many providers support optional Redis caching for embeddings:
-
-- **Implementation**: [src/providers/lmstudio/cached_embeddings.py](../lmstudio/cached_embeddings.py)
-- **Configuration**:
-  - `RAG_EMBED_CACHE_ENABLED`: Enable/disable (default: true)
-  - `RAG_EMBED_CACHE_TTL`: Cache TTL in seconds (default: 604800 = 7 days)
-  - `RAG_EMBED_CACHE_PREFIX`: Cache key prefix (default: "embed:")
-  - `RAG_EMBED_CACHE_DB`: Redis database (default: 0)
 
 ## Adding a New Provider
 
