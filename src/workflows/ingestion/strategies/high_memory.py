@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from collections import deque
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path

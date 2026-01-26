@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from .base import IngestionStrategy
 from .factory import select_strategy
 from .high_memory import HighMemoryStrategy

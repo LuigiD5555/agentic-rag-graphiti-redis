@@ -14,7 +14,7 @@ normalizes these results so downstream code can safely summarize progress.
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Protocol, Sequence
+from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence, Union
 
 
 @dataclass(frozen=True)
@@ -243,11 +243,9 @@ class WaveOrchestrator:
         if isinstance(result, dict):
             return result
 
-        # Natural list/tuple payload.
         if isinstance(result, (list, tuple)):
             return {"payload": list(result)}
 
-        # Generic sequence (but not string/bytes).
         if isinstance(result, Sequence) and not isinstance(result, (str, bytes)):
             return {"payload": list(result)}
 
@@ -256,11 +254,6 @@ class WaveOrchestrator:
     def _count_total_files_processed(self, wave_results: List[Dict[str, Any]]) -> int:
         """
         Count the total files processed across waves.
-
-        We try in this order:
-        - explicit "files" list in preprocess/embedding/upsert dict
-        - explicit "files_count" in wave metadata
-        - length of "payload" if it's a list
 
         Args:
             wave_results: Per-wave results.
@@ -273,7 +266,6 @@ class WaveOrchestrator:
             if wave.get("error") is not None:
                 continue
 
-            # Prefer the most concrete signal available.
             phase_dicts = [
                 wave.get("preprocess", {}),
                 wave.get("embedding", {}),
@@ -325,14 +317,94 @@ class WaveOrchestrator:
         return None
 
 
-def create_default_wave_orchestrator(strategy: WaveOrchestratorStrategy) -> WaveOrchestrator:
-    """
-    Factory function for creating a default WaveOrchestrator.
+class CallbackWaveOrchestrator:
+    """Execute ingestion work in waves using a callback.
 
-    Args:
-        strategy: The wave execution strategy.
+    This orchestrator exists to support the ingestion workflow in
+    `src/workflows/ingestion/orchestrator.py`, which already owns the phase
+    logic and only needs a utility to split candidates into stable waves.
 
     Returns:
-        A WaveOrchestrator instance.
+        Dict with successful_waves, failed_waves, total_waves, wave_summaries.
     """
+
+    def __init__(
+        self,
+        planner: Optional[WavePlanner] = None,
+    ) -> None:
+        """Initialize the callback-based orchestrator.
+
+        Args:
+            planner: Optional planner. If omitted, a default WavePlanner is used.
+        """
+        self._planner = planner or WavePlanner()
+
+    def execute_waves(
+        self,
+        candidates: List[Any],
+        process_callback: Callable[[List[Any]], Any],
+    ) -> Dict[str, Any]:
+        """Plan and execute waves for the given candidates.
+
+        Args:
+            candidates: The items to be processed.
+            process_callback: A callable that processes a single wave.
+
+        Returns:
+            A dictionary containing per-wave summaries and success/failure counts.
+        """
+        wave_plans = self._planner.plan(list(candidates))
+        wave_summaries: List[Dict[str, Any]] = []
+
+        successful_waves = 0
+        failed_waves = 0
+
+        for wave_index, wave_plan in enumerate(wave_plans, start=1):
+            try:
+                result = process_callback(list(wave_plan.candidates))
+                wave_summaries.append(
+                    {
+                        "wave_id": wave_plan.wave_id,
+                        "index": wave_index,
+                        "count": len(wave_plan.candidates),
+                        "metadata": dict(wave_plan.metadata),
+                        "result": result,
+                        "error": None,
+                    }
+                )
+                successful_waves += 1
+            except Exception as exc:  # noqa: BLE001
+                wave_summaries.append(
+                    {
+                        "wave_id": wave_plan.wave_id,
+                        "index": wave_index,
+                        "count": len(wave_plan.candidates),
+                        "metadata": dict(wave_plan.metadata),
+                        "result": None,
+                        "error": f"{exc.__class__.__name__}: {exc}",
+                    }
+                )
+                failed_waves += 1
+
+        return {
+            "successful_waves": successful_waves,
+            "failed_waves": failed_waves,
+            "total_waves": len(wave_plans),
+            "wave_summaries": wave_summaries,
+        }
+
+
+def create_default_wave_orchestrator(
+    strategy: Optional[WaveOrchestratorStrategy] = None,
+) -> Union[WaveOrchestrator, CallbackWaveOrchestrator]:
+    """Create a wave orchestrator.
+
+    Args:
+        strategy: Optional wave strategy. If omitted, returns CallbackWaveOrchestrator.
+
+    Returns:
+        Either a strategy-based WaveOrchestrator or a callback-based orchestrator.
+    """
+    if strategy is None:
+        return CallbackWaveOrchestrator()
     return WaveOrchestrator(strategy=strategy)

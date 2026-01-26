@@ -28,8 +28,6 @@ Output:
     - Creates consolidated errors_all.txt and warnings_all.txt
     - Automatically prunes old logs based on retention period
 """
-from __future__ import annotations
-
 import argparse
 import datetime as dt
 import re

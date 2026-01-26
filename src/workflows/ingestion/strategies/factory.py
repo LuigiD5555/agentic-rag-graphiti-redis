@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Callable, Dict, Optional
 
 from src.backends.storage.cache.ingestion import IngestionCacheManager
