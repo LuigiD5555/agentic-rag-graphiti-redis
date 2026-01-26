@@ -446,12 +446,23 @@ class IngestionOrchestrator:
         return result, strategy.__class__.__name__
 
     def _configure_resumable_ingestion(self, pipeline: IngestionPipeline) -> None:
+        """Configure RabbitMQ-based resumable ingestion.
+        
+        According to specification: Planner publishes to RabbitMQ, Worker executes.
+        SQLite is used for state/idempotence, not as a queue.
+        """
         # Early returns for guard conditions
         if not getattr(self._config, "INGESTION_RESUMABLE_ENABLED", False):
             return
 
-        logger.warning(
-            "Resumable ingestion is disabled (external cache removed). Use non-resumable ingestion or RabbitMQ pipeline."
+        # Note: We don't configure ingest_queue in pipeline anymore
+        # because RabbitMQ is the only queue (per specification).
+        # The pipeline should work in "local mode" when called directly,
+        # and in "RabbitMQ mode" when jobs are published separately.
+        
+        logger.info(
+            "RabbitMQ-based resumable ingestion enabled. "
+            "Jobs will be published to RabbitMQ, not executed locally."
         )
 
     def _cleanup_preprocessed_outputs(self, records: List[Any], result: dict) -> None:
