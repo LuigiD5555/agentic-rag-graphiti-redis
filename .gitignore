@@ -133,3 +133,5 @@ tests/scripts
 tests/systemd
 docs
 .volumes
+final_test.db
+test.db

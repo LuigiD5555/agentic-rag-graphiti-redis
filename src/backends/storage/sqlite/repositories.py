@@ -205,20 +205,30 @@ class FileMetadataStore:
         fingerprint_hash = self._compute_fingerprint_hash(file_path, mtime_ns, size_bytes)
         
         with self.control_plane.get_connection() as conn:
-            conn.execute("""
-                INSERT OR REPLACE INTO files 
-                (file_path, mtime_ns, size_bytes, content_hash, fingerprint_hash, 
+            conn.execute(
+                """
+                INSERT INTO files
+                (file_path, mtime_ns, size_bytes, content_hash, fingerprint_hash,
                  status, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                file_path,
-                mtime_ns,
-                size_bytes,
-                content_hash,
-                fingerprint_hash,
-                FileStatus.NEW.value,
-                now_ts
-            ))
+                ON CONFLICT(file_path) DO UPDATE SET
+                    mtime_ns = excluded.mtime_ns,
+                    size_bytes = excluded.size_bytes,
+                    content_hash = excluded.content_hash,
+                    fingerprint_hash = excluded.fingerprint_hash,
+                    status = excluded.status,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    file_path,
+                    mtime_ns,
+                    size_bytes,
+                    content_hash,
+                    fingerprint_hash,
+                    FileStatus.NEW.value,
+                    now_ts,
+                ),
+            )
     
     def decide_processing(self, file_path: str, mtime_ns: int, size_bytes: int,
                           content_hash: Optional[str], now_ts: int) -> ProcessingDecision:
@@ -249,6 +259,9 @@ class FileMetadataStore:
             
             # Check if file is already fully processed
             if status == FileStatus.UPSERTED:
+                return ProcessingDecision.SKIP
+
+            if status == FileStatus.DELETED:
                 return ProcessingDecision.SKIP
             
             # Check if file failed previously

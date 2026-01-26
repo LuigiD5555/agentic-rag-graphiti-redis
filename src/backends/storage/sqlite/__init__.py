@@ -35,6 +35,7 @@ class FileStatus(Enum):
     EMBEDDED = "EMBEDDED"
     UPSERTED = "UPSERTED"
     FAILED = "FAILED"
+    DELETED = "DELETED"
 
 
 class ChunkStatus(Enum):
@@ -71,6 +72,9 @@ class FileMetadata:
     run_id_last: Optional[str]
     updated_at: int
     last_error: Optional[str] = None
+    scan_run_id: Optional[str] = None
+    ingestion_run_id: Optional[str] = None
+    chunk_ids_json: Optional[str] = None
 
 
 @dataclass
@@ -188,6 +192,10 @@ class SQLiteControlPlane:
             (1, self._migration_001_initial_schema),
             (2, self._migration_002_add_session_audit),
             (3, self._migration_003_add_chunk_registry),
+            (4, self._migration_004_add_temporal_tracking),
+            (5, self._migration_005_add_memory_checkpoints),
+            (6, self._migration_006_add_ingest_queue_and_file_tracking),
+            (7, self._migration_007_add_cache_tables),
         ]
         
         for version, migration_func in migrations:
@@ -341,6 +349,215 @@ class SQLiteControlPlane:
                 last_error TEXT
             )
         """)
+
+    def _migration_004_add_temporal_tracking(self, conn: sqlite3.Connection):
+        """Add temporal file tracking tables."""
+        conn.execute("""
+            CREATE TABLE temporal_files (
+                thread_id TEXT NOT NULL,
+                file_id TEXT NOT NULL,
+                file_hash TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                uploaded_at INTEGER NOT NULL,
+                query_count INTEGER NOT NULL DEFAULT 0,
+                pareto_promoted INTEGER NOT NULL DEFAULT 0,
+                full_promoted INTEGER NOT NULL DEFAULT 0,
+                chunk_ids_json TEXT NOT NULL,
+                expires_at INTEGER NOT NULL,
+                PRIMARY KEY (thread_id, file_id)
+            )
+        """)
+        conn.execute("CREATE INDEX idx_temporal_files_thread ON temporal_files(thread_id)")
+        conn.execute("CREATE INDEX idx_temporal_files_expires ON temporal_files(expires_at)")
+
+        conn.execute("""
+            CREATE TABLE file_uploads (
+                file_hash TEXT PRIMARY KEY,
+                upload_count INTEGER NOT NULL,
+                first_uploaded INTEGER NOT NULL,
+                last_uploaded INTEGER NOT NULL,
+                filename TEXT NOT NULL,
+                promoted INTEGER NOT NULL DEFAULT 0,
+                pareto_promoted INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE file_upload_threads (
+                file_hash TEXT NOT NULL,
+                thread_id TEXT NOT NULL,
+                PRIMARY KEY (file_hash, thread_id),
+                FOREIGN KEY(file_hash) REFERENCES file_uploads(file_hash) ON DELETE CASCADE
+            )
+        """)
+        conn.execute("CREATE INDEX idx_file_upload_threads_thread ON file_upload_threads(thread_id)")
+
+        conn.execute("""
+            CREATE TABLE chunk_scores (
+                thread_id TEXT NOT NULL,
+                file_id TEXT NOT NULL,
+                chunk_id TEXT NOT NULL,
+                score REAL NOT NULL,
+                PRIMARY KEY (thread_id, file_id, chunk_id),
+                FOREIGN KEY(thread_id, file_id) REFERENCES temporal_files(thread_id, file_id) ON DELETE CASCADE
+            )
+        """)
+        conn.execute("CREATE INDEX idx_chunk_scores_file ON chunk_scores(thread_id, file_id)")
+
+        conn.execute("""
+            CREATE TABLE temporal_tenants (
+                tenant_name TEXT PRIMARY KEY,
+                created_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX idx_temporal_tenants_expires ON temporal_tenants(expires_at)")
+
+    def _migration_005_add_memory_checkpoints(self, conn: sqlite3.Connection):
+        """Add memory checkpoint storage."""
+        conn.execute("""
+            CREATE TABLE memory_checkpoints (
+                thread_id TEXT NOT NULL,
+                checkpoint_ns TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                metadata_json TEXT NOT NULL,
+                version INTEGER NOT NULL DEFAULT 1,
+                updated_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL,
+                PRIMARY KEY (thread_id, checkpoint_ns)
+            )
+        """)
+        conn.execute("CREATE INDEX idx_memory_checkpoints_expires ON memory_checkpoints(expires_at)")
+
+    def _migration_006_add_ingest_queue_and_file_tracking(self, conn: sqlite3.Connection):
+        """Add ingestion queue tables and file tracking metadata."""
+        # Extend files table for run tracking and chunk linkage
+        conn.execute("ALTER TABLE files ADD COLUMN scan_run_id TEXT")
+        conn.execute("ALTER TABLE files ADD COLUMN ingestion_run_id TEXT")
+        conn.execute("ALTER TABLE files ADD COLUMN chunk_ids_json TEXT")
+
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_files_scan_run_id ON files(scan_run_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_files_ingestion_run_id ON files(ingestion_run_id)")
+
+        # File run tracking (for deletion detection and history)
+        conn.execute("""
+            CREATE TABLE ingest_file_runs (
+                run_id TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                seen_at INTEGER NOT NULL,
+                PRIMARY KEY (run_id, file_path)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ingest_file_runs_run ON ingest_file_runs(run_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ingest_file_runs_file ON ingest_file_runs(file_path)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ingest_file_runs_seen ON ingest_file_runs(seen_at)")
+
+        # Chunk file metadata (optional, for registry summaries)
+        conn.execute("""
+            CREATE TABLE chunk_files (
+                file_id TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                total_chunks INTEGER NOT NULL,
+                run_id TEXT,
+                chunking_params_json TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                PRIMARY KEY (file_id, file_path)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_chunk_files_file_path ON chunk_files(file_path)")
+
+        # Ingestion queue
+        conn.execute("""
+            CREATE TABLE ingest_jobs (
+                job_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                scan_run_id TEXT,
+                file_path TEXT NOT NULL,
+                options_json TEXT,
+                priority INTEGER NOT NULL DEFAULT 0,
+                retry_count INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL,
+                enqueued_at INTEGER NOT NULL,
+                started_at INTEGER,
+                completed_at INTEGER,
+                error TEXT,
+                consumer_name TEXT,
+                updated_at INTEGER NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ingest_jobs_status ON ingest_jobs(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ingest_jobs_enqueued ON ingest_jobs(enqueued_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ingest_jobs_consumer ON ingest_jobs(consumer_name)")
+
+        conn.execute("""
+            CREATE TABLE ingest_consumers (
+                consumer_name TEXT PRIMARY KEY,
+                last_seen INTEGER NOT NULL,
+                consumer_group TEXT
+            )
+        """)
+
+    def _migration_007_add_cache_tables(self, conn: sqlite3.Connection):
+        """Add SQLite-backed cache tables (ingestion + kv + embeddings)."""
+        conn.execute("""
+            CREATE TABLE ingestion_file_cache (
+                file_path TEXT PRIMARY KEY,
+                content_hash TEXT NOT NULL,
+                mtime REAL NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                last_processed REAL NOT NULL,
+                chunk_count INTEGER NOT NULL,
+                embedding_count INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                error_message TEXT,
+                ingestion_run_id TEXT,
+                scan_run_id TEXT,
+                chunk_ids TEXT,
+                expires_at INTEGER NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ingestion_file_cache_hash ON ingestion_file_cache(content_hash)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ingestion_file_cache_expires ON ingestion_file_cache(expires_at)")
+
+        conn.execute("""
+            CREATE TABLE ingestion_dir_cache (
+                dir_path TEXT PRIMARY KEY,
+                structure_hash TEXT NOT NULL,
+                file_count INTEGER NOT NULL,
+                last_scanned REAL NOT NULL,
+                total_size INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ingestion_dir_cache_expires ON ingestion_dir_cache(expires_at)")
+
+        conn.execute("""
+            CREATE TABLE ingestion_hash_index (
+                content_hash TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                PRIMARY KEY (content_hash, file_path)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ingestion_hash_index_hash ON ingestion_hash_index(content_hash)")
+
+        conn.execute("""
+            CREATE TABLE cache_kv (
+                cache_key TEXT PRIMARY KEY,
+                value_json TEXT NOT NULL,
+                expires_at INTEGER NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_cache_kv_expires ON cache_kv(expires_at)")
+
+        conn.execute("""
+            CREATE TABLE embedding_cache (
+                cache_key TEXT PRIMARY KEY,
+                embedding_json TEXT NOT NULL,
+                expires_at INTEGER NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_embedding_cache_expires ON embedding_cache(expires_at)")
     
     def get_connection(self) -> sqlite3.Connection:
         """Get a database connection."""

@@ -1,19 +1,13 @@
-"""Checkpoint management for resumable ingestion operations."""
+"""Checkpoint management for resumable scanning operations."""
 
 from .scan_checkpointer import ScanCheckpointer, ScanRun
-from .ingest_queue import IngestQueue, IngestJob
-from .chunk_registry import ChunkRegistry, ChunkMetadata, ChunkStatus
-from .file_registry_extensions import FileRegistryExtensions
-from .checkpoint_cli import CheckpointCLI
+
+# Note: IngestQueue and related queue components are removed because
+# RabbitMQ is now the only queue (per specification).
+# SQLite is only used for state/checkpoints, not as a queue.
 
 __all__ = [
     "ScanCheckpointer",
     "ScanRun",
-    "IngestQueue",
-    "IngestJob",
-    "ChunkRegistry",
-    "ChunkMetadata",
-    "ChunkStatus",
-    "FileRegistryExtensions",
-    "CheckpointCLI",
 ]
+
