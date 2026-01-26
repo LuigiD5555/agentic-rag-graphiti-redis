@@ -6,6 +6,7 @@ from src.workflows.query.interfaces.chat_interface import ChatInterface
 from src.backends.llm.lmstudio.model_manager import ModelManager
 from src.backends.llm.lmstudio.embeddings import EmbeddingService
 from src.backends.llm.lmstudio.client import LLMService
+from src.backends.llm.lmstudio.cached_embeddings import CachedEmbeddingService
 from src import logger
 
 
@@ -23,15 +24,21 @@ class LMStudioAdapter(ProviderAdapterBase):
         # Create base embedding service
         base_embedding_service = EmbeddingService(config, mm)
 
-        # Wrap with cache if enabled (external cache removed)
+        # Wrap with cache if enabled (SQLite-backed embedding cache)
         cache_enabled = os.environ.get("RAG_EMBED_CACHE_ENABLED", "false").lower() in ("true", "1", "yes")
         if cache_enabled:
-            embedding = base_embedding_service
-            logger.warning("Embedding cache disabled (no external cache configured)")
+            ttl = int(os.environ.get("RAG_EMBED_CACHE_TTL", "604800"))
+            prefix = os.environ.get("RAG_EMBED_CACHE_PREFIX", "embed:")
+            embedding = CachedEmbeddingService(
+                base_embedding_service,
+                enabled=True,
+                ttl_seconds=ttl,
+                key_prefix=prefix,
+            )
         else:
             embedding = base_embedding_service
 
         chat: ChatInterface = LLMService(config, mm)
         super().__init__(embedding, chat)
 
-    # Embedding cache backend removed (SQLite-only control plane)
+    # Embedding cache backed by SQLite control plane

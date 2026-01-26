@@ -1,8 +1,9 @@
-"""Cache backends (SQLite-only control plane, no external cache)."""
+"""Cache backends (SQLite-only control plane)."""
 
 from typing import Any, Optional
 
 from src.workflows.query.interfaces.cache_interface import CacheServiceProtocol
+from .sqlite_cache import SQLiteCacheService
 
 
 class NullCacheService(CacheServiceProtocol):
@@ -16,11 +17,13 @@ class NullCacheService(CacheServiceProtocol):
 
 
 def get_cache(config: Any, alias: str = "default") -> CacheServiceProtocol:
-    """Return a no-op cache service."""
-    return NullCacheService()
+    """Return a SQLite-backed cache service."""
+    _ = config
+    _ = alias
+    return SQLiteCacheService()
 
 
-__all__ = ["get_cache", "NullCacheService"]
+__all__ = ["get_cache", "NullCacheService", "SQLiteCacheService"]
 
 # Re-export ingestion cache components for convenience
 from .ingestion import (  # noqa: E402
