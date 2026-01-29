@@ -2,13 +2,10 @@
 
 from typing import Optional
 
-from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
-
 from src.workflows.ingestion.options import PipelineOptions
 
 from .strategies import SplitterStrategy
-from .markdown import normalize_markdown_headers
-from .semantic import build_semantic_splitter
+from .registry import ensure_builtin_splitters_loaded, get_splitter_factory
 
 
 def build_text_splitter(
@@ -16,20 +13,28 @@ def build_text_splitter(
     options: PipelineOptions,
     markdown_levels: Optional[object],
 ) -> object:
-    if strategy == SplitterStrategy.RECURSIVE:
-        return RecursiveCharacterTextSplitter(
-            chunk_size=options.chunk_size,
-            chunk_overlap=options.chunk_overlap,
-        )
-
-    if strategy == SplitterStrategy.MARKDOWN_HEADERS:
-        headers = normalize_markdown_headers(markdown_levels)
-        return MarkdownHeaderTextSplitter(headers_to_split_on=headers)
-
-    if strategy == SplitterStrategy.SEMANTIC:
-        return build_semantic_splitter(options)
-
-    raise ValueError(f"Unknown splitting strategy: {strategy}")
+    """
+    Build a text splitter based on the specified strategy.
+    
+    Args:
+        strategy: Splitter strategy
+        options: Pipeline options
+        markdown_levels: Markdown header levels configuration (optional)
+        
+    Returns:
+        Text splitter instance
+        
+    Raises:
+        KeyError: If strategy is not registered
+    """
+    # Ensure built-in splitters are loaded
+    ensure_builtin_splitters_loaded()
+    
+    # Get factory from registry
+    factory = get_splitter_factory(strategy)
+    
+    # Create and return splitter instance
+    return factory(options, markdown_levels)
 
 
 __all__ = ["build_text_splitter"]

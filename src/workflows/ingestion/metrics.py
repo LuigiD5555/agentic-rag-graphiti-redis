@@ -258,6 +258,10 @@ class MetricsCollector:
             "histograms": {}
         }
         
+        # Ensure built-in metric summaries are loaded
+        from .metrics.summary_registry import ensure_builtin_metric_summaries_loaded, get_metric_summary
+        ensure_builtin_metric_summaries_loaded()
+        
         for name, metrics in all_metrics.items():
             if not metrics:
                 continue
@@ -274,45 +278,24 @@ class MetricsCollector:
             if recent:
                 summary["recent_activity"][name] = len(recent)
             
-            # Estadísticas específicas por tipo
-            if metric_type == MetricType.COUNTER.value:
-                total = sum(m.value for m in metrics)
-                summary["counters"][name] = {
-                    "total": total,
-                    "count": len(metrics),
-                    "avg_per_metric": total / len(metrics) if len(metrics) > 0 else 0
-                }
-            
-            elif metric_type == MetricType.GAUGE.value:
-                values = [m.value for m in metrics]
-                summary["gauges"][name] = {
-                    "current": values[-1] if values else 0,
-                    "min": min(values) if values else 0,
-                    "max": max(values) if values else 0,
-                    "avg": sum(values) / len(values) if values else 0
-                }
-            
-            elif metric_type == MetricType.TIMER.value:
-                values = [m.value for m in metrics]
-                summary["timers"][name] = {
-                    "count": len(values),
-                    "total_seconds": sum(values),
-                    "avg_seconds": sum(values) / len(values) if values else 0,
-                    "min_seconds": min(values) if values else 0,
-                    "max_seconds": max(values) if values else 0
-                }
-            
-            elif metric_type == MetricType.HISTOGRAM.value:
-                values = [m.value for m in metrics]
-                summary["histograms"][name] = {
-                    "count": len(values),
-                    "min": min(values) if values else 0,
-                    "max": max(values) if values else 0,
-                    "avg": sum(values) / len(values) if values else 0,
-                    "p50": self._percentile(values, 50) if values else 0,
-                    "p95": self._percentile(values, 95) if values else 0,
-                    "p99": self._percentile(values, 99) if values else 0
-                }
+            # Get summary function from registry
+            try:
+                summary_fn = get_metric_summary(metric_type)
+                summary_dict = summary_fn(metrics)
+                
+                # Store in appropriate section based on metric type
+                if metric_type == MetricType.COUNTER.value:
+                    summary["counters"][name] = summary_dict
+                elif metric_type == MetricType.GAUGE.value:
+                    summary["gauges"][name] = summary_dict
+                elif metric_type == MetricType.TIMER.value:
+                    summary["timers"][name] = summary_dict
+                elif metric_type == MetricType.HISTOGRAM.value:
+                    summary["histograms"][name] = summary_dict
+                    
+            except KeyError:
+                # If metric type not found in registry, skip detailed summary
+                pass
         
         return summary
     

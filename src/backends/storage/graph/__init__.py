@@ -2,6 +2,7 @@ from typing import Any, Mapping
 from urllib.parse import urlparse
 
 from src.workflows.query.interfaces.graph_interface import GraphInterface
+from .registry import ensure_builtin_graph_backends_loaded, get_graph_backend_factory
 
 
 def _graph_settings(config, alias: str) -> Mapping[str, Any]:
@@ -25,6 +26,8 @@ def get_graph_store(config, alias: str = "default") -> GraphInterface:
         GRAPH_STORES = {"default": {"ENGINE": "neo4j"}}
     """
     store_cfg = dict(_graph_settings(config, alias))
+    
+    # Normalize URI/URL configuration
     if "URI" not in store_cfg and "URL" not in store_cfg:
         host = store_cfg.get("HOST")
         port = store_cfg.get("PORT")
@@ -40,60 +43,17 @@ def get_graph_store(config, alias: str = "default") -> GraphInterface:
                 store_cfg.setdefault("PORT", parsed.port)
                 store_cfg.setdefault("SCHEME", parsed.scheme)
 
+    # Get backend name
     backend = (store_cfg.get("BACKEND") or store_cfg.get("ENGINE") or "neo4j").lower()
-
-    if backend == "neo4j":
-        from src.backends.storage.graph.neo4j_repository import Neo4jRepository
-
-        update: dict[str, Any] = {}
-        for key, value in store_cfg.items():
-            if key in {
-                "BACKEND",
-                "ENGINE",
-                "OPTIONS",
-                "NAME",
-                "AUTOCOMMIT",
-                "ATOMIC_REQUESTS",
-                "CONN_MAX_AGE",
-                "CONN_HEALTH_CHECKS",
-                "TIME_ZONE",
-                "TEST",
-            }:
-                continue
-            if key in {"URI", "URL"}:
-                update["NEO4J_URI"] = value
-                continue
-            if key == "USER":
-                update["NEO4J_USER"] = value
-                continue
-            if key == "PASSWORD":
-                update["NEO4J_PASSWORD"] = value
-                continue
-            if key == "HOST":
-                host = str(value or "").strip() or "localhost"
-                port = store_cfg.get("PORT") or 7687
-                scheme = store_cfg.get("SCHEME") or "bolt"
-                update["NEO4J_URI"] = f"{scheme}://{host}:{port}"
-                continue
-            if key == "PORT":
-                host = store_cfg.get("HOST") or "localhost"
-                scheme = store_cfg.get("SCHEME") or "bolt"
-                update["NEO4J_URI"] = f"{scheme}://{host}:{value}"
-                continue
-            raise ValueError(f"Unsupported graph setting '{key}'")
-
-        cfg = config.copy(update=update) if update else config
-        return Neo4jRepository(cfg)
-
-    if backend in {"null", "noop", "disabled"}:
-        from src.backends.storage.graph.null_repository import NullGraphRepository
-
-        extra = set(store_cfg.keys()) - {"BACKEND"}
-        if extra:
-            raise ValueError(f"Unsupported graph setting(s) for '{backend}': {', '.join(sorted(extra))}")
-        return NullGraphRepository()
-
-    raise ValueError(f"Unsupported graph BACKEND: {backend}")
+    
+    # Ensure built-in backends are loaded
+    ensure_builtin_graph_backends_loaded()
+    
+    # Get factory from registry
+    factory = get_graph_backend_factory(backend)
+    
+    # Create and return backend instance
+    return factory(config, store_cfg)
 
 
 __all__ = ["get_graph_store"]

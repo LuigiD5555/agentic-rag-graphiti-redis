@@ -109,7 +109,7 @@ build/
 # -----------------------------
 ~$*
 tools/generate_try_except_report.py
-^
+tools/generate_if_report.py
 # -----------------------------
 # Node / Frontend
 # -----------------------------

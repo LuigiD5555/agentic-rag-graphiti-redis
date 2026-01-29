@@ -44,6 +44,27 @@ def register_api_router_family(name: str, factory: ApiRouterFactory) -> None:
     _registry[normalized] = factory
 
 
+def api_router_family(name: str) -> Callable[[ApiRouterFactory], ApiRouterFactory]:
+    """
+    Decorator to register an API router family.
+    
+    Args:
+        name: Router family name (e.g., 'openai', 'ollama')
+        
+    Returns:
+        Decorator function
+        
+    Example:
+        @api_router_family('openai')
+        def build_openai_family(config):
+            # ... implementation ...
+    """
+    def decorator(factory: ApiRouterFactory) -> ApiRouterFactory:
+        register_api_router_family(name, factory)
+        return factory
+    return decorator
+
+
 def get_api_router_family(config: object) -> ApiRouterFamily:
     mode = (getattr(config, "API_MODE", "") or "openai").strip().lower()
     if mode not in _registry:
@@ -53,6 +74,7 @@ def get_api_router_family(config: object) -> ApiRouterFamily:
     return family
 
 
+@api_router_family("openai")
 def _build_openai_family(config: object) -> ApiRouterFamily:
     _ = config
     from src.api.compatibility.openai import (
@@ -74,6 +96,7 @@ def _build_openai_family(config: object) -> ApiRouterFamily:
     return ApiRouterFamily(name="openai", routers=routers, overrides=overrides)
 
 
+@api_router_family("ollama")
 def _build_ollama_family(config: object) -> ApiRouterFamily:
     _ = config
     from src.api.compatibility.ollama import ollama_router
@@ -96,13 +119,10 @@ def _build_ollama_family(config: object) -> ApiRouterFamily:
     return ApiRouterFamily(name="ollama", routers=routers, overrides=overrides)
 
 
-register_api_router_family("openai", _build_openai_family)
-register_api_router_family("ollama", _build_ollama_family)
-
-
 __all__ = [
     "ApiRouterFamily",
     "DependencyOverrideSpec",
     "get_api_router_family",
     "register_api_router_family",
+    "api_router_family",
 ]

@@ -1,4 +1,4 @@
-from src.backends.llm.registry import register_provider
+from src.backends.llm.registry import provider
 
 _builtin_registered = False
 
@@ -13,12 +13,28 @@ def ensure_builtin_providers_loaded() -> None:
     if _builtin_registered:
         return
 
-    from src.backends.llm.ollama.adapter import OllamaAdapter
-
-    register_provider("ollama", lambda cfg: OllamaAdapter(cfg))
+    # Import built-in providers to trigger decorator registration
+    from src.backends.llm.ollama import adapter  # noqa: F401
+    
     _builtin_registered = True
 
 
 def _reset_for_tests() -> None:  # pragma: no cover
     global _builtin_registered
     _builtin_registered = False
+
+
+# Built-in provider registrations using decorator pattern
+@provider("ollama")
+def build_ollama_adapter(config):
+    """
+    Build an Ollama adapter.
+    
+    Args:
+        config: Application configuration
+        
+    Returns:
+        OllamaAdapter instance
+    """
+    from src.backends.llm.ollama.adapter import OllamaAdapter
+    return OllamaAdapter(config)
