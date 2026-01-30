@@ -55,7 +55,7 @@ class IngestionPipeline:
         self.ingest_queue = ingest_queue
         self.chunk_registry = chunk_registry
 
-        # Nuevos componentes de optimización
+        # New optimization components
         self.resource_pools = None
         self.idempotency_manager = None
 

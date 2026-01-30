@@ -18,7 +18,7 @@ from src.utils.file_operations import sort_paths_by_size_desc
 from src.workflows.query.conf import sync_settings_json
 from src.conf import settings as runtime_settings
 
-# Nuevos componentes de optimización
+# New optimization components
 from src.workflows.ingestion.wave_planner import create_default_wave_orchestrator
 from src.workflows.ingestion.resource_pools import get_global_ingestion_pools
 from src.workflows.ingestion.watermark_cleanup import create_default_cleanup
@@ -290,36 +290,36 @@ class IngestionOrchestrator:
             phase_manager.record_ingestion_summary(result)
             return result, "legacy"
 
-        # Inicializar componentes de optimización
+        # Initialize optimization components
         wave_orchestrator = None
         resource_pools = None
         watermark_cleanup = None
         idempotency_manager = None
         
-        # Verificar si se deben usar los nuevos componentes
+        # Determine whether to use the optimized components
         use_optimized_pipeline = getattr(self._config, "OPTIMIZED_INGESTION_ENABLED", True)
         
         if use_optimized_pipeline:
             try:
-                # Wave Planner (Fase 3)
+                # Wave Planner (Phase 3)
                 wave_orchestrator = create_default_wave_orchestrator()
-                logger.info("Wave Planner habilitado para procesamiento por olas")
+                logger.info("Wave Planner enabled for wave-based processing")
                 
-                # Resource Pools (Fase 4)
+                # Resource Pools (Phase 4)
                 resource_pools = get_global_ingestion_pools(self._config)
-                logger.info("Resource Pools habilitados para control de concurrencia")
+                logger.info("Resource Pools enabled for concurrency control")
                 
-                # Watermark Cleanup (Fase 5)
+                # Watermark Cleanup (Phase 5)
                 watermark_cleanup = create_default_cleanup(self._config)
-                logger.info("Watermark Cleanup habilitado para gestión de disco")
+                logger.info("Watermark Cleanup enabled for disk management")
                 
-                # Idempotency Manager (Fase 6)
+                # Idempotency Manager (Phase 6)
                 idempotency_manager = create_default_idempotency_manager(self._config)
-                logger.info("Idempotency Manager habilitado para reintentos seguros")
+                logger.info("Idempotency Manager enabled for safe retries")
                 
             except Exception as e:
-                logger.warning("Error inicializando componentes optimizados: %s", e)
-                logger.info("Continuando con pipeline estándar")
+                logger.warning("Error initializing optimized components: %s", e)
+                logger.info("Continuing with standard pipeline")
                 use_optimized_pipeline = False
 
         strategy = select_strategy(
@@ -334,10 +334,10 @@ class IngestionOrchestrator:
         preprocessor = get_ingestion_preprocessor()
         logger.info("Starting preprocessing phase (run=%s)", phase_id)
         
-        # Usar Wave Planner si está habilitado
+        # Use the Wave Planner if enabled
         if use_optimized_pipeline and wave_orchestrator:
             try:
-                # Ejecutar preprocesamiento por olas
+                # Run wave-based preprocessing
                 wave_result = wave_orchestrator.execute_waves(
                     file_paths,
                     process_callback=lambda wave_files: strategy.preprocess_phase(
@@ -350,13 +350,13 @@ class IngestionOrchestrator:
                         preprocessed_records.extend(wave_summary['result'])
                 
                 logger.info(
-                    "Preprocesamiento por olas completado: %d olas, %d archivos",
+                    "Wave-based preprocessing completed: %d waves, %d files",
                     wave_result.get('successful_waves', 0),
                     len(preprocessed_records)
                 )
             except Exception as e:
-                logger.error("Error en preprocesamiento por olas: %s", e)
-                logger.info("Continuando con preprocesamiento estándar")
+                logger.error("Wave preprocessing error: %s", e)
+                logger.info("Continuing with standard preprocessing")
                 preprocessed_records = strategy.preprocess_phase(file_paths, options, preprocessor, phase_manager)
         else:
             preprocessed_records = strategy.preprocess_phase(file_paths, options, preprocessor, phase_manager)
@@ -366,25 +366,25 @@ class IngestionOrchestrator:
         pipeline = self._build_pipeline()
         pipeline.disable_preprocessing = True
         
-        # Configurar Resource Pools en el pipeline si están habilitados
+        # Configure Resource Pools on the pipeline if enabled
         if use_optimized_pipeline and resource_pools:
             try:
                 pipeline.resource_pools = resource_pools
-                logger.info("Resource Pools configurados en el pipeline")
+                logger.info("Resource Pools configured on the pipeline")
             except Exception as e:
-                logger.warning("Error configurando Resource Pools: %s", e)
+                logger.warning("Error configuring Resource Pools: %s", e)
         
         self._configure_resumable_ingestion(pipeline)
         logger.info("Starting ingestion phase (run=%s)", phase_id)
         
-        # Ejecutar fase de embedding con componentes optimizados
+        # Run the embedding phase with optimized components
         if use_optimized_pipeline:
             try:
                 # Configurar Idempotency Manager en el pipeline
                 if idempotency_manager:
                     pipeline.idempotency_manager = idempotency_manager
                 
-                # Ejecutar embedding con Wave Planner si está habilitado
+                # Run embedding with Wave Planner if enabled
                 if wave_orchestrator:
                     wave_result = wave_orchestrator.execute_waves(
                         [getattr(rec, 'original_path', '') for rec in preprocessed_records],
@@ -395,7 +395,7 @@ class IngestionOrchestrator:
                         )
                     )
                     
-                    # Consolidar resultados de todas las olas
+                    # Consolidate results from all waves
                     result = {
                         'processed_files': 0,
                         'ingested': 0,
@@ -413,33 +413,33 @@ class IngestionOrchestrator:
                     result = strategy.embedding_phase(preprocessed_records, pipeline, options, phase_manager)
                 
             except Exception as e:
-                logger.error("Error en pipeline optimizado: %s", e)
-                logger.info("Continuando con pipeline estándar")
+                logger.error("Optimized pipeline error: %s", e)
+                logger.info("Continuing with standard pipeline")
                 result = strategy.embedding_phase(preprocessed_records, pipeline, options, phase_manager)
         else:
             result = strategy.embedding_phase(preprocessed_records, pipeline, options, phase_manager)
         
         logger.info("Ingestion phase finished (run=%s)", phase_id)
 
-        # Ejecutar limpieza con Watermark Cleanup si está habilitado
+        # Run Watermark Cleanup if enabled
         if use_optimized_pipeline and watermark_cleanup:
             try:
-                # Limpiar archivos preprocesados
+                # Clean up preprocessed files
                 for record in preprocessed_records:
                     processed_path = getattr(record, 'processed_path', None)
                     if processed_path:
                         watermark_cleanup.cleanup_completed_file(processed_path, immediate=True)
                 
-                # Ejecutar limpieza general si es necesario
+                # Run general cleanup if needed
                 disk_usage = watermark_cleanup.get_disk_usage()
                 if disk_usage.usage_percent >= watermark_cleanup.watermark_percent:
                     cleanup_result = watermark_cleanup.run_cleanup(aggressive=False)
                     logger.info(
-                        "Watermark cleanup ejecutado: %.2f MB liberados",
+                        "Watermark cleanup executed: %.2f MB freed",
                         cleanup_result.get('freed_mb', 0)
                     )
             except Exception as e:
-                logger.warning("Error en Watermark Cleanup: %s", e)
+                logger.warning("Watermark Cleanup error: %s", e)
         else:
             self._cleanup_preprocessed_outputs(preprocessed_records, result)
 

@@ -1,7 +1,7 @@
 """
-Metrics Instrumentation - Fase 0 del plan de optimización
+Metrics Instrumentation - Phase 0 of the optimization plan
 
-Implementa recolección de métricas para monitoreo del pipeline de ingestión.
+Implements metric collection for monitoring the ingestion pipeline.
 """
 
 import time
@@ -16,7 +16,7 @@ from src.workflows.query.audit.decorators import logged, timed
 
 
 class MetricType(Enum):
-    """Tipos de métricas soportados."""
+    """Supported metric types."""
     COUNTER = "counter"
     GAUGE = "gauge"
     HISTOGRAM = "histogram"
@@ -25,7 +25,7 @@ class MetricType(Enum):
 
 @dataclass
 class Metric:
-    """Definición de una métrica."""
+    """Definition of a metric."""
     name: str
     type: MetricType
     value: float
@@ -35,15 +35,15 @@ class Metric:
 
 
 class MetricsCollector:
-    """Colector de métricas para el pipeline de ingestión."""
+    """Metrics collector for the ingestion pipeline."""
     
     def __init__(self):
         self._metrics: Dict[str, List[Metric]] = {}
         self._lock = Lock()
         
-        # Métricas predefinidas
+        # Predefined metrics
         self._predefined_metrics = {
-            # Contadores
+            # Counters
             "ingestion.files.discovered": MetricType.COUNTER,
             "ingestion.files.processed": MetricType.COUNTER,
             "ingestion.files.ingested": MetricType.COUNTER,
@@ -65,13 +65,13 @@ class MetricsCollector:
             "ingestion.timing.batch_upsert": MetricType.TIMER,
             "ingestion.timing.wave_processing": MetricType.TIMER,
             
-            # Histogramas
+            # Histograms
             "ingestion.sizes.file_mb": MetricType.HISTOGRAM,
             "ingestion.sizes.chunk_tokens": MetricType.HISTOGRAM,
             "ingestion.sizes.embedding_dimensions": MetricType.HISTOGRAM,
         }
         
-        logger.info("MetricsCollector inicializado con %d métricas predefinidas", 
+        logger.info("MetricsCollector initialized with %d predefined metrics", 
                    len(self._predefined_metrics))
     
     def record(
@@ -83,20 +83,20 @@ class MetricsCollector:
         description: Optional[str] = None
     ) -> None:
         """
-        Registra una métrica.
+        Records a metric.
         
         Args:
-            name: Nombre de la métrica
-            value: Valor de la métrica
-            metric_type: Tipo de métrica (si no se especifica, se infiere del nombre)
-            tags: Etiquetas adicionales
-            description: Descripción opcional
+            name: Metric name
+            value: Metric value
+            metric_type: Metric type (inferred from name if not provided)
+            tags: Additional tags
+            description: Optional description
         """
-        # Determinar tipo de métrica
+        # Determine metric type
         if metric_type is None:
             metric_type = self._infer_metric_type(name)
         
-        # Crear métrica
+        # Create metric
         metric = Metric(
             name=name,
             type=metric_type,
@@ -106,13 +106,13 @@ class MetricsCollector:
             description=description
         )
         
-        # Guardar métrica
+        # Store metric
         with self._lock:
             if name not in self._metrics:
                 self._metrics[name] = []
             self._metrics[name].append(metric)
         
-        logger.debug("Métrica registrada: %s = %s (%s)", name, value, metric_type.value)
+        logger.debug("Metric recorded: %s = %s (%s)", name, value, metric_type.value)
     
     def increment(
         self,
@@ -121,7 +121,7 @@ class MetricsCollector:
         tags: Optional[Dict[str, str]] = None,
         description: Optional[str] = None
     ) -> None:
-        """Incrementa un contador."""
+        """Increment a counter."""
         self.record(
             name=name,
             value=amount,
@@ -137,7 +137,7 @@ class MetricsCollector:
         tags: Optional[Dict[str, str]] = None,
         description: Optional[str] = None
     ) -> None:
-        """Establece un gauge."""
+        """Set a gauge."""
         self.record(
             name=name,
             value=value,
@@ -153,7 +153,7 @@ class MetricsCollector:
         tags: Optional[Dict[str, str]] = None,
         description: Optional[str] = None
     ) -> None:
-        """Registra un tiempo de ejecución."""
+        """Record a duration."""
         self.record(
             name=name,
             value=duration_seconds,
@@ -169,7 +169,7 @@ class MetricsCollector:
         tags: Optional[Dict[str, str]] = None,
         description: Optional[str] = None
     ) -> None:
-        """Registra un valor en un histograma."""
+        """Record a value in a histogram."""
         self.record(
             name=name,
             value=value,
@@ -180,12 +180,12 @@ class MetricsCollector:
     
     def timeit(self, name: str, tags: Optional[Dict[str, str]] = None):
         """
-        Decorador para medir tiempo de ejecución.
+        Decorator to measure execution time.
         
-        Uso:
+        Example:
             @metrics.timeit("ingestion.timing.file_processing")
             def process_file(file_path):
-                # ... procesamiento ...
+                # ... processing ...
         """
         def decorator(func):
             def wrapper(*args, **kwargs):
@@ -206,15 +206,15 @@ class MetricsCollector:
         limit: Optional[int] = None
     ) -> Dict[str, List[Metric]]:
         """
-        Obtiene métricas almacenadas.
+        Retrieves stored metrics.
         
         Args:
-            name: Nombre de métrica específica (None para todas)
-            since: Filtrar métricas desde esta fecha
-            limit: Límite de métricas por nombre
+            name: Specific metric name (None for all)
+            since: Filter metrics from this timestamp
+            limit: Maximum metrics per name
             
         Returns:
-            Diccionario de nombre -> lista de métricas
+            Dictionary mapping metric names to lists of metrics
         """
         with self._lock:
             if name:
@@ -222,7 +222,7 @@ class MetricsCollector:
             else:
                 metrics = self._metrics.copy()
         
-        # Aplicar filtros
+        # Apply filters
         filtered_metrics = {}
         for metric_name, metric_list in metrics.items():
             filtered = metric_list
@@ -231,7 +231,7 @@ class MetricsCollector:
                 filtered = [m for m in filtered if m.timestamp >= since]
             
             if limit and len(filtered) > limit:
-                filtered = filtered[-limit:]  # Últimas N métricas
+                filtered = filtered[-limit:]  # Last N metrics
             
             if filtered:
                 filtered_metrics[metric_name] = filtered
@@ -240,10 +240,10 @@ class MetricsCollector:
     
     def get_summary(self) -> Dict[str, Any]:
         """
-        Obtiene un resumen estadístico de las métricas.
+        Returns a statistical summary of the metrics.
         
         Returns:
-            Diccionario con estadísticas por tipo de métrica
+            Dictionary with statistics per metric type
         """
         with self._lock:
             all_metrics = self._metrics.copy()
@@ -268,11 +268,11 @@ class MetricsCollector:
             
             summary["total_metrics"] += len(metrics)
             
-            # Estadísticas por tipo
+            # Statistics per metric type
             metric_type = metrics[0].type.value
             summary["metric_types"][metric_type] = summary["metric_types"].get(metric_type, 0) + len(metrics)
             
-            # Métricas recientes (última hora)
+            # Recent metrics (last hour)
             one_hour_ago = datetime.now(timezone.utc).timestamp() - 3600
             recent = [m for m in metrics if m.timestamp.timestamp() > one_hour_ago]
             if recent:
@@ -301,10 +301,10 @@ class MetricsCollector:
     
     def clear(self, name: Optional[str] = None) -> None:
         """
-        Limpia métricas almacenadas.
+        Clears stored metrics.
         
         Args:
-            name: Nombre de métrica específica (None para todas)
+            name: Specific metric name (None for all)
         """
         with self._lock:
             if name:
@@ -313,14 +313,14 @@ class MetricsCollector:
             else:
                 self._metrics.clear()
         
-        logger.info("Métricas limpiadas%s", f" para '{name}'" if name else "")
+        logger.info("Metrics cleared%s", f" for '{name}'" if name else "")
     
     def export_prometheus(self) -> str:
         """
-        Exporta métricas en formato Prometheus.
+        Exports metrics in Prometheus format.
         
         Returns:
-            String en formato Prometheus
+            Prometheus-formatted string
         """
         lines = []
         now = datetime.now(timezone.utc).timestamp() * 1000  # milisegundos
@@ -330,20 +330,20 @@ class MetricsCollector:
                 if not metrics:
                     continue
                 
-                # Usar la métrica más reciente
+                # Use the most recent metric
                 latest = metrics[-1]
                 
-                # Formato Prometheus
+                # Prometheus format
                 metric_type = latest.type.value
                 value = latest.value
                 
-                # Construir etiquetas
+                # Build tags
                 tags_str = ""
                 if latest.tags:
                     tags = [f'{k}="{v}"' for k, v in latest.tags.items()]
                     tags_str = "{" + ",".join(tags) + "}"
                 
-                # Línea de métrica
+                # Metric line
                 line = f"{self._sanitize_name(name)}{tags_str} {value} {int(now)}"
                 lines.append(f"# TYPE {self._sanitize_name(name)} {metric_type}")
                 lines.append(line)
@@ -351,12 +351,12 @@ class MetricsCollector:
         return "\n".join(lines)
     
     def _infer_metric_type(self, name: str) -> MetricType:
-        """Infiere el tipo de métrica basado en el nombre."""
-        # Verificar métricas predefinidas
+        """Infers the metric type based on the name."""
+        # Check predefined metrics
         if name in self._predefined_metrics:
             return self._predefined_metrics[name]
         
-        # Inferir por patrones en el nombre
+        # Infer by name patterns
         name_lower = name.lower()
         
         if any(pattern in name_lower for pattern in ["counter", "count", "total", "processed"]):
@@ -371,34 +371,36 @@ class MetricsCollector:
         if any(pattern in name_lower for pattern in ["histogram", "size", "distribution"]):
             return MetricType.HISTOGRAM
         
-        # Por defecto, usar gauge
+        # Default to gauge
         return MetricType.GAUGE
     
     @staticmethod
     def _sanitize_name(name: str) -> str:
-        """Sanitiza nombre para formato Prometheus."""
-        # Reemplazar caracteres no válidos
+        """Sanitizes metric names for Prometheus format."""
+        # Replace invalid characters
         sanitized = name.replace(".", "_").replace("-", "_").replace(" ", "_")
-        # Asegurar que empiece con letra
+        # Ensure name starts with a letter
         if sanitized and not sanitized[0].isalpha():
             sanitized = "metric_" + sanitized
         return sanitized
     
     @staticmethod
     def _percentile(values: List[float], p: float) -> float:
-        """Calcula percentil de una lista de valores."""
+        """Calculates the percentile of a list of values."""
         if not values:
             return 0.0
         
         sorted_values = sorted(values)
-        k = (len(sorted_values) - 1) * (p / 100.0)
-        f = int(k)
-        c = k - f
-        
-        if f + 1 < len(sorted_values):
-            return sorted_values[f] + c * (sorted_values[f + 1] - sorted_values[f])
+        scaled_index = (len(sorted_values) - 1) * (p / 100.0)
+        lower_index = int(scaled_index)
+        fractional_part = scaled_index - lower_index
+
+        if lower_index + 1 < len(sorted_values):
+            return sorted_values[lower_index] + fractional_part * (
+                sorted_values[lower_index + 1] - sorted_values[lower_index]
+            )
         else:
-            return sorted_values[f]
+            return sorted_values[lower_index]
 
 
 # Singleton global
@@ -406,7 +408,7 @@ _global_metrics_collector: Optional[MetricsCollector] = None
 
 
 def get_global_metrics_collector() -> MetricsCollector:
-    """Obtiene el colector de métricas global."""
+    """Returns the global metrics collector."""
     global _global_metrics_collector
     if _global_metrics_collector is None:
         _global_metrics_collector = MetricsCollector()
@@ -415,50 +417,50 @@ def get_global_metrics_collector() -> MetricsCollector:
 
 # Decoradores de conveniencia
 def record_metric(name: str, value: float, **kwargs):
-    """Decorador para registrar una métrica."""
+    """Decorator to record a metric."""
     collector = get_global_metrics_collector()
     collector.record(name, value, **kwargs)
 
 
 def increment_counter(name: str, amount: float = 1.0, **kwargs):
-    """Decorador para incrementar un contador."""
+    """Decorator to increment a counter."""
     collector = get_global_metrics_collector()
     collector.increment(name, amount, **kwargs)
 
 
 def set_gauge(name: str, value: float, **kwargs):
-    """Decorador para establecer un gauge."""
+    """Decorator to set a gauge."""
     collector = get_global_metrics_collector()
     collector.gauge(name, value, **kwargs)
 
 
 def record_timer(name: str, duration_seconds: float, **kwargs):
-    """Decorador para registrar un timer."""
+    """Decorator to record a timer."""
     collector = get_global_metrics_collector()
     collector.timer(name, duration_seconds, **kwargs)
 
 
 def record_histogram(name: str, value: float, **kwargs):
-    """Decorador para registrar un histograma."""
+    """Decorator to record a histogram."""
     collector = get_global_metrics_collector()
     collector.histogram(name, value, **kwargs)
 
 
 def time_metric(name: str, **kwargs):
-    """Decorador para medir tiempo de ejecución."""
+    """Decorator to measure execution time."""
     collector = get_global_metrics_collector()
     return collector.timeit(name, **kwargs)
 
 
-# Integración con componentes existentes
+# Integration with existing components
 class IngestionMetrics:
-    """Clase de conveniencia para métricas de ingestión."""
+    """Convenience class for ingestion metrics."""
     
     def __init__(self, collector: Optional[MetricsCollector] = None):
         self.collector = collector or get_global_metrics_collector()
     
     def record_discovery(self, file_count: int, directory_count: int) -> None:
-        """Registra métricas de descubrimiento."""
+        """Record discovery metrics."""
         self.collector.increment("ingestion.files.discovered", file_count)
         self.collector.gauge("ingestion.directories.scanned", directory_count)
     
@@ -469,7 +471,7 @@ class IngestionMetrics:
         success: bool,
         duration_seconds: float
     ) -> None:
-        """Registra métricas de procesamiento de archivo."""
+        """Record file processing metrics."""
         self.collector.increment("ingestion.files.processed")
         
         if success:
@@ -486,7 +488,7 @@ class IngestionMetrics:
         token_count: int,
         duration_seconds: float
     ) -> None:
-        """Registra métricas de procesamiento de chunks."""
+        """Record chunk processing metrics."""
         self.collector.increment("ingestion.chunks.created", chunk_count)
         self.collector.histogram("ingestion.sizes.chunk_tokens", token_count)
         self.collector.timer("ingestion.timing.chunk_embedding", duration_seconds)
@@ -497,7 +499,7 @@ class IngestionMetrics:
         embedding_dimensions: int,
         duration_seconds: float
     ) -> None:
-        """Registra métricas de embedding."""
+        """Record embedding metrics."""
         self.collector.increment("ingestion.chunks.embedded", chunk_count)
         self.collector.histogram("ingestion.sizes.embedding_dimensions", embedding_dimensions)
         self.collector.timer("ingestion.timing.chunk_embedding", duration_seconds)
@@ -508,7 +510,7 @@ class IngestionMetrics:
         duration_seconds: float,
         batch_size: int = 1
     ) -> None:
-        """Registra métricas de upsert."""
+        """Record upsert metrics."""
         self.collector.increment("ingestion.chunks.upserted", chunk_count)
         self.collector.timer("ingestion.timing.batch_upsert", duration_seconds)
         self.collector.gauge("ingestion.batch.size", batch_size)
@@ -520,7 +522,7 @@ class IngestionMetrics:
         total_mb: float,
         duration_seconds: float
     ) -> None:
-        """Registra métricas de procesamiento por olas."""
+        """Record wave processing metrics."""
         tags = {"wave_id": wave_id}
         self.collector.gauge("ingestion.wave.file_count", file_count, tags=tags)
         self.collector.gauge("ingestion.wave.total_mb", total_mb, tags=tags)
@@ -533,7 +535,7 @@ class IngestionMetrics:
         queued_tasks: int,
         completed_tasks: int
     ) -> None:
-        """Registra métricas de pools de recursos."""
+        """Record resource pool metrics."""
         tags = {"pool_name": pool_name}
         self.collector.gauge("ingestion.pool.active_tasks", active_tasks, tags=tags)
         self.collector.gauge("ingestion.pool.queued_tasks", queued_tasks, tags=tags)
@@ -545,7 +547,7 @@ class IngestionMetrics:
         free_mb: float,
         total_mb: float
     ) -> None:
-        """Registra métricas de disco."""
+        """Record disk metrics."""
         self.collector.gauge("ingestion.disk.usage_percent", usage_percent)
         self.collector.gauge("ingestion.disk.free_mb", free_mb)
         self.collector.gauge("ingestion.disk.total_mb", total_mb)
@@ -555,15 +557,15 @@ class IngestionMetrics:
         usage_mb: float,
         usage_percent: float
     ) -> None:
-        """Registra métricas de memoria."""
+        """Record memory metrics."""
         self.collector.gauge("ingestion.memory.usage_mb", usage_mb)
         self.collector.gauge("ingestion.memory.usage_percent", usage_percent)
     
     def get_ingestion_summary(self) -> Dict[str, Any]:
-        """Obtiene un resumen de las métricas de ingestión."""
+        """Returns a summary of ingestion metrics."""
         summary = self.collector.get_summary()
         
-        # Extraer métricas clave
+        # Extract key metrics
         key_metrics = {
             "files": {
                 "discovered": summary.get("counters", {}).get("ingestion.files.discovered", {}).get("total", 0),

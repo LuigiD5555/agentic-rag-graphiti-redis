@@ -3,7 +3,7 @@ Core modules for Result pattern implementation.
 
 This package provides the foundation for the Result pattern implementation
 as described in the plan: Template Method (Adapters) + Error Policy Strategy + 
-Mapper Chain + Metadata (Errores + Señales de presión).
+Mapper Chain + Metadata (Errors + Pressure Signals).
 """
 
 from .result import (

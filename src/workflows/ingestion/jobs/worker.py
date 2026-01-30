@@ -70,7 +70,7 @@ class IngestionWorker:
         log.debug("Worker %s processing job %s (phase=%s, file=%s)",
                  self.worker_name, job.job_id, job.phase.value, job.file_path)
         
-        # Paso 1: Verificar idempotencia
+        # Step 1: Check idempotency
         decision = self.state_repository.try_claim(job)
         
         if decision.skip:
@@ -86,11 +86,11 @@ class IngestionWorker:
             log.info("Retrying job %s: %s", job.job_id, decision.reason)
         
         try:
-            # Paso 2: Ejecutar trabajo según phase
+            # Step 2: Execute work according to the phase
             result = await self._execute_phase(job)
             
             if result.get("success", False):
-                # Paso 3: Marcar como DONE en SQLite
+                # Step 3: Mark as DONE in SQLite
                 metrics = result.get("metrics", {})
                 self.state_repository.mark_done(job, metrics)
                 
@@ -101,7 +101,7 @@ class IngestionWorker:
                     "metrics": metrics
                 }
             else:
-                # Paso 3: Marcar como FAILED en SQLite
+                # Step 3: Mark as FAILED in SQLite
                 error = result.get("error", "Unknown error")
                 retryable = result.get("retryable", True)
                 self.state_repository.mark_failed(job, error, retryable)

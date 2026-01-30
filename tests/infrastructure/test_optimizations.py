@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script de prueba para verificar la integración de todas las optimizaciones del pipeline de ingestión.
+Test script to verify the integration of all ingestion pipeline optimizations.
 """
 
 import os
@@ -8,7 +8,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-# Agregar el directorio src al path
+# Add the src directory to the import path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.workflows.ingestion.wave_planner import WavePlanner, WaveOrchestrator
@@ -19,29 +19,29 @@ from src.workflows.ingestion.metrics import MetricsCollector, IngestionMetrics
 
 
 def test_wave_planner():
-    """Prueba el Wave Planner."""
-    print("=== Probando Wave Planner ===")
+    """Tests the Wave Planner."""
+    print("=== Testing Wave Planner ===")
     
-    # Crear archivos de prueba
+    # Create test files
     test_dir = tempfile.mkdtemp(prefix="rag_test_")
     test_files = []
     
     for i in range(5):
         file_path = Path(test_dir) / f"test_file_{i}.txt"
-        file_path.write_text(f"Contenido del archivo de prueba {i}\n" * 100)
+        file_path.write_text(f"Test file content {i}\n" * 100)
         test_files.append(str(file_path))
     
-    # Probar WavePlanner
+    # Test WavePlanner
     planner = WavePlanner(max_mb_per_wave=1.0, max_files_per_wave=2)
     waves = planner.plan_waves(test_files)
     
-    print(f"Archivos de prueba creados: {len(test_files)}")
-    print(f"Olas planificadas: {len(waves)}")
+    print(f"Test files created: {len(test_files)}")
+    print(f"Waves planned: {len(waves)}")
     
     for i, wave in enumerate(waves, 1):
-        print(f"  Ola {i}: {len(wave.files)} archivos, {wave.total_mb:.2f} MB")
+        print(f"  Wave {i}: {len(wave.files)} files, {wave.total_mb:.2f} MB")
     
-    # Probar WaveOrchestrator
+    # Test WaveOrchestrator
     orchestrator = WaveOrchestrator(planner)
     
     def mock_process_callback(files):
@@ -49,22 +49,22 @@ def test_wave_planner():
     
     result = orchestrator.execute_waves(test_files, mock_process_callback)
     
-    print(f"Resultado de ejecución: {result['status']}")
-    print(f"Olas exitosas: {result['successful_waves']}/{result['total_waves']}")
+    print(f"Execution result: {result['status']}")
+    print(f"Successful waves: {result['successful_waves']}/{result['total_waves']}")
     
-    # Limpiar
+    # Clean up
     import shutil
     shutil.rmtree(test_dir)
     
-    print("✓ Wave Planner probado exitosamente\n")
+    print("✓ Wave Planner tested successfully\n")
     return True
 
 
 def test_resource_pools():
-    """Prueba los Resource Pools."""
-    print("=== Probando Resource Pools ===")
+    """Tests the Resource Pools."""
+    print("=== Testing Resource Pools ===")
     
-    # Probar ResourcePool básico
+    # Test basic ResourcePool
     pool = ResourcePool("test_pool", max_workers=2, max_queue_size=5)
     
     results = []
@@ -74,17 +74,17 @@ def test_resource_pools():
         time.sleep(delay)
         return f"task_{task_id}_completed"
     
-    # Enviar tareas
+    # Submit tasks
     futures = []
     for i in range(3):
         future = pool.submit(test_task, i, 0.05)
         if future:
             futures.append(future)
     
-    # Esperar completación
+    # Wait for completion
     pool.wait_for_completion(timeout=5.0)
     
-    # Obtener resultados
+    # Collect results
     for future in futures:
         try:
             result = future.result(timeout=1.0)
@@ -92,37 +92,37 @@ def test_resource_pools():
         except Exception as e:
             print(f"Error en tarea: {e}")
     
-    # Obtener métricas
+    # Retrieve metrics
     metrics = pool.get_metrics()
     print(f"Tareas completadas: {metrics.completed_tasks}")
     print(f"Tareas fallidas: {metrics.failed_tasks}")
     print(f"Tiempo promedio: {metrics.avg_task_time:.3f}s")
     
-    # Probar IngestionPools
+    # Test IngestionPools
     ingestion_pools = IngestionPools()
-    print(f"Pools de ingestión creados: convert, embed, upsert")
+    print(f"Ingestion pools created: convert, embed, upsert")
     
-    # Apagar pools
+    # Shutdown pools
     pool.shutdown(wait=True)
     ingestion_pools.shutdown(wait=True)
     
-    print("✓ Resource Pools probados exitosamente\n")
+    print("✓ Resource Pools tested successfully\n")
     return len(results) == 3
 
 
 def test_watermark_cleanup():
-    """Prueba el Watermark Cleanup."""
-    print("=== Probando Watermark Cleanup ===")
+    """Tests the Watermark Cleanup."""
+    print("=== Testing Watermark Cleanup ===")
     
-    # Crear directorio de staging
+    # Create staging directory
     staging_dir = tempfile.mkdtemp(prefix="rag_staging_")
     
-    # Crear algunos archivos de prueba
+    # Create some test files
     for i in range(3):
         file_path = Path(staging_dir) / f"test_{i}.tmp"
-        file_path.write_text("contenido temporal" * 100)
+        file_path.write_text("temporary content" * 100)
     
-    # Probar WatermarkCleanup
+    # Test WatermarkCleanup
     cleanup = WatermarkCleanup(
         staging_dir=staging_dir,
         watermark_percent=10.0,  # Bajo para forzar limpieza
@@ -131,97 +131,97 @@ def test_watermark_cleanup():
         workers=1
     )
     
-    # Obtener uso de disco
+    # Get disk usage
     disk_usage = cleanup.get_disk_usage()
-    print(f"Directorio de staging: {staging_dir}")
-    print(f"Uso de disco: {disk_usage.usage_percent:.1f}%")
+    print(f"Staging directory: {staging_dir}")
+    print(f"Disk usage: {disk_usage.usage_percent:.1f}%")
     
-    # Verificar si necesita limpieza
+    # Check if cleanup is needed
     needs_cleanup, needs_aggressive = cleanup.should_cleanup()
-    print(f"Necesita limpieza: {needs_cleanup}")
-    print(f"Necesita limpieza agresiva: {needs_aggressive}")
+    print(f"Needs cleanup: {needs_cleanup}")
+    print(f"Needs aggressive cleanup: {needs_aggressive}")
     
-    # Ejecutar limpieza
+    # Run cleanup
     cleanup_result = cleanup.run_cleanup(aggressive=False)
-    print(f"Limpieza ejecutada: {cleanup_result['status']}")
-    print(f"Archivos limpiados: {cleanup_result['files_cleaned']}")
-    print(f"MB liberados: {cleanup_result.get('freed_mb', 0):.2f}")
+    print(f"Cleanup executed: {cleanup_result['status']}")
+    print(f"Files cleaned: {cleanup_result['files_cleaned']}")
+    print(f"MB freed: {cleanup_result.get('freed_mb', 0):.2f}")
     
-    # Obtener métricas
+    # Get metrics
     metrics = cleanup.get_metrics()
-    print(f"Limpiezas totales: {metrics['cleanup_stats']['total_cleanups']}")
+    print(f"Total cleanups: {metrics['cleanup_stats']['total_cleanups']}")
     
-    # Limpiar
+    # Clean up
     import shutil
     shutil.rmtree(staging_dir)
     cleanup.stop_monitor()
     
-    print("✓ Watermark Cleanup probado exitosamente\n")
+    print("✓ Watermark Cleanup tested successfully\n")
     return True
 
 
 def test_idempotency_manager():
-    """Prueba el Idempotency Manager."""
-    print("=== Probando Idempotency Manager ===")
+    """Tests the Idempotency Manager."""
+    print("=== Testing Idempotency Manager ===")
     
-    # Crear archivo de prueba
+    # Create a temporary test file
     test_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
-    test_file.write("Contenido de prueba para idempotencia\n" * 10)
+    test_file.write("Sample content for idempotency\n" * 10)
     test_file.close()
     
-    # Probar IdempotencyManager
+    # Test IdempotencyManager
     manager = IdempotencyManager(ttl_seconds=3600)
     
-    # Calcular hash
+    # Compute file hash
     file_hash = manager.compute_file_hash(test_file.name)
-    print(f"Hash del archivo: {file_hash[:16]}...")
+    print(f"File hash: {file_hash[:16]}...")
     
-    # Verificar estado inicial
+    # Check initial state
     initial_state = manager.get_file_state(test_file.name)
-    print(f"Estado inicial: {'Existe' if initial_state else 'No existe'}")
+    print(f"Initial state: {'Exists' if initial_state else 'Not found'}")
     
-    # Marcar etapas
+    # Mark stages
     manager.mark_stage_completed(test_file.name, ProcessingStage.DISCOVERED)
     manager.mark_stage_completed(test_file.name, ProcessingStage.PREPROCESSED)
     
-    # Verificar siguiente etapa
+    # Check next stage
     next_stage = manager.get_next_stage(test_file.name)
-    print(f"Siguiente etapa: {next_stage.value if next_stage else 'Completado'}")
+    print(f"Next stage: {next_stage.value if next_stage else 'Completed'}")
     
-    # Verificar si debe saltarse
+    # Check if file should be skipped
     should_skip, reason = manager.should_skip_file(test_file.name)
-    print(f"Debe saltarse: {should_skip} ({reason if reason else 'N/A'})")
+    print(f"Should skip: {should_skip} ({reason if reason else 'N/A'})")
     
-    # Probar batch check
+    # Test batch check
     batch_result = manager.batch_check_states([test_file.name])
-    print(f"Batch check: {len(batch_result)} resultados")
+    print(f"Batch check: {len(batch_result)} results")
     
-    # Obtener métricas
+    # Retrieve metrics
     metrics = manager.get_metrics()
-    print(f"Tamaño de cache: {metrics['cache_size']}")
-    print(f"Ratio de hits: {metrics['hit_ratio']:.2%}")
+    print(f"Cache size: {metrics['cache_size']}")
+    print(f"Hit ratio: {metrics['hit_ratio']:.2%}")
     
-    # Limpiar
+    # Clean up
     os.unlink(test_file.name)
     
-    print("✓ Idempotency Manager probado exitosamente\n")
+    print("✓ Idempotency Manager tested successfully\n")
     return True
 
 
 def test_metrics_collector():
-    """Prueba el Metrics Collector."""
-    print("=== Probando Metrics Collector ===")
+    """Tests the Metrics Collector."""
+    print("=== Testing Metrics Collector ===")
     
-    # Probar MetricsCollector
+    # Test MetricsCollector
     collector = MetricsCollector()
     
-    # Registrar diferentes tipos de métricas
+    # Record different metric types
     collector.increment("test.counter", 1)
     collector.gauge("test.gauge", 42.5)
     collector.timer("test.timer", 1.23)
     collector.histogram("test.histogram", 100.0)
     
-    # Probar decorador timeit
+    # Test the timeit decorator
     @collector.timeit("test.decorated_timer")
     def slow_function():
         import time
@@ -229,20 +229,20 @@ def test_metrics_collector():
         return "done"
     
     result = slow_function()
-    print(f"Función decorada: {result}")
+    print(f"Decorated function result: {result}")
     
-    # Obtener métricas
+    # Retrieve metrics
     metrics = collector.get_metrics()
-    print(f"Métricas registradas: {len(metrics)}")
+    print(f"Metrics recorded: {len(metrics)}")
     
-    # Obtener resumen
+    # Get summary
     summary = collector.get_summary()
-    print(f"Total de métricas: {summary['total_metrics']}")
-    print(f"Tipos de métricas: {summary['metric_types']}")
+    print(f"Total metrics: {summary['total_metrics']}")
+    print(f"Metric types: {summary['metric_types']}")
     
-    # Probar exportación Prometheus
+    # Test Prometheus export
     prometheus_output = collector.export_prometheus()
-    print(f"Exportación Prometheus: {len(prometheus_output.splitlines())} líneas")
+    print(f"Prometheus export: {len(prometheus_output.splitlines())} lines")
     
     # Probar IngestionMetrics
     ingestion_metrics = IngestionMetrics(collector)
@@ -250,23 +250,23 @@ def test_metrics_collector():
     ingestion_metrics.record_file_processing("/test/path.txt", 1.5, True, 0.5)
     ingestion_metrics.record_chunk_processing(5, 100, 0.1)
     
-    # Obtener resumen de ingestión
+    # Get ingestion summary
     ingestion_summary = ingestion_metrics.get_ingestion_summary()
-    print(f"Archivos descubiertos: {ingestion_summary['files']['discovered']}")
-    print(f"Chunks creados: {ingestion_summary['chunks']['created']}")
+    print(f"Files discovered: {ingestion_summary['files']['discovered']}")
+    print(f"Chunks created: {ingestion_summary['chunks']['created']}")
     
-    # Limpiar
+    # Clean up
     collector.clear()
     
-    print("✓ Metrics Collector probado exitosamente\n")
+    print("✓ Metrics Collector tested successfully\n")
     return True
 
 
 def test_integration():
-    """Prueba la integración de todos los componentes."""
-    print("=== Probando Integración Completa ===")
+    """Tests the integration of all components."""
+    print("=== Testing Full Integration ===")
     
-    # Crear directorio de prueba
+    # Create temporary test directory
     test_dir = tempfile.mkdtemp(prefix="rag_integration_")
     
     try:
@@ -277,26 +277,26 @@ def test_integration():
         idempotency_manager = IdempotencyManager()
         metrics_collector = MetricsCollector()
         
-        print("Componentes inicializados:")
+        print("Components initialized:")
         print(f"  - WavePlanner: {wave_planner}")
         print(f"  - IngestionPools: {resource_pools}")
         print(f"  - WatermarkCleanup: {watermark_cleanup}")
         print(f"  - IdempotencyManager: {idempotency_manager}")
         print(f"  - MetricsCollector: {metrics_collector}")
         
-        # Crear archivos de prueba
+        # Create test files
         test_files = []
         for i in range(3):
             file_path = Path(test_dir) / f"integration_test_{i}.txt"
-            file_path.write_text(f"Archivo de integración {i}\n" * 50)
+            file_path.write_text(f"Integration file {i}\n" * 50)
             test_files.append(str(file_path))
         
-        # Probar flujo integrado
-        print("\nSimulando flujo de procesamiento:")
+        # Simulate the integrated processing flow
+        print("\nSimulating processing flow:")
         
         # 1. Wave Planning
         waves = wave_planner.plan_waves(test_files)
-        print(f"  1. Wave Planning: {len(waves)} olas creadas")
+        print(f"  1. Wave Planning: {len(waves)} waves created")
         
         # 2. Idempotency check
         for file_path in test_files:
@@ -304,9 +304,9 @@ def test_integration():
             if not should_skip:
                 idempotency_manager.mark_stage_completed(file_path, ProcessingStage.DISCOVERED)
         
-        print(f"  2. Idempotency: {len(test_files)} archivos marcados como descubiertos")
+        print(f"  2. Idempotency: {len(test_files)} files marked as discovered")
         
-        # 3. Resource Pool processing (simulado)
+        # 3. Resource Pool processing (simulated)
         def process_file(file_path):
             import time
             time.sleep(0.01)
@@ -319,26 +319,26 @@ def test_integration():
                 futures.append(future)
         
         resource_pools.wait_for_all(timeout=5.0)
-        print(f"  3. Resource Pools: {len(futures)} tareas procesadas")
+        print(f"  3. Resource Pools: {len(futures)} tasks processed")
         
         # 4. Metrics recording
         metrics_collector.increment("integration.files.processed", len(test_files))
         metrics_collector.gauge("integration.active_workers", 2)
         
         metrics_summary = metrics_collector.get_summary()
-        print(f"  4. Metrics: {metrics_summary['total_metrics']} métricas registradas")
+        print(f"  4. Metrics: {metrics_summary['total_metrics']} metrics recorded")
         
         # 5. Cleanup
         for file_path in test_files:
             watermark_cleanup.cleanup_completed_file(file_path, immediate=True)
         
-        print(f"  5. Cleanup: Archivos de prueba limpiados")
+        print(f"  5. Cleanup: Test files cleaned")
         
         # Apagar componentes
         resource_pools.shutdown(wait=True)
         watermark_cleanup.stop_monitor()
         
-        print("\n✓ Integración probada exitosamente")
+        print("\n✓ Integration tested successfully")
         return True
         
     finally:
@@ -348,9 +348,9 @@ def test_integration():
 
 
 def main():
-    """Función principal de prueba."""
+    """Main test runner."""
     print("=" * 60)
-    print("PRUEBA DE OPTIMIZACIONES DEL PIPELINE DE INGESTIÓN")
+    print("INGESTION PIPELINE OPTIMIZATION TESTS")
     print("=" * 60)
     print()
     
@@ -360,7 +360,7 @@ def main():
         ("Watermark Cleanup", test_watermark_cleanup),
         ("Idempotency Manager", test_idempotency_manager),
         ("Metrics Collector", test_metrics_collector),
-        ("Integración Completa", test_integration),
+        ("Full Integration", test_integration),
     ]
     
     results = []
@@ -370,22 +370,22 @@ def main():
             success = test_func()
             results.append((test_name, success, None))
         except Exception as e:
-            print(f"✗ Error en {test_name}: {e}")
+            print(f"✗ Error in {test_name}: {e}")
             import traceback
             traceback.print_exc()
             results.append((test_name, False, str(e)))
         print()
     
-    # Resumen
+    # Summary
     print("=" * 60)
-    print("RESUMEN DE PRUEBAS")
+    print("TEST SUMMARY")
     print("=" * 60)
     
     passed = 0
     failed = 0
     
     for test_name, success, error in results:
-        status = "✓ PASÓ" if success else "✗ FALLÓ"
+        status = "✓ PASSED" if success else "✗ FAILED"
         if error:
             status += f" ({error})"
         print(f"{status}: {test_name}")
@@ -394,15 +394,15 @@ def main():
             passed += 1
         else:
             failed += 1
-    
+   
     print()
-    print(f"Total: {passed} pasaron, {failed} fallaron")
+    print(f"Total: {passed} passed, {failed} failed")
     
     if failed == 0:
-        print("\n¡Todas las optimizaciones están funcionando correctamente!")
+        print("\nAll optimizations are working correctly!")
         return 0
     else:
-        print(f"\nHay {failed} pruebas que necesitan atención.")
+        print(f"\n{failed} tests need attention.")
         return 1
 
 

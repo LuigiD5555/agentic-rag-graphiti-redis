@@ -116,11 +116,11 @@ class JobStateRepository:
             
             row = cursor.fetchone()
         
-        # Caso A: Estado = DONE
+        # Case A: State = DONE
         if row and row[0] == JobStatus.DONE.value:
             return ProcessingDecision.skip_reason("already_done")
         
-        # Caso B: Estado = IN_PROGRESS (válido)
+        # Case B: State = IN_PROGRESS (valid)
         if row and row[0] == JobStatus.IN_PROGRESS.value:
             started_at = row[2] or 0
             if now_ts - started_at < self.timeout_seconds:
@@ -130,7 +130,7 @@ class JobStateRepository:
                 # Job timed out, can retry
                 return ProcessingDecision.retry_reason("timed_out")
         
-        # Caso C: Estado = FAILED pero retries disponibles
+        # Case C: State = FAILED but retries available
         if row and row[0] in [JobStatus.FAILED.value, JobStatus.FAILED_FINAL.value]:
             attempts = row[1] or 0
             if attempts < self.MAX_RETRIES:
@@ -138,7 +138,7 @@ class JobStateRepository:
             else:
                 return ProcessingDecision.skip_reason("max_retries_exceeded")
         
-        # Caso D: Estado NO existe
+        # Case D: State does not exist
         # Create new record with IN_PROGRESS status
         with self.sqlite_manager.control_plane.get_connection() as conn:
             conn.execute("""

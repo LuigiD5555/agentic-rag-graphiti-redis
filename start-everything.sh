@@ -131,7 +131,7 @@ fi
 # STEP 3: INSTALL AND ENABLE SYSTEMD SOCKETS
 # ============================================================================
 
-# Leer configuración de auto-inicio desde .env
+# Read autostart configuration from .env
 RAG_AUTOSTART_CONFIG="true"
 if [ -f ".env" ]; then
     RAG_AUTOSTART_CONFIG="$(grep -E "^RAG_AUTOSTART=" .env | tail -n 1 | cut -d '=' -f2- | tr -d '\"' || echo "true")"
@@ -140,7 +140,7 @@ fi
 export RAG_AUTOSTART="$RAG_AUTOSTART_CONFIG"
 
 print_header "STEP 3: Configuring Systemd Sockets"
-print_info "Configuración de auto-inicio: RAG_AUTOSTART=$RAG_AUTOSTART_CONFIG"
+print_info "Autostart configuration: RAG_AUTOSTART=$RAG_AUTOSTART_CONFIG"
 
 # Running inside a container? systemd --user sockets won't work here.
 if [ -f "/.dockerenv" ] || grep -qE "(podman|docker|container)" /proc/1/cgroup 2>/dev/null; then
@@ -320,40 +320,40 @@ print_step "Starting tool services via systemd..."
 if command -v systemctl >/dev/null 2>&1; then
     # Solo habilitar servicios si RAG_AUTOSTART=true
     if [ "$RAG_AUTOSTART_CONFIG" = "true" ]; then
-        print_info "Auto-inicio habilitado - Configurando servicios para inicio automático"
+        print_info "Autostart enabled - configuring services for automatic startup"
         
         # Start Open WebUI service (independent)
         if [ -f "/home/luiginorp/.config/systemd/user/rag-tool-ui.service" ]; then
-            print_step "Configurando Open WebUI para inicio automático..."
+            print_step "Configuring Open WebUI for autostart..."
             systemctl --user daemon-reload
             systemctl --user enable --now rag-tool-ui.service || print_warning "Failed to start rag-tool-ui.service"
         fi
         
         # Start tool sockets (will activate services on-demand)
-        print_step "Configurando tool sockets para inicio automático..."
+        print_step "Configuring tool sockets for autostart..."
         systemctl --user daemon-reload
         systemctl --user enable --now tool-extractor.socket || print_warning "Failed to start tool-extractor.socket"
         systemctl --user enable --now tool-document-processor.socket || print_warning "Failed to start tool-document-processor.socket"
         systemctl --user enable --now tool-websearch.socket || print_warning "Failed to start tool-websearch.socket"
         
-        print_success "Servicios configurados para inicio automático"
+        print_success "Services configured for autostart"
     else
-        print_info "Auto-inicio deshabilitado - Solo iniciando servicios para esta sesión"
+        print_info "Autostart disabled - starting services for this session only"
         
-        # Solo iniciar servicios para esta sesión, sin habilitarlos en el arranque
+        # Only start services for this session, do not enable them at boot
         if [ -f "/home/luiginorp/.config/systemd/user/rag-tool-ui.service" ]; then
-            print_step "Iniciando Open WebUI para esta sesión..."
+            print_step "Starting Open WebUI for this session..."
             systemctl --user daemon-reload
             systemctl --user start rag-tool-ui.service || print_warning "Failed to start rag-tool-ui.service"
         fi
         
-        print_step "Iniciando tool sockets para esta sesión..."
+        print_step "Starting tool sockets for this session..."
         systemctl --user daemon-reload
         systemctl --user start tool-extractor.socket || print_warning "Failed to start tool-extractor.socket"
         systemctl --user start tool-document-processor.socket || print_warning "Failed to start tool-document-processor.socket"
         systemctl --user start tool-websearch.socket || print_warning "Failed to start tool-websearch.socket"
         
-        print_success "Servicios iniciados para esta sesión (no se iniciarán automáticamente en el arranque)"
+        print_success "Services started for this session (they will not auto-start on boot)"
     fi
 else
     print_warning "systemctl not available; tool services must be started manually"

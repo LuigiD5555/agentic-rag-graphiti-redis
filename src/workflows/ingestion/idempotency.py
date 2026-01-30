@@ -1,8 +1,8 @@
 """
-Idempotency Hardening - Fase 6 del plan de optimización
+Idempotency Hardening - Phase 6 of the optimization plan
 
-Implementa mecanismos robustos de idempotencia para hacer reintentos seguros
-y evitar trabajo duplicado después de fallos.
+Implements robust idempotency mechanisms for safe retries
+and to avoid duplicate work after failures.
 """
 
 import hashlib
@@ -20,7 +20,7 @@ from src.workflows.query.audit.decorators import logged, timed
 
 
 class ProcessingStage(Enum):
-    """Etapas del procesamiento de un archivo."""
+    """Processing stages for a file."""
     DISCOVERED = "discovered"
     PREPROCESSED = "preprocessed"
     SPLIT = "split"
@@ -31,7 +31,7 @@ class ProcessingStage(Enum):
 
 @dataclass
 class FileProcessingState:
-    """Estado de procesamiento de un archivo."""
+    """Processing state for a file."""
     file_path: str
     file_hash: str
     stages: Dict[ProcessingStage, Dict[str, Any]]
@@ -41,7 +41,7 @@ class FileProcessingState:
 
 
 class IdempotencyManager:
-    """Gestor de idempotencia para el pipeline de ingestión."""
+    """Idempotency manager for the ingestion pipeline."""
     
     def __init__(
         self,
@@ -51,52 +51,52 @@ class IdempotencyManager:
     ):
         """
         Args:
-            storage_backend: Backend de almacenamiento (SQLite, archivo, etc.)
-            ttl_seconds: TTL para estados en segundos
-            workers: Workers para operaciones paralelas
+            storage_backend: Storage backend (SQLite, file, etc.)
+            ttl_seconds: TTL for states in seconds
+            workers: Workers for parallel operations
         """
         self.storage_backend = storage_backend
         self.ttl_seconds = ttl_seconds
         self.workers = workers
         
-        # Cache en memoria para acceso rápido
+        # In-memory cache for quick access
         self._memory_cache: Dict[str, FileProcessingState] = {}
         self._lock = threading.Lock()
         
-        # Métricas
+        # Metrics
         self._hits = 0
         self._misses = 0
         self._skipped_work = 0
         
         logger.info(
-            "IdempotencyManager inicializado: TTL=%ds, workers=%d",
+            "IdempotencyManager initialized: TTL=%ds, workers=%d",
             ttl_seconds, workers
         )
     
     def compute_file_hash(self, file_path: str, chunk_size: int = 8192) -> str:
         """
-        Calcula hash determinístico de un archivo.
+        Computes a deterministic hash for a file.
         
         Args:
-            file_path: Ruta del archivo
-            chunk_size: Tamaño de chunk para lectura
+            file_path: Path to the file
+            chunk_size: Chunk size for reading
             
         Returns:
-            Hash SHA256 del archivo
+            SHA256 hash of the file
         """
         try:
             hasher = hashlib.sha256()
             path = Path(file_path)
             
             if not path.exists():
-                raise FileNotFoundError(f"Archivo no encontrado: {file_path}")
+                raise FileNotFoundError(f"File not found: {file_path}")
             
-            # Incluir metadatos en el hash
+            # Include metadata in the hash
             stat = path.stat()
             metadata = f"{path.name}:{stat.st_size}:{stat.st_mtime}"
             hasher.update(metadata.encode('utf-8'))
             
-            # Incluir contenido del archivo
+            # Include file contents
             with open(file_path, 'rb') as f:
                 while chunk := f.read(chunk_size):
                     hasher.update(chunk)
@@ -104,21 +104,21 @@ class IdempotencyManager:
             return hasher.hexdigest()
             
         except Exception as e:
-            logger.error("Error calculando hash de %s: %s", file_path, e)
-            # Fallback: hash basado en ruta y timestamp
+            logger.error("Error calculating hash for %s: %s", file_path, e)
+            # Fallback: hash based on path and timestamp
             fallback = f"{file_path}:{time.time()}"
             return hashlib.sha256(fallback.encode('utf-8')).hexdigest()
     
     def get_file_state(self, file_path: str) -> Optional[FileProcessingState]:
         """
-        Obtiene el estado de procesamiento de un archivo.
+        Retrieves the processing state of a file.
         
         Returns:
-            FileProcessingState si existe, None si no
+            FileProcessingState if found, None otherwise
         """
         file_hash = self.compute_file_hash(file_path)
         
-        # Primero verificar cache en memoria
+        # First check in-memory cache
         with self._lock:
             cache_key = f"{file_path}:{file_hash}"
             if cache_key in self._memory_cache:
@@ -127,7 +127,7 @@ class IdempotencyManager:
         
         self._misses += 1
         
-        # Si hay backend, buscar allí
+        # If a backend exists, try loading from it
         if self.storage_backend:
             try:
                 state_data = self._load_from_backend(file_path, file_hash)
@@ -137,7 +137,7 @@ class IdempotencyManager:
                         self._memory_cache[cache_key] = state
                     return state
             except Exception as e:
-                logger.warning("Error cargando estado desde backend: %s", e)
+                logger.warning("Error loading state from backend: %s", e)
         
         return None
     
@@ -149,22 +149,22 @@ class IdempotencyManager:
         force: bool = False
     ) -> bool:
         """
-        Marca una etapa como completada para un archivo.
+        Marks a stage as completed for a file.
         
         Args:
-            file_path: Ruta del archivo
-            stage: Etapa completada
-            metadata: Metadatos adicionales de la etapa
-            force: Forzar actualización incluso si ya está completada
+            file_path: Path to the file
+            stage: Completed stage
+            metadata: Additional metadata for the stage
+            force: Force update even if already completed
             
         Returns:
-            True si se actualizó el estado, False si ya estaba completado
+            True if the state was updated, False if already completed
         """
         file_hash = self.compute_file_hash(file_path)
         cache_key = f"{file_path}:{file_hash}"
         
         with self._lock:
-            # Obtener o crear estado
+            # Obtain or create the state
             if cache_key in self._memory_cache:
                 state = self._memory_cache[cache_key]
             else:
@@ -175,38 +175,38 @@ class IdempotencyManager:
                     last_updated=datetime.now(timezone.utc)
                 )
             
-            # Verificar si ya está completado
+            # Check if already completed
             if stage in state.stages and not force:
                 logger.debug(
-                    "Etapa %s ya completada para %s (idempotencia)",
+                    "Stage %s already completed for %s (idempotency)",
                     stage.value, file_path
                 )
                 self._skipped_work += 1
                 return False
             
-            # Actualizar estado
+            # Update state
             state.stages[stage] = {
                 'completed_at': datetime.now(timezone.utc).isoformat(),
                 'metadata': metadata or {}
             }
             state.last_updated = datetime.now(timezone.utc)
             
-            # Marcar como completado si todas las etapas están hechas
+            # Mark as completed if all stages are done
             if self._all_stages_completed(state):
                 state.completed = True
             
-            # Guardar en cache
+            # Store in cache
             self._memory_cache[cache_key] = state
             
-            # Guardar en backend si existe
+            # Save to backend if available
             if self.storage_backend:
                 try:
                     self._save_to_backend(state)
                 except Exception as e:
-                    logger.warning("Error guardando estado en backend: %s", e)
+                    logger.warning("Error saving state to backend: %s", e)
         
         logger.debug(
-            "Etapa %s marcada como completada para %s",
+            "Stage %s marked as completed for %s",
             stage.value, file_path
         )
         
@@ -219,12 +219,12 @@ class IdempotencyManager:
         error: str,
         metadata: Optional[Dict[str, Any]] = None
     ) -> None:
-        """Marca una etapa como fallida."""
+        """Marks a stage as failed."""
         file_hash = self.compute_file_hash(file_path)
         cache_key = f"{file_path}:{file_hash}"
         
         with self._lock:
-            # Obtener o crear estado
+            # Obtain or create the state
             if cache_key in self._memory_cache:
                 state = self._memory_cache[cache_key]
             else:
@@ -235,7 +235,7 @@ class IdempotencyManager:
                     last_updated=datetime.now(timezone.utc)
                 )
             
-            # Marcar como fallido
+            # Mark as failed
             state.stages[ProcessingStage.FAILED] = {
                 'failed_at': datetime.now(timezone.utc).isoformat(),
                 'stage': stage.value,
@@ -245,23 +245,23 @@ class IdempotencyManager:
             state.error = error
             state.last_updated = datetime.now(timezone.utc)
             
-            # Guardar
+            # Store state
             self._memory_cache[cache_key] = state
-            
+           
             if self.storage_backend:
                 try:
                     self._save_to_backend(state)
                 except Exception as e:
-                    logger.warning("Error guardando estado fallido: %s", e)
+                    logger.warning("Error saving failed state: %s", e)
         
         logger.warning(
-            "Etapa %s marcada como fallida para %s: %s",
+            "Stage %s marked as failed for %s: %s",
             stage.value, file_path, error
         )
     
     def should_skip_file(self, file_path: str) -> tuple[bool, Optional[str]]:
         """
-        Determina si un archivo debe ser saltado.
+        Determines whether a file should be skipped.
         
         Returns:
             Tuple (should_skip, reason)
@@ -271,11 +271,11 @@ class IdempotencyManager:
         if not state:
             return False, None
         
-        # Si ya está completamente procesado
+        # If already fully processed
         if state.completed:
             return True, "already_fully_processed"
         
-        # Si falló recientemente (menos de 1 hora)
+        # If it failed recently (less than 1 hour)
         if ProcessingStage.FAILED in state.stages:
             failed_data = state.stages[ProcessingStage.FAILED]
             failed_at = datetime.fromisoformat(failed_data['failed_at'])
@@ -288,10 +288,11 @@ class IdempotencyManager:
     
     def get_next_stage(self, file_path: str) -> Optional[ProcessingStage]:
         """
-        Obtiene la siguiente etapa a procesar para un archivo.
+        """
+        Determines the next stage to process for a file.
         
         Returns:
-            Siguiente etapa, o None si ya está completo
+            Next stage, or None if already complete
         """
         state = self.get_file_state(file_path)
         
@@ -301,10 +302,10 @@ class IdempotencyManager:
         if state.completed:
             return None
         
-        # Determinar última etapa completada
+        # Determine the last completed stage
         completed_stages = set(state.stages.keys())
         
-        # Orden de procesamiento
+        # Processing order
         stage_order = [
             ProcessingStage.DISCOVERED,
             ProcessingStage.PREPROCESSED,
@@ -324,10 +325,11 @@ class IdempotencyManager:
         file_paths: List[str]
     ) -> Dict[str, Dict[str, Any]]:
         """
-        Verifica estados de múltiples archivos en batch.
+        """
+        Checks states for multiple files in batch.
         
         Returns:
-            Dict con estado de cada archivo
+            Dict with the state of each file
         """
         results = {}
         
@@ -354,13 +356,14 @@ class IdempotencyManager:
     
     def cleanup_old_states(self, max_age_seconds: Optional[int] = None) -> int:
         """
-        Limpia estados antiguos.
+        """
+        Cleans up old states.
         
         Args:
-            max_age_seconds: Edad máxima en segundos (None = usar TTL)
+            max_age_seconds: Maximum age in seconds (None = use TTL)
             
         Returns:
-            Número de estados limpiados
+            Number of states cleaned
         """
         age_limit = max_age_seconds or self.ttl_seconds
         cutoff = datetime.now(timezone.utc).timestamp() - age_limit
@@ -368,7 +371,7 @@ class IdempotencyManager:
         cleaned = 0
         
         with self._lock:
-            # Limpiar cache en memoria
+            # Clean in-memory cache
             keys_to_remove = []
             for key, state in self._memory_cache.items():
                 if state.last_updated.timestamp() < cutoff:
@@ -378,7 +381,7 @@ class IdempotencyManager:
                 del self._memory_cache[key]
                 cleaned += 1
             
-            # Limpiar backend si existe
+            # Clean backend if available
             if self.storage_backend:
                 try:
                     backend_cleaned = self._cleanup_backend(cutoff)
@@ -387,12 +390,12 @@ class IdempotencyManager:
                     logger.warning("Error limpiando backend: %s", e)
         
         if cleaned > 0:
-            logger.info("Limpiados %d estados antiguos", cleaned)
+            logger.info("Removed %d old states", cleaned)
         
         return cleaned
     
     def get_metrics(self) -> Dict[str, Any]:
-        """Obtiene métricas del gestor de idempotencia."""
+        """Returns metrics from the idempotency manager."""
         with self._lock:
             cache_size = len(self._memory_cache)
             
@@ -412,7 +415,7 @@ class IdempotencyManager:
             }
     
     def _all_stages_completed(self, state: FileProcessingState) -> bool:
-        """Verifica si todas las etapas están completadas."""
+        """Checks if all stages are completed."""
         required_stages = {
             ProcessingStage.DISCOVERED,
             ProcessingStage.PREPROCESSED,
@@ -424,7 +427,7 @@ class IdempotencyManager:
         return required_stages.issubset(set(state.stages.keys()))
     
     def _serialize_state(self, state: FileProcessingState) -> Dict[str, Any]:
-        """Serializa estado para almacenamiento."""
+        """Serializes state for storage."""
         return {
             'file_path': state.file_path,
             'file_hash': state.file_hash,
@@ -438,14 +441,14 @@ class IdempotencyManager:
         }
     
     def _deserialize_state(self, data: Dict[str, Any]) -> FileProcessingState:
-        """Deserializa estado desde almacenamiento."""
+        """Deserializes state from storage."""
         stages = {}
         for stage_str, stage_data in data.get('stages', {}).items():
             try:
                 stage = ProcessingStage(stage_str)
                 stages[stage] = stage_data
             except ValueError:
-                logger.warning("Etapa desconocida en datos serializados: %s", stage_str)
+                logger.warning("Unknown stage in serialized data: %s", stage_str)
         
         return FileProcessingState(
             file_path=data['file_path'],
@@ -457,7 +460,7 @@ class IdempotencyManager:
         )
     
     def _save_to_backend(self, state: FileProcessingState) -> None:
-        """Guarda estado en backend (implementación básica)."""
+        """Saves state to the backend (basic implementation)."""
         if hasattr(self.storage_backend, 'set'):
             # Cache-like interface
             key = f"idempotency:{state.file_hash}"
@@ -473,7 +476,7 @@ class IdempotencyManager:
                 json.dump(self._serialize_state(state), f)
     
     def _load_from_backend(self, file_path: str, file_hash: str) -> Optional[Dict[str, Any]]:
-        """Carga estado desde backend."""
+        """Loads state from the backend."""
         if hasattr(self.storage_backend, 'get'):
             # Cache-like interface
             key = f"idempotency:{file_hash}"
@@ -492,7 +495,7 @@ class IdempotencyManager:
         return None
     
     def _cleanup_backend(self, cutoff_timestamp: float) -> int:
-        """Limpia estados antiguos del backend."""
+        """Cleans up old states from the backend."""
         cleaned = 0
         
         if hasattr(self.storage_backend, 'scan_iter'):
@@ -508,43 +511,43 @@ class IdempotencyManager:
                             self.storage_backend.delete(key)
                             cleaned += 1
                 except Exception as e:
-                    logger.warning("Error limpiando clave %s: %s", key, e)
+                    logger.warning("Error cleaning key %s: %s", key, e)
         
         return cleaned
 
 
-# Decoradores para idempotencia
+# Decorators for idempotency
 def idempotent_stage(stage: ProcessingStage):
     """
-    Decorador para hacer una función de etapa idempotente.
+    Decorator to make a stage function idempotent.
     
-    Uso:
+    Usage:
         @idempotent_stage(ProcessingStage.PREPROCESSED)
         def preprocess_file(idempotency_manager: IdempotencyManager, file_path: str) -> Dict[str, Any]:
-            # ... procesamiento ...
+            # ... processing ...
             return {'result': 'data'}
     """
     def decorator(func: Callable):
         def wrapper(idempotency_manager: IdempotencyManager, file_path: str, *args, **kwargs):
-            # Verificar si ya está completado
+            # Check if already completed
             if not idempotency_manager.mark_stage_completed(file_path, stage):
                 logger.debug(
-                    "Saltando etapa %s para %s (ya completada)",
+                    "Skipping stage %s for %s (already completed)",
                     stage.value, file_path
                 )
                 return {'skipped': True, 'stage': stage.value}
             
             try:
-                # Ejecutar función
+                # Execute function
                 result = func(idempotency_manager, file_path, *args, **kwargs)
                 
-                # Registrar metadatos
+                # Record metadata
                 metadata = {
                     'result_type': type(result).__name__,
                     'timestamp': datetime.now(timezone.utc).isoformat()
                 }
                 
-                # Actualizar estado con metadatos
+                # Update state with metadata
                 idempotency_manager.mark_stage_completed(
                     file_path, stage, metadata=metadata, force=True
                 )
@@ -552,7 +555,7 @@ def idempotent_stage(stage: ProcessingStage):
                 return result
                 
             except Exception as e:
-                # Marcar como fallido
+                # Mark as failed
                 idempotency_manager.mark_stage_failed(
                     file_path, stage, str(e)
                 )
@@ -563,14 +566,14 @@ def idempotent_stage(stage: ProcessingStage):
     return decorator
 
 
-# Utilidades para integración
+# Utilities for integration
 def create_default_idempotency_manager(config: Optional[Any] = None) -> IdempotencyManager:
-    """Crea un IdempotencyManager con configuración por defecto."""
+    """Creates an IdempotencyManager with default configuration."""
     import os
     
     # External cache removed: always use in-memory backend
     storage_backend = None
-    logger.info("IdempotencyManager usando cache en memoria (SQLite control plane)")
+    logger.info("IdempotencyManager using in-memory cache (SQLite control plane)")
     
     ttl = int(os.getenv('IDEMPOTENCY_TTL_SECONDS', '86400'))
     workers = int(os.getenv('IDEMPOTENCY_WORKERS', '4'))

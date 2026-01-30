@@ -1,8 +1,8 @@
 """
-Watermark Cleanup - Fase 5 del plan de optimización
+Watermark Cleanup - Phase 5 of the optimization plan
 
-Implementa limpieza basada en watermarks para prevenir saturación de disco
-y eliminar artefactos intermedios de manera segura.
+Implements watermark-based cleanup to prevent disk saturation
+and safely remove intermediate artifacts.
 """
 
 import os
@@ -20,7 +20,7 @@ from src.workflows.query.audit.decorators import logged, timed
 
 @dataclass
 class DiskUsage:
-    """Información de uso de disco."""
+    """Disk usage information."""
     total_bytes: int
     used_bytes: int
     free_bytes: int
@@ -29,16 +29,16 @@ class DiskUsage:
 
 @dataclass
 class CleanupRule:
-    """Regla de limpieza."""
+    """Cleanup rule."""
     name: str
-    pattern: str  # Patrón glob o extensión
-    max_age_seconds: Optional[int] = None  # None = sin límite de edad
-    min_size_bytes: Optional[int] = None  # None = sin límite de tamaño
-    priority: int = 1  # 1 = más importante, 10 = menos importante
+    pattern: str  # Glob pattern or extension
+    max_age_seconds: Optional[int] = None  # None = no age limit
+    min_size_bytes: Optional[int] = None  # None = no size limit
+    priority: int = 1  # 1 = highest priority, 10 = lowest priority
 
 
 class WatermarkCleanup:
-    """Sistema de limpieza basado en watermarks."""
+    """Watermark-based cleanup system."""
     
     def __init__(
         self,
@@ -50,11 +50,11 @@ class WatermarkCleanup:
     ):
         """
         Args:
-            staging_dir: Directorio de staging a monitorear
-            watermark_percent: Porcentaje de uso que activa limpieza normal
-            aggressive_percent: Porcentaje que activa limpieza agresiva
-            check_interval_seconds: Intervalo entre verificaciones
-            workers: Workers para limpieza paralela
+            staging_dir: Staging directory to monitor
+            watermark_percent: Usage percent that triggers normal cleanup
+            aggressive_percent: Usage percent that triggers aggressive cleanup
+            check_interval_seconds: Interval between checks
+            workers: Number of workers for parallel cleanup
         """
         self.staging_dir = Path(staging_dir).resolve()
         self.watermark_percent = watermark_percent
@@ -62,36 +62,36 @@ class WatermarkCleanup:
         self.check_interval = check_interval_seconds
         self.workers = workers
         
-        # Reglas de limpieza por defecto
+        # Default cleanup rules
         self.rules = self._get_default_rules()
         
-        # Estado
+        # State
         self._running = False
         self._monitor_thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
         
-        # Métricas
+        # Metrics
         self._last_check_time = 0.0
         self._cleanup_count = 0
         self._freed_bytes = 0
         self._last_usage_percent = 0.0
         
-        # Crear directorio si no existe
+        # Create directory if missing
         self.staging_dir.mkdir(parents=True, exist_ok=True)
         
         logger.info(
-            "WatermarkCleanup inicializado para %s: watermark=%.1f%%, agresivo=%.1f%%, check=%ds",
+            "WatermarkCleanup initialized for %s: watermark=%.1f%%, aggressive=%.1f%%, check=%ds",
             self.staging_dir, watermark_percent, aggressive_percent, check_interval_seconds
         )
     
     def _get_default_rules(self) -> List[CleanupRule]:
-        """Obtiene reglas de limpieza por defecto."""
+        """Returns the default cleanup rules."""
         return [
-            # Archivos temporales de procesamiento
+            # Temporary processing files
             CleanupRule(
                 name="temp_files",
                 pattern="*.tmp",
-                max_age_seconds=3600,  # 1 hora
+                max_age_seconds=3600,  # 1 hour
                 priority=1
             ),
             CleanupRule(
@@ -101,11 +101,11 @@ class WatermarkCleanup:
                 priority=1
             ),
             
-            # Artefactos de conversión/OCR
+            # Conversion/OCR artifacts
             CleanupRule(
                 name="conversion_artifacts",
                 pattern="*.converted.*",
-                max_age_seconds=7200,  # 2 horas
+                max_age_seconds=7200,  # 2 hours
                 priority=2
             ),
             CleanupRule(
@@ -115,24 +115,24 @@ class WatermarkCleanup:
                 priority=2
             ),
             
-            # Archivos preprocesados
+            # Preprocessed files
             CleanupRule(
                 name="preprocessed_files",
                 pattern="*.preprocessed.*",
-                max_age_seconds=86400,  # 24 horas
+                max_age_seconds=86400,  # 24 hours
                 priority=3
             ),
             
-            # Logs antiguos
+            # Old logs
             CleanupRule(
                 name="old_logs",
                 pattern="*.log",
-                max_age_seconds=604800,  # 7 días
-                min_size_bytes=1024 * 1024,  # 1 MB mínimo
+                max_age_seconds=604800,  # 7 days
+                min_size_bytes=1024 * 1024,  # 1 MB minimum
                 priority=4
             ),
             
-            # Caché antiguo
+            # Old cache
             CleanupRule(
                 name="old_cache",
                 pattern="*.cache",
@@ -201,11 +201,11 @@ class WatermarkCleanup:
         freed_bytes = 0
         errors = 0
         
-        # Obtener archivos candidatos
+        # Get cleanup candidates
         candidates = self._find_cleanup_candidates(aggressive)
         
         if not candidates:
-            logger.info("No hay candidatos para limpieza")
+        logger.info("No cleanup candidates found")
             return {
                 'status': 'no_candidates',
                 'files_cleaned': 0,
@@ -215,7 +215,7 @@ class WatermarkCleanup:
                 'duration_seconds': time.time() - start_time
             }
         
-        logger.info("Encontrados %d candidatos para limpieza", len(candidates))
+        logger.info("Found %d cleanup candidates", len(candidates))
         
         # Limpiar en paralelo
         with ThreadPoolExecutor(max_workers=self.workers) as executor:
@@ -240,7 +240,7 @@ class WatermarkCleanup:
                     logger.error("Error procesando resultado de limpieza: %s", e)
                     errors += 1
         
-        # Actualizar métricas
+        # Update metrics
         with self._lock:
             self._cleanup_count += 1
             self._freed_bytes += freed_bytes
@@ -248,8 +248,8 @@ class WatermarkCleanup:
         duration = time.time() - start_time
         
         logger.info(
-            "Limpieza completada: %d archivos, %d directorios, %.2f MB liberados, "
-            "%d errores, %.2f segundos",
+            "Cleanup completed: %d files, %d directories, %.2f MB freed, "
+            "%d errors, %.2f seconds",
             files_cleaned, dirs_cleaned, freed_bytes / (1024 * 1024),
             errors, duration
         )
@@ -268,17 +268,17 @@ class WatermarkCleanup:
         }
     
     def _find_cleanup_candidates(self, aggressive: bool) -> List[Path]:
-        """Encuentra candidatos para limpieza basados en reglas."""
+        """Finds cleanup candidates based on the rules."""
         candidates = []
         now = time.time()
         
         for rule in self.rules:
-            # En modo agresivo, limpiar más archivos
+            # In aggressive mode, skip lower priority rules
             if aggressive and rule.priority > 3:
-                continue  # Saltar reglas de baja prioridad en modo agresivo
+                continue  # Skip low-priority rules in aggressive mode
             
             try:
-                # Buscar archivos que coincidan con el patrón
+                # Look for files that match the pattern
                 for item in self.staging_dir.rglob(rule.pattern):
                     if not item.exists():
                         continue
@@ -289,7 +289,7 @@ class WatermarkCleanup:
                         if age < rule.max_age_seconds and not aggressive:
                             continue
                     
-                    # Verificar tamaño mínimo
+                    # Check minimum size
                     if rule.min_size_bytes is not None:
                         size = item.stat().st_size if item.is_file() else 0
                         if size < rule.min_size_bytes:
@@ -300,16 +300,16 @@ class WatermarkCleanup:
             except Exception as e:
                 logger.warning("Error aplicando regla '%s': %s", rule.name, e)
         
-        # Ordenar por prioridad (edad * tamaño)
+        # Sort by priority (age * size)
         candidates.sort(key=lambda p: (
-            -(now - p.stat().st_mtime) if p.exists() else 0,  # Más viejo primero
-            -p.stat().st_size if p.is_file() else 0  # Más grande primero
+            -(now - p.stat().st_mtime) if p.exists() else 0,  # Oldest first
+            -p.stat().st_size if p.is_file() else 0  # Biggest first
         ))
         
         return candidates
     
     def _cleanup_item(self, item: Path) -> Dict[str, Any]:
-        """Limpia un solo archivo o directorio."""
+        """Cleans up a single file or directory."""
         try:
             if not item.exists():
                 return {'success': False, 'error': 'not_exists', 'path': str(item)}
@@ -318,7 +318,7 @@ class WatermarkCleanup:
             size_bytes = 0
             
             if is_dir:
-                # Calcular tamaño del directorio
+                # Calculate directory size
                 for root, dirs, files in os.walk(str(item)):
                     for f in files:
                         file_path = Path(root) / f
@@ -327,19 +327,18 @@ class WatermarkCleanup:
                         except:
                             pass
                 
-                # Eliminar directorio
+                # Remove directory
                 shutil.rmtree(str(item), ignore_errors=True)
-                
             else:
-                # Obtener tamaño del archivo
+                # Get file size
                 size_bytes = item.stat().st_size
                 
-                # Eliminar archivo
+                # Remove file
                 item.unlink(missing_ok=True)
             
             logger.debug(
-                "Limpieza: %s %s (%.2f MB)",
-                "directorio" if is_dir else "archivo",
+                "Cleanup: %s %s (%.2f MB)",
+                "directory" if is_dir else "file",
                 item.name, size_bytes / (1024 * 1024)
             )
             
@@ -362,7 +361,7 @@ class WatermarkCleanup:
     def start_monitor(self) -> None:
         """Inicia el monitor de watermarks en segundo plano."""
         if self._running:
-            logger.warning("Monitor ya está ejecutándose")
+            logger.warning("Monitor already running")
             return
         
         self._running = True
@@ -381,7 +380,7 @@ class WatermarkCleanup:
         logger.info("Monitor de watermarks detenido")
     
     def _monitor_loop(self) -> None:
-        """Loop del monitor que verifica watermarks periódicamente."""
+        """Monitor loop that periodically checks watermarks."""
         logger.info("Monitor loop iniciado para %s", self.staging_dir)
         
         while self._running:
@@ -391,19 +390,19 @@ class WatermarkCleanup:
                 
                 if needs_aggressive:
                     logger.warning(
-                        "Uso de disco CRÍTICO: %.1f%% (watermark=%.1f%%) - Limpieza agresiva",
+                        "CRITICAL disk usage: %.1f%% (watermark=%.1f%%) - Aggressive cleanup",
                         self._last_usage_percent, self.aggressive_percent
                     )
                     self.run_cleanup(aggressive=True)
                     
                 elif needs_cleanup:
                     logger.info(
-                        "Uso de disco ALTO: %.1f%% (watermark=%.1f%%) - Limpieza normal",
+                        "HIGH disk usage: %.1f%% (watermark=%.1f%%) - Normal cleanup",
                         self._last_usage_percent, self.watermark_percent
                     )
                     self.run_cleanup(aggressive=False)
                 
-                # Esperar hasta la siguiente verificación
+                # Wait until the next check
                 for _ in range(self.check_interval):
                     if not self._running:
                         break
@@ -414,7 +413,7 @@ class WatermarkCleanup:
                 time.sleep(60)  # Esperar antes de reintentar
     
     def get_metrics(self) -> Dict[str, Any]:
-        """Obtiene métricas del sistema de limpieza."""
+        """Returns metrics from the cleanup system."""
         usage = self.get_disk_usage()
         
         with self._lock:
@@ -443,26 +442,26 @@ class WatermarkCleanup:
     
     def cleanup_completed_file(self, file_path: str, immediate: bool = True) -> bool:
         """
-        Limpia un archivo procesado exitosamente.
+        Cleans up a processed file.
         
         Args:
-            file_path: Ruta del archivo a limpiar
-            immediate: True para limpiar inmediatamente, False para solo marcar
+            file_path: Path to the file to clean
+            immediate: True to clean immediately, False to only mark
             
         Returns:
-            True si se limpió exitosamente
+            True if the file was cleaned successfully
         """
         try:
             path = Path(file_path)
             if not path.exists():
                 return True  # Ya no existe
             
-            # Verificar que esté dentro del directorio de staging
+            # Ensure the file is inside the staging directory
             try:
                 path.resolve().relative_to(self.staging_dir)
             except ValueError:
                 logger.warning(
-                    "Archivo fuera del staging dir, no se limpiará: %s",
+                    "File outside the staging dir, skipping cleanup: %s",
                     file_path
                 )
                 return False
@@ -476,16 +475,16 @@ class WatermarkCleanup:
                     with self._lock:
                         self._freed_bytes += size
                     
-                    logger.debug("Archivo procesado limpiado: %s (%.2f MB)", 
+                    logger.debug("Processed file cleaned: %s (%.2f MB)", 
                                path.name, size / (1024 * 1024))
                 else:
-                    logger.warning("Ruta no es archivo: %s", file_path)
+                    logger.warning("Path is not a file: %s", file_path)
                     return False
             
             return True
             
         except Exception as e:
-            logger.error("Error limpiando archivo procesado %s: %s", file_path, e)
+            logger.error("Error cleaning processed file %s: %s", file_path, e)
             return False
     
     def __enter__(self):
@@ -496,9 +495,9 @@ class WatermarkCleanup:
         self.stop_monitor()
 
 
-# Utilidades para integración con el pipeline
+# Utilities for pipeline integration
 def create_default_cleanup(config: Optional[Any] = None) -> WatermarkCleanup:
-    """Crea un WatermarkCleanup con configuración por defecto."""
+    """Creates a WatermarkCleanup with default configuration."""
     import os
     
     staging_dir = os.getenv(

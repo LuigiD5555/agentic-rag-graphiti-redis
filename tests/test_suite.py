@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-Test Suite para RAG Agentic Graphiti
+Test Suite for RAG Agentic Graphiti
 
-Este archivo proporciona una forma conveniente de ejecutar todos los tests del proyecto
-usando pytest. Incluye opciones para ejecutar diferentes tipos de tests:
+This file provides a convenient way to run all project tests via pytest. It offers options
+for different test types:
 
-1. Tests unitarios (rápidos, sin dependencias externas)
-2. Tests de integración (requieren servicios externos)
-3. Todos los tests
+1. Unit tests (fast, no external dependencies)
+2. Integration tests (require external services)
+3. All tests
 
-Uso:
-    python -m pytest tests/test_suite.py           # Ejecuta tests unitarios por defecto
-    python -m pytest tests/test_suite.py -m unit   # Solo tests unitarios
-    python -m pytest tests/test_suite.py -m integration  # Solo tests de integración (requiere RUN_INTEGRATION=1)
-    python -m pytest tests/test_suite.py --setup-fallback  # Con opción de fallback
+Usage:
+    python -m pytest tests/test_suite.py           # Runs all tests by default
+    python -m pytest tests/test_suite.py -m unit   # Unit tests only
+    python -m pytest tests/test_suite.py -m integration  # Integration tests only (requires RUN_INTEGRATION=1)
+    python -m pytest tests/test_suite.py --setup-fallback  # With setup fallback option
 """
 
 import os
@@ -22,12 +22,12 @@ import pytest
 
 
 def run_unit_tests():
-    """Ejecuta solo los tests unitarios."""
-    print("=== Ejecutando Tests Unitarios ===")
-    print("Estos tests son rápidos y no requieren servicios externos.")
+    """Runs only the unit tests."""
+    print("=== Running Unit Tests ===")
+    print("These tests are fast and do not require external services.")
     print("-" * 50)
     
-    # Ejecutar tests en directorio unit/ (no usar marcador ya que no están consistentemente marcados)
+    # Run tests in the unit/ directory (markers are not consistently applied)
     return pytest.main([
         "tests/unit/",
         "--tb=short",
@@ -38,17 +38,17 @@ def run_unit_tests():
 
 
 def run_integration_tests():
-    """Ejecuta tests de integración (requiere RUN_INTEGRATION=1)."""
+    """Runs integration tests (requires RUN_INTEGRATION=1)."""
     if os.getenv("RUN_INTEGRATION") != "1":
-        print("ERROR: Los tests de integración requieren RUN_INTEGRATION=1")
-        print("Ejecuta: export RUN_INTEGRATION=1")
+        print("ERROR: Integration tests require RUN_INTEGRATION=1")
+        print("Run: export RUN_INTEGRATION=1")
         return 1
     
-    print("=== Ejecutando Tests de Integración ===")
-    print("Estos tests pueden requerir servicios externos (Weaviate, etc.)")
+    print("=== Running Integration Tests ===")
+    print("These tests may require external services (Weaviate, etc.)")
     print("-" * 50)
     
-    # Ejecutar tests en directorio integration/ (no usar marcadores)
+    # Run tests in the integration/ directory (markers are not consistently applied)
     return pytest.main([
         "tests/integration/",
         "--tb=short",
@@ -59,12 +59,12 @@ def run_integration_tests():
 
 
 def run_all_tests():
-    """Ejecuta todos los tests (unitarios por defecto, integración opcional)."""
-    print("=== Ejecutando Todos los Tests ===")
-    print("Nota: Los tests de integración se saltan a menos que RUN_INTEGRATION=1")
+    """Runs all tests (unit tests by default, integration optional)."""
+    print("=== Running All Tests ===")
+    print("Note: Integration tests are skipped unless RUN_INTEGRATION=1")
     print("-" * 50)
     
-    # Ejecutar pytest con configuración por defecto
+    # Run pytest with the default configuration
     return pytest.main([
         "--tb=short",
         "-v",
@@ -74,9 +74,9 @@ def run_all_tests():
 
 
 def run_tests_with_fallback():
-    """Ejecuta tests con opción de setup-fallback."""
-    print("=== Ejecutando Tests con Setup Fallback ===")
-    print("Configura directorios de fallback cuando los volúmenes no son accesibles")
+    """Runs tests with the setup-fallback option."""
+    print("=== Running Tests with Setup Fallback ===")
+    print("Configures fallback directories when volumes are inaccessible")
     print("-" * 50)
     
     return pytest.main([
@@ -89,20 +89,20 @@ def run_tests_with_fallback():
 
 
 def main():
-    """Función principal para ejecutar el test suite."""
+    """Main function to run the test suite."""
     import argparse
     
     parser = argparse.ArgumentParser(
-        description="Test Suite para RAG Agentic Graphiti",
+        description="Test Suite for RAG Agentic Graphiti",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Ejemplos:
-  %(prog)s unit              # Solo tests unitarios
-  %(prog)s integration       # Tests de integración (requiere RUN_INTEGRATION=1)
-  %(prog)s all               # Todos los tests
-  %(prog)s fallback          # Tests con setup-fallback
+Examples:
+  %(prog)s unit              # Unit tests only
+  %(prog)s integration       # Integration tests (requires RUN_INTEGRATION=1)
+  %(prog)s all               # All tests
+  %(prog)s fallback          # Tests with setup-fallback
   
-  RUN_INTEGRATION=1 %(prog)s integration  # Para ejecutar tests de integración
+  RUN_INTEGRATION=1 %(prog)s integration  # Run integration tests
         """
     )
     
@@ -111,13 +111,13 @@ Ejemplos:
         choices=["unit", "integration", "all", "fallback"],
         nargs="?",
         default="all",
-        help="Modo de ejecución (default: all)"
+        help="Run mode (default: all)"
     )
     
     parser.add_argument(
         "--coverage",
         action="store_true",
-        help="Generar reporte de cobertura"
+        help="Generate coverage report"
     )
     
     args = parser.parse_args()
@@ -131,7 +131,7 @@ Ejemplos:
             "--cov-report=html:coverage_html"
         ])
     
-    # Ejecutar según el modo seleccionado
+    # Run according to the selected mode
     if args.mode == "unit":
         return run_unit_tests()
     elif args.mode == "integration":
