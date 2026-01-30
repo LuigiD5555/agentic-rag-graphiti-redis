@@ -408,12 +408,12 @@ services:
 
   rabbitmq:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_rabbitmq_1"
-    image: "docker.io/library/rabbitmq:${RABBITMQ_IMAGE_TAG:-3.13-management}"
+    image: "docker.io/library/rabbitmq:${RABBITMQ_IMAGE_TAG:-4.2.3-management-alpine}"
     restart: "no"
     logging:
       driver: journald
     network_mode: "host"
-    user: "rabbitmq:rabbitmq"
+    # Remove explicit user specification to let RabbitMQ run with default permissions
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-admin}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-change-me-rabbitmq}
@@ -424,6 +424,7 @@ services:
     volumes:
       - ${HOST_RABBITMQ_DATA:-rabbitmq_data}:/var/lib/rabbitmq:Z
       - ${HOST_RABBITMQ_LOGS:-rabbitmq_logs}:/var/log/rabbitmq:Z
+      - ./config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:Z
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 30s
