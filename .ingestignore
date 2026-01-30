@@ -6,6 +6,8 @@
 #   data/private/**
 #   /absolute/path/to/secrets.txt
 
+**/.claude/**
+**/pycache/**
 /mnt/Documents/Documents/Credisol
 /mnt/Documents/Documents/Processing
 /mnt/Documents/Documents/Plantillas personalizadas de Office
