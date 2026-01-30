@@ -580,7 +580,7 @@ class SystemdManager:
             tools = self.TOOLS
 
         # Validate tool names
-        invalid_tools = [t for t in tools if t not in self.TOOLS]
+        invalid_tools = [candidate_tool for candidate_tool in tools if candidate_tool not in self.TOOLS]
         if invalid_tools:
             if verbose:
                 print(f"{Colors.RED}✗ Invalid tool names:{Colors.NC} {', '.join(invalid_tools)}")
@@ -886,8 +886,8 @@ class SystemdManager:
         # Add unit filter
         if all_tools:
             # Show logs from all tool services
-            for t in self.TOOLS:
-                cmd.extend(['-u', f'tool-{t}.service'])
+            for tool_name in self.TOOLS:
+                cmd.extend(['-u', f'tool-{tool_name}.service'])
         else:
             cmd.extend(['-u', f'tool-{tool}.service'])
 

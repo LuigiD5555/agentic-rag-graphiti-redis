@@ -46,14 +46,14 @@ class CrossChatRetriever:
         Returns:
             List of relevant snapshot summaries with metadata
         """
-        k = top_k or self.top_k
+        result_limit = top_k or self.top_k
 
         try:
             # Search ChatMemory for relevant past conversations
             snapshots = self.chat_memory.search_snapshots(
                 query=query,
                 user_id=user_id,
-                top_k=k,
+                top_k=result_limit,
                 alpha=0.7,  # Balanced hybrid search
             )
 

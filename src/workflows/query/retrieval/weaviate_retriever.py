@@ -93,12 +93,12 @@ class WeaviateRetriever:
             - results: List of retrieved documents, or None if error occurred
             - metadata: Dict with timing info, error details, and relevance stats
         """
-        k = top_k or self.top_k
+        result_limit = top_k or self.top_k
         total_start = time.time()
 
         metadata = {
             "query": query[:100],
-            "top_k": k,
+            "top_k": result_limit,
             "embedding_time_ms": None,
             "search_time_ms": None,
             "total_time_ms": None,
@@ -135,11 +135,11 @@ class WeaviateRetriever:
 
                     # Step 2: Vector search
                     search_start = time.time()
-                    log.debug("Executing near_vector search: top_k=%d", k)
+                    log.debug("Executing near_vector search: top_k=%d", result_limit)
 
                     response = self.collection.query.near_vector(
                         near_vector=query_vector,
-                        limit=k,
+                        limit=result_limit,
                         filters=active_filters,
                         return_metadata=MetadataQuery(score=True, distance=True),
                     )
@@ -154,7 +154,7 @@ class WeaviateRetriever:
 
                     response = self.collection.query.hybrid(
                         query=query,
-                        limit=k,
+                        limit=result_limit,
                         alpha=self.alpha,
                         filters=active_filters,
                         return_metadata=MetadataQuery(score=True, distance=True),
@@ -273,14 +273,14 @@ class WeaviateRetriever:
         """
         from weaviate.classes.query import Filter
 
-        k = top_k or self.top_k
+        result_limit = top_k or self.top_k
 
         try:
             log.debug("Searching source=%s with query=%s", source_filter, query[:50])
 
             response = self.collection.query.hybrid(
                 query=query,
-                limit=k,
+                limit=result_limit,
                 alpha=self.alpha,
                 filters=Filter.by_property("source").equal(source_filter),
                 return_metadata=MetadataQuery(score=True),

@@ -118,7 +118,7 @@ class HybridRetriever:
         Returns:
             Fused ranking of results
         """
-        k = top_k or self.top_k
+        result_limit = top_k or self.top_k
         rankings = []
 
         # Gather results from each retriever
@@ -160,7 +160,7 @@ class HybridRetriever:
         fused = rrf_fusion(rankings, k=self.rrf_k)
 
         # Return top-k
-        results = fused[:k]
+        results = fused[:result_limit]
 
         logger.info(
             f"Hybrid retrieval: {len(results)} results from {len(self.retrievers)} sources"

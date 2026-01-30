@@ -71,7 +71,7 @@ def mmr_rerank(
     # Initialize
     selected: List[Dict[str, Any]] = []
     remaining = documents.copy()
-    k = top_k or len(documents)
+    selection_limit = top_k or len(documents)
 
     # Precompute query relevance if query_vector provided
     if query_vector:
@@ -87,7 +87,7 @@ def mmr_rerank(
             doc["_query_similarity"] = doc.get(score_key, 0.0)
 
     # MMR selection loop
-    while len(selected) < k and remaining:
+    while len(selected) < selection_limit and remaining:
         # For each remaining document, calculate MMR score
         mmr_scores = []
 

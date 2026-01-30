@@ -62,7 +62,7 @@ class MultiTenantRetriever:
         Returns:
             Dictionary mapping tenant name to list of results
         """
-        k = top_k_per_tenant or self.top_k_per_tenant
+        per_tenant_limit = top_k_per_tenant or self.top_k_per_tenant
 
         # Generate query embedding once (reuse across tenants)
         query_vector = None
@@ -80,7 +80,7 @@ class MultiTenantRetriever:
                     self._retrieve_from_single_tenant,
                     query,
                     tenant,
-                    k,
+                    per_tenant_limit,
                     query_vector,
                 ): tenant
                 for tenant in tenants
@@ -105,7 +105,7 @@ class MultiTenantRetriever:
         self,
         query: str,
         tenant: str,
-        top_k: int,
+        per_tenant_limit: int,
         query_vector: Optional[List[float]] = None,
     ) -> List[Dict[str, Any]]:
         """Retrieve from a single tenant.
@@ -113,7 +113,7 @@ class MultiTenantRetriever:
         Args:
             query: User query
             tenant: Tenant name
-            top_k: Number of results
+            per_tenant_limit: Number of results per tenant
             query_vector: Pre-computed query embedding (optional)
 
         Returns:
@@ -130,14 +130,14 @@ class MultiTenantRetriever:
             if query_vector is not None:
                 response = tenant_collection.query.near_vector(
                     near_vector=query_vector,
-                    limit=top_k,
+                    limit=per_tenant_limit,
                     return_metadata=MetadataQuery(score=True, distance=True),
                 )
             else:
                 # Fallback to hybrid search
                 response = tenant_collection.query.hybrid(
                     query=query,
-                    limit=top_k,
+                    limit=per_tenant_limit,
                     alpha=self.alpha,
                     return_metadata=MetadataQuery(score=True, distance=True),
                 )

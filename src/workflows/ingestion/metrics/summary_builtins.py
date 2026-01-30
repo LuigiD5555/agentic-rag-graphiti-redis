@@ -113,14 +113,15 @@ def summarize_histogram(metrics: List) -> Dict[str, Any]:
             return 0.0
         
         sorted_values = sorted(vals)
-        k = (len(sorted_values) - 1) * (p / 100.0)
-        f = int(k)
-        c = k - f
-        
-        if f + 1 < len(sorted_values):
-            return sorted_values[f] + c * (sorted_values[f + 1] - sorted_values[f])
-        else:
-            return sorted_values[f]
+        scaled_index = (len(sorted_values) - 1) * (p / 100.0)
+        lower_index = int(scaled_index)
+        fractional_part = scaled_index - lower_index
+
+        if lower_index + 1 < len(sorted_values):
+            return sorted_values[lower_index] + fractional_part * (
+                sorted_values[lower_index + 1] - sorted_values[lower_index]
+            )
+        return sorted_values[lower_index]
     
     return {
         "count": len(values),
