@@ -110,6 +110,13 @@ build/
 ~$*
 tools/generate_try_except_report.py
 tools/generate_if_report.py
+# experiment artifacts
+.file_discovery_cache.json
+config/problematic_files.json
+ejemplo_final.csv
+tools/debug/coverage/
+tools/debug/coverage_reports/
+tools/debug/=*
 # -----------------------------
 # Node / Frontend
 # -----------------------------
