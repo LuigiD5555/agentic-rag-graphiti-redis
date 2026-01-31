@@ -382,12 +382,13 @@ class DirectoryScanner:
         try:
             while True:
                 # Pop next directory from checkpoint queue
-                result = self.scan_checkpointer.pop_pending_directory(run_id)
-                if not result:
+                dirpath = self.scan_checkpointer.pop_pending_directory(run_id)
+                if not dirpath:
                     # Queue empty, scanning complete
                     break
 
-                dirpath, rel_dirpath = result
+                # Calculate relative path from root
+                rel_dirpath = os.path.relpath(dirpath, root) if dirpath != root else ""
 
                 # Check if already visited (idempotency)
                 if self.scan_checkpointer.is_directory_visited(run_id, dirpath):
@@ -487,7 +488,9 @@ class DirectoryScanner:
 
                     # Add subdirectories to checkpoint queue
                     if subdirs_to_add:
-                        self.scan_checkpointer.push_pending_directories(run_id, subdirs_to_add)
+                        # Extract just the directory paths from the tuples
+                        dir_paths = [dir_path for dir_path, _ in subdirs_to_add]
+                        self.scan_checkpointer.push_pending_directories(run_id, dir_paths)
 
                     # Add discovered files to checkpoint
                     if dir_files:
@@ -500,8 +503,8 @@ class DirectoryScanner:
                     if processed_in_batch >= BATCH_SIZE:
                         self.scan_checkpointer.update_stats(
                             run_id,
-                            dirs_scanned=processed_in_batch,
-                            files_found=len(dir_files)
+                            dirs_visited_delta=processed_in_batch,
+                            files_found_delta=len(dir_files)
                         )
                         processed_in_batch = 0
 
@@ -514,8 +517,8 @@ class DirectoryScanner:
             if processed_in_batch > 0:
                 self.scan_checkpointer.update_stats(
                     run_id,
-                    dirs_scanned=processed_in_batch,
-                    files_found=0
+                    dirs_visited_delta=processed_in_batch,
+                    files_found_delta=0
                 )
 
             # Mark run as completed

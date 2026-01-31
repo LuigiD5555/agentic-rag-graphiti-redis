@@ -12,7 +12,6 @@ from .cache import DiscoveryCacheManager
 from .pattern_matching import PatternMatcher
 from .filters import build_filters
 from .scanner import DirectoryScanner
-from .adaptive_scanner import AdaptiveHybridScanner, SchedulerPolicy
 
 log = get_logger(__name__)
 
@@ -30,6 +29,7 @@ class FileDiscoveryService:
         self.pattern_matcher = PatternMatcher()
         self.scanner = DirectoryScanner(self.cache_mgr, self.pattern_matcher, scan_checkpointer)
         self._last_visited_dirs = 0
+        self.scan_checkpointer = scan_checkpointer
 
     @logged("Starting file discovery")
     @timed()
@@ -314,6 +314,131 @@ class FileDiscoveryService:
                 'tree_stats': scan_stats['path_tree']
             }
         }
+
+    @logged("Starting resumable file discovery")
+    @timed()
+    def discover_resumable(
+        self,
+        opts: DiscoveryOptions,
+        scan_run_id: Optional[str] = None,
+        use_cache: bool = True
+    ) -> Tuple[List[str], int, str]:
+        """
+        Traverse roots with checkpoint support for resumable scanning.
+
+        Args:
+            opts: Discovery options
+            scan_run_id: Optional run_id to resume (None = new run)
+            use_cache: Whether to use caching
+
+        Returns:
+            Tuple of (list of file paths, number of visited directories, run_id)
+        """
+        if not self.scan_checkpointer:
+            log.warning("No scan checkpointer available, falling back to regular discovery")
+            files, visited = self.discover(opts, use_cache)
+            return files, visited, ""
+
+        discovered_files: List[str] = []
+        visited_dirs = 0
+        progress_every = getattr(opts, "progress_every", 0)
+
+        self.pattern_matcher.precompile_patterns(opts.excluded_globs)
+
+        options_hash = self.cache_mgr.compute_options_hash(opts)
+
+        filters = build_filters(opts, self.pattern_matcher)
+
+        check_ext = bool(opts.allowed_exts)
+        allowed_exts_lower = {ext.lower() for ext in opts.allowed_exts} if opts.allowed_exts else set()
+
+        paths_to_scan = opts.enabled_paths if opts.enabled_paths else opts.roots
+
+        if opts.enabled_paths:
+            log.info(
+                "Using enabled paths whitelist (%d paths). Ignoring DOCS_PATHS.",
+                len(opts.enabled_paths)
+            )
+        else:
+            log.info("No enabled paths specified. Scanning all DOCS_PATHS (%d roots).", len(opts.roots))
+
+        for raw_root in paths_to_scan:
+            root = os.path.abspath(raw_root)
+            if not os.path.exists(root):
+                log.warning("Root does not exist: %s", root)
+                continue
+
+            if os.path.isfile(root):
+                rel_file = os.path.basename(root)
+                if self.pattern_matcher.matches_any_glob(
+                    rel_file, opts.excluded_globs, absolute_path=root
+                ):
+                    continue
+                idx = root.rfind('.')
+                if idx != -1:
+                    ext = root[idx:].lower()
+                    if not check_ext or ext in allowed_exts_lower:
+                        discovered_files.append(root)
+                continue
+
+            if self.pattern_matcher.matches_any_glob("", opts.excluded_globs, absolute_path=root):
+                log.info("Skipping excluded root directory: %s", root)
+                continue
+
+            if use_cache:
+                cached = self.cache_mgr.is_dir_unchanged(root, options_hash)
+                if cached:
+                    self.cache_mgr.record_hit()
+                    discovered_files.extend(cached.files)
+                    visited_dirs += 1
+                    log.info(
+                        "OK cache hit for %s: %d files (saved scanning)",
+                        root, len(cached.files)
+                    )
+                    continue
+                else:
+                    self.cache_mgr.record_miss()
+
+            root_files: List[str] = []
+            root_visited, new_scan_run_id = self.scanner.scan_directory_resumable(
+                root, filters, opts.excluded_globs,
+                opts.follow_symlinks, root_files,
+                progress_every, options_hash, scan_run_id
+            )
+
+            discovered_files.extend(root_files)
+            visited_dirs += root_visited
+            scan_run_id = new_scan_run_id  # Update run_id for subsequent roots
+
+        if use_cache:
+            self.cache_mgr.save_cache()
+            cache_stats = self.get_cache_stats()
+            scan_stats = self.scanner.get_scan_stats()
+
+            log.info(
+                "Cache stats: hits=%d, misses=%d, hit_rate=%.1f%%",
+                cache_stats['cache_hits'], cache_stats['cache_misses'], cache_stats['hit_rate']
+            )
+            log.info(
+                "Path optimization: skipped_visited=%d, skipped_excluded=%d, tree_nodes=%d",
+                scan_stats['paths_skipped_visited'],
+                scan_stats['paths_skipped_excluded'],
+                scan_stats['path_tree']['total_nodes']
+            )
+
+            total_skipped = (
+                scan_stats['paths_skipped_visited'] +
+                scan_stats['paths_skipped_excluded']
+            )
+            if total_skipped > 0:
+                log.info(
+                    "Performance boost: %d path operations avoided via tree optimization",
+                    total_skipped
+                )
+
+        discovered_files = list(dict.fromkeys(discovered_files))
+        discovered_files.sort()
+        return discovered_files, visited_dirs, scan_run_id or ""
 
 
 __all__ = ["FileDiscoveryService"]

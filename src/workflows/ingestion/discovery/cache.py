@@ -84,12 +84,27 @@ class DiscoveryCacheManager:
         return hashlib.md5(config_str.encode()).hexdigest()
 
     def get_dir_hash(self, dirpath: str) -> str:
-        """Fast hash based on directory structure (names + count, not content)."""
+        """Fast hash based on directory structure and metadata."""
         try:
-            entries = os.listdir(dirpath)
+            entries = []
+            with os.scandir(dirpath) as it:
+                for entry in it:
+                    try:
+                        # Include name, type, size (for files), and mtime
+                        stat = entry.stat()
+                        if entry.is_file():
+                            entries.append(f"{entry.name}:file:{stat.st_size}:{stat.st_mtime}")
+                        elif entry.is_dir():
+                            entries.append(f"{entry.name}:dir:{stat.st_mtime}")
+                        else:
+                            entries.append(f"{entry.name}:other:{stat.st_mtime}")
+                    except (OSError, PermissionError):
+                        # Skip entries we can't stat
+                        entries.append(f"{entry.name}:error:0")
+            
             # Sort for consistency
             entries.sort()
-            hash_input = f"{len(entries)}:{','.join(entries)}"
+            hash_input = f"{len(entries)}:{':'.join(entries)}"
             return hashlib.md5(hash_input.encode()).hexdigest()
         except (OSError, PermissionError):
             return ""

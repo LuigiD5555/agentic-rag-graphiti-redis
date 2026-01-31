@@ -214,106 +214,46 @@ class CheckpointCLI:
     # ============================================================================
 
     def _queue_stats(self):
-        from src.workflows.ingestion.checkpoint.ingest_queue import IngestQueue
-
-        queue = IngestQueue()
-        stats = queue.get_stats()
-
         print("\nIngestion Queue Statistics:")
         print("=" * 80)
-        print(f"Total Enqueued: {stats['total_enqueued']}")
-        print(f"Pending: {stats['pending']}")
-        print(f"Processing: {stats['processing']}")
-        print(f"Completed: {stats['completed']}")
-        print(f"Failed: {stats['failed']}")
-        print()
-        print(f"Queue Length: {queue.get_queue_length()}")
-        print(f"DLQ Length: {queue.get_dlq_length()}")
-
-        consumers = queue.list_consumers()
-        if consumers:
-            print(f"\nActive Consumers ({len(consumers)}):")
-            for consumer in consumers:
-                last_seen = datetime.fromtimestamp(consumer["last_seen"]).strftime("%Y-%m-%d %H:%M:%S")
-                print(f"  {consumer['name']} (last seen: {last_seen})")
+        print("Note: SQLite-based queue is deprecated.")
+        print("RabbitMQ is now the only queue (per specification).")
+        print("\nUse RabbitMQ management interface for queue statistics:")
+        print("  - http://localhost:15672 (management UI)")
+        print("  - rabbitmqctl list_queues (CLI)")
+        print("\nFor ledger/checkpoint statistics, use the new ledger repository.")
 
     def _queue_list(self, limit: int):
-        conn = self._sqlite_manager.control_plane.get_connection()
-        cursor = conn.execute(
-            """
-            SELECT job_id, file_path, run_id, retry_count, enqueued_at
-            FROM ingest_jobs
-            WHERE status = 'pending'
-            ORDER BY enqueued_at ASC
-            LIMIT ?
-            """,
-            (limit,),
-        )
-        rows = cursor.fetchall()
-        conn.close()
-
-        if not rows:
-            print("No pending jobs in queue.")
-            return
-
-        print(f"\nPending Jobs (showing {len(rows)}):")
+        print("\nPending Jobs List:")
         print("=" * 80)
-
-        for row in rows:
-            print(f"Job ID: {row[0]}")
-            print(f"  File: {row[1]}")
-            print(f"  Run ID: {row[2]}")
-            print(f"  Retry Count: {row[3]}")
-            enqueued_at = float(row[4] or 0)
-            if enqueued_at:
-                print(f"  Enqueued: {datetime.fromtimestamp(enqueued_at).strftime('%Y-%m-%d %H:%M:%S')}")
-            print()
+        print("Note: SQLite-based queue is deprecated.")
+        print("RabbitMQ is now the only queue (per specification).")
+        print("\nSQLite queue data shown below is for historical reference only.")
+        print("Active jobs are managed by RabbitMQ.")
+        print("\nTo view active RabbitMQ queues:")
+        print("  - RabbitMQ management UI: http://localhost:15672")
+        print("  - CLI: rabbitmqctl list_queues")
 
     def _queue_dlq(self, limit: int):
-        conn = self._sqlite_manager.control_plane.get_connection()
-        cursor = conn.execute(
-            """
-            SELECT job_id, file_path, run_id, retry_count, error, completed_at
-            FROM ingest_jobs
-            WHERE status = 'dlq'
-            ORDER BY completed_at DESC
-            LIMIT ?
-            """,
-            (limit,),
-        )
-        rows = cursor.fetchall()
-        conn.close()
-
-        if not rows:
-            print("Dead letter queue is empty.")
-            return
-
-        print(f"\nDead Letter Queue (showing {len(rows)}):")
+        print("\nDead Letter Queue:")
         print("=" * 80)
-
-        for row in rows:
-            print(f"Job ID: {row[0]}")
-            print(f"  File: {row[1]}")
-            print(f"  Run ID: {row[2]}")
-            print(f"  Retry Count: {row[3]}")
-            print(f"  Error: {row[4] or 'Unknown'}")
-            failed_at = float(row[5] or 0)
-            if failed_at:
-                print(f"  Failed: {datetime.fromtimestamp(failed_at).strftime('%Y-%m-%d %H:%M:%S')}")
-            print()
+        print("Note: SQLite-based queue is deprecated.")
+        print("RabbitMQ is now the only queue (per specification).")
+        print("\nSQLite DLQ data shown below is for historical reference only.")
+        print("Active DLQ is managed by RabbitMQ.")
+        print("\nTo view RabbitMQ DLQ:")
+        print("  - RabbitMQ management UI: http://localhost:15672")
+        print("  - Look for queues with '.dlq' suffix")
 
     def _queue_clear(self, force: bool):
-        from src.workflows.ingestion.checkpoint.ingest_queue import IngestQueue
-
-        if not force:
-            response = input("Are you sure you want to clear ALL queue data? This cannot be undone. [y/N]: ")
-            if response.lower() != "y":
-                print("Aborted.")
-                return
-
-        queue = IngestQueue()
-        queue.clear_queue()
-        print("Queue data cleared successfully.")
+        print("\nQueue Clear Operation:")
+        print("=" * 80)
+        print("Note: SQLite-based queue is deprecated.")
+        print("RabbitMQ is now the only queue (per specification).")
+        print("\nTo clear RabbitMQ queues, use:")
+        print("  - RabbitMQ management UI: http://localhost:15672")
+        print("  - CLI: rabbitmqctl purge_queue <queue_name>")
+        print("\nSQLite queue data is no longer used for active processing.")
 
     # ============================================================================
     # Chunk Commands
