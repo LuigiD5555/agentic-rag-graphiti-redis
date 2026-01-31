@@ -24,6 +24,9 @@ from src.workflows.ingestion.resource_pools import get_global_ingestion_pools
 from src.workflows.ingestion.watermark_cleanup import create_default_cleanup
 from src.workflows.ingestion.idempotency import create_default_idempotency_manager
 
+# Checkpoint system
+from src.workflows.ingestion.checkpoint.scan_checkpointer import ScanCheckpointer
+
 logger = get_logger(__name__)
 
 
@@ -43,8 +46,20 @@ class IngestionOrchestrator:
         # Initialize cache manager (SQLite-only control plane)
         self._cache_manager = IngestionCacheManager.from_settings(self._export_settings_dict(self._config))
 
+        # Initialize scan checkpointer for resumable scanning
+        scan_checkpointer = None
+        if getattr(self._config, "SCAN_CHECKPOINT_ENABLED", True):
+            try:
+                scan_checkpointer = ScanCheckpointer()
+                logger.info("Scan checkpoint system enabled")
+            except Exception as e:
+                logger.warning("Failed to initialize scan checkpointer: %s", e)
+
         # Initialize discovery service (uses cache internally)
-        self._discovery = FileDiscoveryService(cache_manager=self._cache_manager)
+        self._discovery = FileDiscoveryService(
+            cache_manager=self._cache_manager,
+            scan_checkpointer=scan_checkpointer
+        )
 
         logger.info("IngestionOrchestrator initialized with control-plane caching.")
 
@@ -103,10 +118,42 @@ class IngestionOrchestrator:
         # Ensure settings are synced before running
         sync_settings_json()
 
+        # Initialize coverage tracking if enabled
+        coverage_enabled = getattr(self._config, "INGESTION_COVERAGE_ENABLED", False)
+        coverage_report = None
+        
+        if coverage_enabled:
+            try:
+                # Initialize coverage tracker
+                from src.workflows.ingestion.coverage_tracker import (
+                    init_global_coverage_tracker,
+                    start_coverage_tracking,
+                )
+                coverage_output_dir = getattr(
+                    self._config, "INGESTION_COVERAGE_OUTPUT_DIR", "tools/debug/coverage/coverage_reports"
+                )
+                init_global_coverage_tracker(source_dirs=['src'], output_dir=coverage_output_dir)
+                start_coverage_tracking()
+                logger.info("Coverage tracking enabled for this ingestion run")
+            except Exception as e:
+                logger.warning(f"Failed to initialize coverage tracking: {e}")
+                coverage_enabled = False
+
         # Phase 1: Discovery
         logger.info("Starting discovery phase...")
         discovery_opts = self._to_discovery_options(options)
-        discovered_files, visited_dirs = self._discovery.discover(discovery_opts, use_cache=True)
+        
+        # Use resumable discovery if run_id is provided (for resuming)
+        if options.run_id and hasattr(self._discovery, 'discover_resumable'):
+            discovered_files, visited_dirs, scan_run_id = self._discovery.discover_resumable(
+                discovery_opts, 
+                scan_run_id=options.run_id,
+                use_cache=True
+            )
+            logger.info("Resumed scan run: %s", scan_run_id)
+        else:
+            discovered_files, visited_dirs = self._discovery.discover(discovery_opts, use_cache=True)
+            
         strategy_run_id = options.run_id or str(uuid.uuid4())
         phase_manager = self._build_phase_manager(strategy_run_id)
         sorted_files = sort_paths_by_size_desc(discovered_files)
@@ -114,17 +161,28 @@ class IngestionOrchestrator:
 
         if not sorted_files:
             logger.info("No files to process. Exiting.")
+            
+            # Generate coverage report if enabled
+            if coverage_enabled:
+                coverage_report = self._generate_coverage_report()
+            
             return {
                 "status": "no_files",
                 "run_id": strategy_run_id,
                 "discovery": {"total_files": 0, "visited_dirs": visited_dirs},
                 "pipeline": {"processed_files": 0},
+                "coverage": coverage_report,
             }
 
         logger.info("Discovered %d file(s) from %d directories.", len(discovered_files), visited_dirs)
 
         if getattr(options, "dry_run", False):
             logger.info("Dry-run flagged; skipping preprocessing and ingestion.")
+            
+            # Generate coverage report if enabled
+            if coverage_enabled:
+                coverage_report = self._generate_coverage_report()
+            
             return {
                 "status": "dry_run",
                 "run_id": strategy_run_id,
@@ -135,6 +193,7 @@ class IngestionOrchestrator:
                     "failed": 0,
                     "candidates": len(sorted_files),
                 },
+                "coverage": coverage_report,
             }
 
         pipeline_result, strategy_name = self._execute_phased_ingestion(
@@ -143,12 +202,17 @@ class IngestionOrchestrator:
             phase_manager,
         )
 
+        # Generate coverage report if enabled
+        if coverage_enabled:
+            coverage_report = self._generate_coverage_report()
+
         return {
             "status": "completed",
             "run_id": strategy_run_id,
             "strategy": strategy_name,
             "discovery": {"total_files": len(sorted_files), "visited_dirs": visited_dirs},
             "pipeline": pipeline_result,
+            "coverage": coverage_report,
         }
 
     def run_incremental_scan(self, options: IngestionOptions) -> dict:
@@ -168,7 +232,32 @@ class IngestionOrchestrator:
 
         # Use discovery with cache enabled - it will detect changes automatically
         discovery_opts = self._to_discovery_options(options)
-        discovered_files, visited_dirs = self._discovery.discover(discovery_opts, use_cache=True)
+        
+        # Try to use resumable scanning with persistent run_id for autoscan
+        # This prevents re-scanning already visited directories
+        scan_run_id = None
+        discovered_files = []
+        visited_dirs = 0
+        
+        # Generate a persistent run_id for autoscan based on root paths
+        if not options.run_id and hasattr(self._discovery, 'discover_resumable'):
+            # Create a deterministic run_id based on root paths for autoscan
+            import hashlib
+            root_paths_str = ','.join(sorted(options.root_paths))
+            scan_run_id = f"autoscan_{hashlib.md5(root_paths_str.encode()).hexdigest()[:16]}"
+            logger.info("Using persistent scan run_id for autoscan: %s", scan_run_id)
+            
+            # Try to resume existing scan or start new one
+            discovered_files, visited_dirs, new_run_id = self._discovery.discover_resumable(
+                discovery_opts, 
+                scan_run_id=scan_run_id,
+                use_cache=True
+            )
+            logger.info("Resumable scan completed: files=%d, dirs=%d", len(discovered_files), visited_dirs)
+        else:
+            # Fallback to regular discovery
+            discovered_files, visited_dirs = self._discovery.discover(discovery_opts, use_cache=True)
+        
         strategy_run_id = options.run_id or str(uuid.uuid4())
         phase_manager = self._build_phase_manager(strategy_run_id)
 
@@ -181,6 +270,7 @@ class IngestionOrchestrator:
             return {
                 "status": "no_changes",
                 "run_id": strategy_run_id,
+                "scan_run_id": scan_run_id,
                 "discovery": {"changed_files": 0, "visited_dirs": visited_dirs},
                 "pipeline": {"processed_files": 0},
             }
@@ -192,6 +282,7 @@ class IngestionOrchestrator:
             return {
                 "status": "dry_run",
                 "run_id": strategy_run_id,
+                "scan_run_id": scan_run_id,
                 "discovery": {"changed_files": len(sorted_files), "visited_dirs": visited_dirs},
                 "pipeline": {
                     "processed_files": 0,
@@ -210,6 +301,7 @@ class IngestionOrchestrator:
         return {
             "status": "completed",
             "run_id": strategy_run_id,
+            "scan_run_id": scan_run_id,
             "strategy": strategy_name,
             "discovery": {"changed_files": len(sorted_files), "visited_dirs": visited_dirs},
             "pipeline": pipeline_result,
@@ -490,3 +582,54 @@ class IngestionOrchestrator:
                 logger.debug("Failed to clean preprocessed file %s: %s", processed, exc)
         if cleaned:
             logger.info("Cleaned %d preprocessed file(s).", cleaned)
+
+    def _generate_coverage_report(self) -> Optional[Dict[str, Any]]:
+        """
+        Generate coverage report using the global coverage tracker.
+        
+        Returns:
+            Coverage report dictionary or None if coverage tracking is not enabled
+        """
+        try:
+            from src.workflows.ingestion.coverage_tracker import (
+                stop_coverage_tracking,
+                generate_coverage_reports,
+                get_orphaned_code_analysis,
+            )
+            
+            # Stop coverage tracking and generate reports
+            stop_coverage_tracking()
+            reports = generate_coverage_reports()
+            
+            if not reports:
+                return None
+            
+            # Get orphaned code analysis
+            orphaned_analysis = get_orphaned_code_analysis() or {}
+            
+            # Combine reports into a summary
+            coverage_report = {
+                "reports_generated": True,
+                "report_paths": reports,
+                "orphaned_code_analysis": orphaned_analysis,
+                "summary": {
+                    "orphaned_files": orphaned_analysis.get("total_orphaned_files", 0),
+                    "orphaned_lines": orphaned_analysis.get("total_orphaned_lines", 0),
+                    "total_files": orphaned_analysis.get("total_files", 0),
+                }
+            }
+            
+            logger.info(
+                "Coverage report generated: %d orphaned files, %d orphaned lines",
+                coverage_report["summary"]["orphaned_files"],
+                coverage_report["summary"]["orphaned_lines"]
+            )
+            
+            return coverage_report
+            
+        except Exception as e:
+            logger.warning(f"Failed to generate coverage report: {e}")
+            return {
+                "reports_generated": False,
+                "error": str(e)
+            }
