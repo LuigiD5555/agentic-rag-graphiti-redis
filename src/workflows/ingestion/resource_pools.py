@@ -69,7 +69,6 @@ class ResourcePool:
         )
     
     def submit(self, task_fn: Callable, *args, **kwargs) -> Optional[Future]:
-        """
         """Submits a task to the pool.
         
         Returns:
@@ -103,7 +102,6 @@ class ResourcePool:
         return future
     
     def submit_batch(self, tasks: List[tuple]) -> List[Optional[Future]]:
-        """
         """Submits a batch of tasks to the pool.
         
         Args:
@@ -124,7 +122,6 @@ class ResourcePool:
         return futures
     
     def wait_for_completion(self, timeout: Optional[float] = None) -> bool:
-        """
         """Waits for all queued tasks to complete.
         
         Returns:
@@ -150,7 +147,6 @@ class ResourcePool:
             time.sleep(0.1)
     
     def shutdown(self, wait: bool = True, timeout: Optional[float] = None) -> bool:
-        """
         """Shuts down the pool gracefully.
         
         Args:

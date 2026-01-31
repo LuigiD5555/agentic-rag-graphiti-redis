@@ -287,9 +287,7 @@ class IdempotencyManager:
         return False, None
     
     def get_next_stage(self, file_path: str) -> Optional[ProcessingStage]:
-        """
-        """
-        Determines the next stage to process for a file.
+        """Determines the next stage to process for a file.
         
         Returns:
             Next stage, or None if already complete
@@ -324,9 +322,7 @@ class IdempotencyManager:
         self,
         file_paths: List[str]
     ) -> Dict[str, Dict[str, Any]]:
-        """
-        """
-        Checks states for multiple files in batch.
+        """Checks states for multiple files in batch.
         
         Returns:
             Dict with the state of each file
@@ -355,9 +351,7 @@ class IdempotencyManager:
         return results
     
     def cleanup_old_states(self, max_age_seconds: Optional[int] = None) -> int:
-        """
-        """
-        Cleans up old states.
+        """Cleans up old states.
         
         Args:
             max_age_seconds: Maximum age in seconds (None = use TTL)

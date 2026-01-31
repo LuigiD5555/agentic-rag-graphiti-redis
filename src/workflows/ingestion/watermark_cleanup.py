@@ -205,7 +205,7 @@ class WatermarkCleanup:
         candidates = self._find_cleanup_candidates(aggressive)
         
         if not candidates:
-        logger.info("No cleanup candidates found")
+            logger.info("No cleanup candidates found")
             return {
                 'status': 'no_candidates',
                 'files_cleaned': 0,
