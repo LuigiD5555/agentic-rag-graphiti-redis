@@ -389,6 +389,19 @@ WEAVIATE_HNSW_EF_CONSTRUCTION = int(os.getenv("WEAVIATE_HNSW_EF_CONSTRUCTION", "
 WEAVIATE_HNSW_MAX_CONNECTIONS = int(os.getenv("WEAVIATE_HNSW_MAX_CONNECTIONS", "32"))
 WEAVIATE_HNSW_DISTANCE_METRIC = os.getenv("WEAVIATE_HNSW_DISTANCE_METRIC", "cosine")
 
+# ===== Coverage Tracking Configuration =====
+# Enable dynamic code coverage tracking during ingestion
+INGESTION_COVERAGE_ENABLED = os.getenv("INGESTION_COVERAGE_ENABLED", "false").strip().lower() == "true"
+
+# Source directories to track coverage for (comma-separated)
+INGESTION_COVERAGE_SOURCE_DIRS = os.getenv("INGESTION_COVERAGE_SOURCE_DIRS", "src").split(",")
+
+# Output directory for coverage reports
+INGESTION_COVERAGE_OUTPUT_DIR = os.getenv("INGESTION_COVERAGE_OUTPUT_DIR", "tools/debug/coverage/coverage_reports")
+
+# Enable branch coverage (more detailed but slower)
+INGESTION_COVERAGE_BRANCH = os.getenv("INGESTION_COVERAGE_BRANCH", "true").strip().lower() == "true"
+
 # ===== Observability and Monitoring =====
 # Disable progress bars in container mode to reduce log noise
 DISABLE_PROGRESS_BARS = os.getenv("DISABLE_PROGRESS_BARS", "false").strip().lower() == "true"

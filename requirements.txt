@@ -39,3 +39,6 @@ langdetect
 pika==1.3.2
 aio-pika==9.4.1
 celery==5.3.6
+
+# Code coverage for dynamic analysis
+coverage>=7.0.0
