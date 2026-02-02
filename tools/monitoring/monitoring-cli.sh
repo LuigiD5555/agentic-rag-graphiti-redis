@@ -1,123 +1,123 @@
 #!/bin/bash
-# Monitoring CLI - Wrapper script for monitoring container operations
+# Monitoring CLI for RAG Agentic Graphiti
 
 set -e
 
-COMPOSE_FILE="${COMPOSE_FILE:-podman-compose.yml}"
-CONTAINER_NAME="${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_monitoring_1"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+MONITORING_DIR="$SCRIPT_DIR"
 
-# Colors
+# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Helper functions
-info() {
-    echo -e "${BLUE}ℹ${NC} $1"
+# Logging functions
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
 }
 
-success() {
-    echo -e "${GREEN}✓${NC} $1"
+log_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
-warning() {
-    echo -e "${YELLOW}⚠${NC} $1"
+log_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
-error() {
-    echo -e "${RED}✗${NC} $1"
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Check if monitoring container is running
-check_container() {
-    if ! podman ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-        error "Monitoring container is not running"
-        info "Start it with: podman-compose up -d monitoring"
+# Check if Python is available
+check_python() {
+    if ! command -v python3 &> /dev/null; then
+        log_error "Python3 is not installed"
         exit 1
     fi
 }
 
-# Show usage
-usage() {
-    cat << EOF
-${BLUE}Monitoring CLI${NC} - Manage RAG monitoring container
-
-${YELLOW}Usage:${NC}
-    $0 <command> [options]
-
-${YELLOW}Commands:${NC}
-
-  ${GREEN}Container Management:${NC}
-    start                  Start monitoring container
-    stop                   Stop monitoring container
-    restart                Restart monitoring container
-    logs [-f]             View container logs
-    shell                  Interactive shell in container
-    status                 Show container status
-
-  ${GREEN}Log Analysis:${NC}
-    analyze [OPTIONS]      Analyze logs
-      --since TIME         Time range (e.g., "1 week ago", "24 hours ago")
-      --tool TOOL          Specific tool (office, extractor, ocr, document-processor, websearch)
-      --format FORMAT      Output format (text, json)
-      --all                Analyze all tools
-
-  ${GREEN}Verification:${NC}
-    verify [--json]        Verify setup and configuration
-    health                 Check service health
-
-  ${GREEN}Volume Monitoring:${NC}
-    volumes                Check volume status
-    watch-volumes          Monitor volumes continuously
-
-  ${GREEN}Reports:${NC}
-    reports list           List generated reports
-    reports view REPORT    View specific report
-    reports clean          Clean old reports
-
-${YELLOW}Examples:${NC}
-    # Analyze logs from last 24 hours
-    $0 analyze --since "24 hours ago"
-
-    # Verify setup and export to JSON
-    $0 verify --json > setup-status.json
-
-    # Watch logs in real-time
-    $0 logs -f
-
-    # Interactive shell
-    $0 shell
-
-EOF
-    exit 0
+# Check if required packages are installed
+check_dependencies() {
+    log_info "Checking dependencies..."
+    
+    # Check coverage
+    if ! python3 -c "import coverage" 2>/dev/null; then
+        log_warning "coverage package not found. Installing..."
+        pip install coverage
+    fi
+    
+    # Check vulture
+    if ! python3 -c "import vulture" 2>/dev/null; then
+        log_warning "vulture package not found. Installing..."
+        pip install vulture
+    fi
+    
+    # Check astor
+    if ! python3 -c "import astor" 2>/dev/null; then
+        log_warning "astor package not found. Installing..."
+        pip install astor
+    fi
 }
 
-# Command implementations
-cmd_start() {
-    info "Starting monitoring container..."
-    podman-compose up -d monitoring
-    success "Monitoring container started"
+# Run bloat analysis
+run_bloat_analysis() {
+    log_info "Running bloat analysis..."
+    
+    cd "$PROJECT_ROOT"
+    
+    python3 -m tools.monitoring.src.bloat_analyzer
+    
+    if [ $? -eq 0 ]; then
+        log_success "Bloat analysis completed"
+        echo "Reports available in: /app/reports/bloat/"
+    else
+        log_error "Bloat analysis failed"
+        exit 1
+    fi
 }
 
-cmd_stop() {
-    info "Stopping monitoring container..."
-    podman-compose stop monitoring
-    success "Monitoring container stopped"
+# Start real-time monitoring
+start_realtime_monitoring() {
+    log_info "Starting real-time monitoring..."
+    
+    cd "$PROJECT_ROOT"
+    
+    python3 -m tools.monitoring.src.realtime_monitor start
+    
+    if [ $? -eq 0 ]; then
+        log_success "Real-time monitoring started"
+        echo "Monitoring coverage across all pipelines..."
+        echo "Press Ctrl+C to stop and generate report"
+    else
+        log_error "Failed to start real-time monitoring"
+        exit 1
+    fi
 }
 
-cmd_restart() {
-    info "Restarting monitoring container..."
-    podman-compose restart monitoring
-    success "Monitoring container restarted"
+# Stop real-time monitoring
+stop_realtime_monitoring() {
+    log_info "Stopping real-time monitoring..."
+    
+    cd "$PROJECT_ROOT"
+    
+    python3 -m tools.monitoring.src.realtime_monitor stop
+    
+    if [ $? -eq 0 ]; then
+        log_success "Real-time monitoring stopped"
+        echo "Reports available in: /app/reports/realtime/"
+    else
+        log_error "Failed to stop real-time monitoring"
+        exit 1
+    fi
 }
 
-cmd_logs() {
-    check_container
-    podman-compose logs "$@" monitoring
-}
-
+# Generate report from existing data
+generate_report() {
+    local format="$1"
+    
 cmd_shell() {
     check_container
     info "Opening shell in monitoring container..."

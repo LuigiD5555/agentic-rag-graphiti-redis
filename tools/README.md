@@ -17,6 +17,7 @@ Each tool is:
 | **tool-document-processor** | 9106 | OCR + Office conversion | LibreOffice, Tesseract, poppler |
 | **tool-extractor** | 9101 | File extraction | unzip, 7z, tar |
 | **tool-ocr** | 9103 | Optical Character Recognition | Tesseract, poppler |
+| **tool-monitoring** | 9107 | Code quality monitoring | vulture, coverage.py, AST analysis |
 
 ## How Socket Activation Works
 
@@ -53,6 +54,7 @@ This builds the tool images:
 - `rag-tool-document-processor:latest`
 - `rag-tool-extractor:latest`
 - `rag-tool-ocr:latest`
+- `rag-tool-monitoring:latest`
 
 ### 2. Install systemd Units
 
@@ -71,6 +73,7 @@ This:
 systemctl --user enable --now tool-document-processor.socket
 systemctl --user enable --now tool-extractor.socket
 systemctl --user enable --now tool-ocr.socket
+systemctl --user enable --now tool-monitoring.socket
 ```
 
 ### 4. Test
@@ -84,6 +87,9 @@ curl http://127.0.0.1:9101/healthz
 
 # Test OCR tool
 curl http://127.0.0.1:9103/healthz
+
+# Test monitoring tool
+curl http://127.0.0.1:9107/healthz
 
 ```
 
@@ -150,6 +156,56 @@ curl -X POST http://127.0.0.1:9103/ocr \
     "output_format": "txt"
   }'
 ```
+
+### tool-monitoring
+
+**Code quality monitoring and legacy code detection**
+
+The monitoring tool provides comprehensive code quality analysis including:
+- **Static analysis** with vulture for dead code detection
+- **Dynamic analysis** with coverage.py for unused code paths
+- **Real-time monitoring** for development environments
+- **Pipeline classification** to identify code belonging to specific workflows
+- **Legacy code detection** for unused integrations (qdrant, redis, etc.)
+
+**Endpoints:**
+- `GET /healthz` - Health check
+- `POST /analyze/bloat` - Run bloat analysis (vulture + coverage)
+- `POST /analyze/coverage` - Run coverage analysis only
+- `POST /analyze/vulture` - Run vulture static analysis only
+- `GET /reports/{report_type}` - Get analysis reports
+- `POST /cleanup/legacy` - Run legacy code cleanup (interactive)
+
+**Example: Run bloat analysis**
+```bash
+curl -X POST http://127.0.0.1:9107/analyze/bloat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mode": "development",
+    "include_coverage": true,
+    "include_vulture": true,
+    "generate_reports": true
+  }'
+```
+
+**Example: Get reports**
+```bash
+# Get bloat analysis report
+curl http://127.0.0.1:9107/reports/bloat
+
+# Get coverage report
+curl http://127.0.0.1:9107/reports/coverage
+
+# Get vulture report
+curl http://127.0.0.1:9107/reports/vulture
+```
+
+**Environment Variables:**
+The monitoring tool respects these environment variables:
+- `ENABLE_COVERAGE_MONITORING` - Enable coverage.py dynamic analysis
+- `ENABLE_VULTURE_MONITORING` - Enable vulture static analysis
+- `ENABLE_REALTIME_MONITORING` - Enable real-time background monitoring
+- `MONITORING_MODE` - "development" or "production"
 
 ## Management Commands
 
@@ -338,6 +394,7 @@ RuntimeMaxSec=300
 | 9101 | 19101 | archive | HTTP |
 | 9106 | 19104 | document-processor | HTTP |
 | 9103 | 19103 | ocr | HTTP |
+| 9107 | 19107 | monitoring | HTTP |
 
 ## License
 

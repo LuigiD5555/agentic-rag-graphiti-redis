@@ -46,6 +46,10 @@ class MonitoringDaemon:
         self.enable_health_checks = os.environ.get("ENABLE_HEALTH_CHECKS", "true").lower() == "true"
         self.enable_memory_monitoring = os.environ.get("ENABLE_MEMORY_MONITORING", "true").lower() == "true"
         self.enable_vulture_monitoring = os.environ.get("ENABLE_VULTURE_MONITORING", "false").lower() == "true"
+        self.enable_coverage_monitoring = os.environ.get("ENABLE_COVERAGE_MONITORING", "false").lower() == "true"
+        self.enable_realtime_monitoring = os.environ.get("ENABLE_REALTIME_MONITORING", "false").lower() == "true"
+        self.monitoring_mode = os.environ.get("MONITORING_MODE", "production").lower()
+        self.report_retention_seconds = int(os.environ.get("REPORT_RETENTION_SECONDS", "3600"))
         self.enable_neo4j = os.environ.get("ENABLE_NEO4J", "false").lower() == "true"
         self.memory_monitor_mode = os.environ.get("MEMORY_MONITOR_MODE", "auto").lower()
         self.memory_monitor_interval = int(os.environ.get("MEMORY_MONITOR_INTERVAL", "10"))
@@ -63,16 +67,22 @@ class MonitoringDaemon:
             os.environ.get("VULTURE_EXCLUDE", ".git,dist,build,__pycache__")
         )
         self._last_vulture_run = 0.0
+        self._last_coverage_run = 0.0
         self._memory_thread = None
+        self._realtime_thread = None
         self._memory_warned_no_source = False
 
         logger.info("Monitoring daemon initialized")
         logger.info(f"Check interval: {self.check_interval}s")
+        logger.info(f"Monitoring mode: {self.monitoring_mode}")
         logger.info(f"Log analysis: {self.enable_log_analysis}")
         logger.info(f"Volume monitoring: {self.enable_volume_monitoring}")
         logger.info(f"Health checks: {self.enable_health_checks}")
         logger.info(f"Memory monitoring: {self.enable_memory_monitoring}")
         logger.info(f"Vulture monitoring: {self.enable_vulture_monitoring}")
+        logger.info(f"Coverage monitoring: {self.enable_coverage_monitoring}")
+        logger.info(f"Real-time monitoring: {self.enable_realtime_monitoring}")
+        logger.info(f"Report retention: {self.report_retention_seconds}s")
         logger.info(f"Neo4j monitoring: {self.enable_neo4j}")
         if self.enable_memory_monitoring:
             logger.info(
@@ -91,6 +101,10 @@ class MonitoringDaemon:
                 ",".join(self.vulture_targets),
                 ",".join(self.vulture_exclude),
             )
+        if self.enable_coverage_monitoring:
+            logger.info("Coverage monitoring enabled (development mode)")
+        if self.enable_realtime_monitoring:
+            logger.info("Real-time monitoring enabled (development mode)")
 
     def _default_app_container_name(self) -> str:
         project_name = os.environ.get("COMPOSE_PROJECT_NAME", "rag-graphiti-agentic")
@@ -421,6 +435,97 @@ class MonitoringDaemon:
         except Exception as e:
             logger.error(f"Volume check failed: {e}", exc_info=True)
 
+    def run_coverage_analysis(self):
+        """Run coverage analysis for dead code detection."""
+        if not self.enable_coverage_monitoring:
+            return
+
+        now = time.time()
+        # Run coverage analysis less frequently (every 6 hours)
+        if now - self._last_coverage_run < 21600:  # 6 hours
+            return
+
+        self._last_coverage_run = now
+
+        logger.info("Running coverage analysis...")
+        
+        try:
+            # Try to import and run the bloat analyzer
+            sys.path.insert(0, "/app/src")
+            from bloat_analyzer import BloatAnalyzer
+            
+            analyzer = BloatAnalyzer({
+                "source_dir": "/workspace/src",
+                "test_dir": "/workspace/tests",
+                "output_dir": "/app/reports/bloat",
+                "vulture_min_confidence": self.vulture_min_confidence,
+                "vulture_exclude": self.vulture_exclude
+            })
+            
+            results = analyzer.run_analysis()
+            
+            if results.get("error"):
+                logger.error(f"Coverage analysis failed: {results['error']}")
+            else:
+                logger.info(f"Coverage analysis completed: {results['correlated_findings']} findings")
+                logger.info(f"Reports saved to: {results.get('reports', {})}")
+                
+        except ImportError as e:
+            logger.warning(f"Bloat analyzer not available: {e}")
+            logger.info("Running basic coverage analysis...")
+            
+            # Fallback to basic coverage analysis
+            try:
+                cmd = [
+                    "coverage", "run", "--branch", "--source=/workspace/src",
+                    "-m", "pytest", "/workspace/tests", "-v"
+                ]
+                
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+                
+                if result.returncode not in (0, 1):  # 0=success, 1=tests failed
+                    logger.error(f"Coverage run failed: {result.stderr}")
+                    return
+                
+                # Generate XML report
+                xml_cmd = ["coverage", "xml", "-o", "/app/reports/coverage.xml"]
+                subprocess.run(xml_cmd, capture_output=True, text=True, timeout=60)
+                
+                logger.info("Basic coverage analysis completed")
+                
+            except Exception as e:
+                logger.error(f"Basic coverage analysis failed: {e}")
+                
+        except Exception as e:
+            logger.error(f"Coverage analysis failed: {e}", exc_info=True)
+
+    def _realtime_monitor_loop(self):
+        """Real-time monitoring loop for development mode."""
+        logger.info("Real-time monitor started")
+        
+        try:
+            # Try to import realtime monitor
+            sys.path.insert(0, "/app/src")
+            from realtime_monitor import RealTimeCoverageMonitor
+            
+            monitor = RealTimeCoverageMonitor(
+                source_dir="/workspace/src",
+                output_dir="/app/reports/realtime"
+            )
+            
+            monitor.start_monitoring()
+            
+            while self.running and self.enable_realtime_monitoring:
+                time.sleep(60)  # Check every minute if still enabled
+                
+            monitor.stop_monitoring()
+            logger.info("Real-time monitor stopped")
+            
+        except ImportError as e:
+            logger.warning(f"Real-time monitor not available: {e}")
+        except Exception as e:
+            logger.error(f"Real-time monitor error: {e}", exc_info=True)
+
     def run_vulture_scan(self):
         """Run dead-code detection with vulture."""
         if not self.enable_vulture_monitoring:
@@ -482,6 +587,37 @@ class MonitoringDaemon:
         except Exception as e:
             logger.error(f"Vulture scan failed: {e}", exc_info=True)
 
+    def cleanup_old_reports(self):
+        """Remove report files older than the retention window."""
+        if self.report_retention_seconds <= 0:
+            return
+
+        report_root = Path("/app/reports")
+        if not report_root.exists():
+            return
+
+        now = time.time()
+        removed = 0
+        for path in report_root.rglob("*"):
+            if not path.is_file():
+                continue
+            try:
+                age = now - path.stat().st_mtime
+                if age > self.report_retention_seconds:
+                    path.unlink()
+                    removed += 1
+            except FileNotFoundError:
+                continue
+            except Exception as exc:
+                logger.debug("Failed to remove report file %s: %s", path, exc)
+
+        if removed:
+            logger.info(
+                "Report cleanup removed %d file(s) older than %ss",
+                removed,
+                self.report_retention_seconds,
+            )
+
     def run_monitoring_cycle(self):
         """Run one complete monitoring cycle."""
         logger.info("=" * 70)
@@ -493,7 +629,12 @@ class MonitoringDaemon:
             self.run_log_analysis()
             self.run_volume_checks()
             self.run_vulture_scan()
+            
+            # Only run coverage analysis in development mode
+            if self.monitoring_mode == "development":
+                self.run_coverage_analysis()
 
+            self.cleanup_old_reports()
             logger.info("Monitoring cycle completed successfully")
 
         except Exception as e:
@@ -518,6 +659,14 @@ class MonitoringDaemon:
             )
             self._memory_thread.start()
 
+        if self.enable_realtime_monitoring:
+            self._realtime_thread = threading.Thread(
+                target=self._realtime_monitor_loop,
+                name="realtime-monitor",
+                daemon=True,
+            )
+            self._realtime_thread.start()
+
         # Run initial check
         self.run_monitoring_cycle()
 
@@ -538,6 +687,8 @@ class MonitoringDaemon:
         logger.info("Monitoring daemon stopped")
         if self._memory_thread:
             self._memory_thread.join(timeout=2)
+        if self._realtime_thread:
+            self._realtime_thread.join(timeout=2)
 
     def _handle_shutdown(self, signum, frame):
         """Handle shutdown signals."""

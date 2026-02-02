@@ -144,7 +144,7 @@ fi
 
 export RAG_AUTOSTART="$RAG_AUTOSTART_CONFIG"
 
-print_header "STEP 3: Configuring Systemd Sockets"
+print_header "STEP 3: Configuring Systemd Sockets/Services"
 print_info "Autostart configuration: RAG_AUTOSTART=$RAG_AUTOSTART_CONFIG"
 
 # Running inside a container? systemd --user sockets won't work here.
@@ -157,7 +157,7 @@ if [ -f "/.dockerenv" ] || grep -qE "(podman|docker|container)" /proc/1/cgroup 2
     print_info "  python -m src.utils.tools.systemd_manager enable"
 else
     # Use Python module for systemd management
-    print_step "Installing and enabling systemd sockets..."
+    print_step "Installing and enabling systemd units..."
 
     if ! "$PYTHON_CMD" -m src.utils.tools.systemd_manager install; then
         print_error "Failed to install systemd units"
@@ -165,7 +165,8 @@ else
     fi
 
     # Do not enable sockets on boot; start them only for this session.
-    print_step "Disabling tool sockets autostart..."
+    # Document processor runs as a direct service (no socket activation).
+    print_step "Disabling tool socket autostart..."
     systemctl --user disable --now tool-extractor.socket || true
     systemctl --user disable --now tool-document-processor.socket || true
     systemctl --user disable --now tool-websearch.socket || true
@@ -177,10 +178,10 @@ else
 
     SOCKET_START_TIME="$(date --iso-8601=seconds)"
 
-    print_step "Starting tool sockets (on-demand for this session only)..."
+    print_step "Starting tool sockets/services (session only)..."
     systemctl --user daemon-reload || true
     systemctl --user start tool-extractor.socket || true
-    systemctl --user start tool-document-processor.socket || true
+    systemctl --user start tool-document-processor.service || true
     systemctl --user start tool-websearch.socket || true
 
     print_step "Checking tool sockets..."
@@ -210,7 +211,7 @@ else
         systemctl --user daemon-reload
     fi
 
-    print_success "Socket activation configured"
+    print_success "Socket/service activation configured"
 fi
 
 # ============================================================================
@@ -243,6 +244,48 @@ fi
 # ============================================================================
 
 print_header "STEP 5: Building and Starting All Services"
+
+# Ask about monitoring features
+print_step "Configuring monitoring features..."
+
+read -p "Enable development mode with code analysis? (y/N): " enable_dev
+if [[ $enable_dev =~ ^[Yy]$ ]]; then
+    export MONITORING_MODE=development
+    print_info "Development mode enabled"
+    
+    read -p "Enable coverage monitoring for dead code detection? (y/N): " enable_coverage
+    if [[ $enable_coverage =~ ^[Yy]$ ]]; then
+        export ENABLE_COVERAGE_MONITORING=true
+        print_info "Coverage monitoring enabled"
+    else
+        export ENABLE_COVERAGE_MONITORING=false
+        print_info "Coverage monitoring disabled"
+    fi
+    
+    read -p "Enable vulture analysis for dead code detection? (y/N): " enable_vulture
+    if [[ $enable_vulture =~ ^[Yy]$ ]]; then
+        export ENABLE_VULTURE_MONITORING=true
+        print_info "Vulture analysis enabled"
+    else
+        export ENABLE_VULTURE_MONITORING=false
+        print_info "Vulture analysis disabled"
+    fi
+    
+    read -p "Enable real-time monitoring? (y/N): " enable_realtime
+    if [[ $enable_realtime =~ ^[Yy]$ ]]; then
+        export ENABLE_REALTIME_MONITORING=true
+        print_info "Real-time monitoring enabled"
+    else
+        export ENABLE_REALTIME_MONITORING=false
+        print_info "Real-time monitoring disabled"
+    fi
+else
+    export MONITORING_MODE=production
+    export ENABLE_COVERAGE_MONITORING=false
+    export ENABLE_VULTURE_MONITORING=false
+    export ENABLE_REALTIME_MONITORING=false
+    print_info "Production mode - monitoring features disabled by default"
+fi
 
 print_step "Checking if services are already running..."
 
@@ -335,10 +378,11 @@ if command -v systemctl >/dev/null 2>&1; then
         fi
         
         # Start tool sockets (will activate services on-demand)
-        print_step "Configuring tool sockets for autostart..."
+        # Document processor runs as a direct service (no socket activation).
+        print_step "Configuring tool sockets/services for autostart..."
         systemctl --user daemon-reload
         systemctl --user enable --now tool-extractor.socket || print_warning "Failed to start tool-extractor.socket"
-        systemctl --user enable --now tool-document-processor.socket || print_warning "Failed to start tool-document-processor.socket"
+        systemctl --user enable --now tool-document-processor.service || print_warning "Failed to start tool-document-processor.service"
         systemctl --user enable --now tool-websearch.socket || print_warning "Failed to start tool-websearch.socket"
         
         print_success "Services configured for autostart"
@@ -352,10 +396,10 @@ if command -v systemctl >/dev/null 2>&1; then
             systemctl --user start rag-tool-ui.service || print_warning "Failed to start rag-tool-ui.service"
         fi
         
-        print_step "Starting tool sockets for this session..."
+        print_step "Starting tool sockets/services for this session..."
         systemctl --user daemon-reload
         systemctl --user start tool-extractor.socket || print_warning "Failed to start tool-extractor.socket"
-        systemctl --user start tool-document-processor.socket || print_warning "Failed to start tool-document-processor.socket"
+        systemctl --user start tool-document-processor.service || print_warning "Failed to start tool-document-processor.service"
         systemctl --user start tool-websearch.socket || print_warning "Failed to start tool-websearch.socket"
         
         print_success "Services started for this session (they will not auto-start on boot)"

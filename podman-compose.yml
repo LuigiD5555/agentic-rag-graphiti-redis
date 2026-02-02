@@ -356,6 +356,10 @@ services:
       ENABLE_HEALTH_CHECKS: "${ENABLE_HEALTH_CHECKS:-true}"
       ENABLE_MEMORY_MONITORING: "${ENABLE_MEMORY_MONITORING:-true}"
       ENABLE_VULTURE_MONITORING: "${ENABLE_VULTURE_MONITORING:-false}"
+      ENABLE_COVERAGE_MONITORING: "${ENABLE_COVERAGE_MONITORING:-false}"
+      ENABLE_REALTIME_MONITORING: "${ENABLE_REALTIME_MONITORING:-false}"
+      MONITORING_MODE: "${MONITORING_MODE:-production}"
+      REPORT_RETENTION_SECONDS: "${REPORT_RETENTION_SECONDS:-3600}"
       VULTURE_INTERVAL: "${VULTURE_INTERVAL:-3600}"
       VULTURE_MIN_CONFIDENCE: "${VULTURE_MIN_CONFIDENCE:-80}"
       VULTURE_TARGETS: "${VULTURE_TARGETS:-/workspace/src}"
@@ -412,7 +416,10 @@ services:
     restart: "no"
     logging:
       driver: journald
-    network_mode: "host"
+    # Use bridge networking with port mapping instead of host networking
+    ports:
+      - "127.0.0.1:5673:5672"
+      - "127.0.0.1:15672:15672"
     # Remove explicit user specification to let RabbitMQ run with default permissions
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-admin}
