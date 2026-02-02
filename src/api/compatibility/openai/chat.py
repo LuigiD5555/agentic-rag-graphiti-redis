@@ -166,6 +166,7 @@ async def create_chat_completion(
             thread_id=thread_id,
             model=selected_model,
             conversation_history=state["messages"],
+            session_id=thread_id,
         )
     except Exception as e:
         logger.error(f"RAG query failed: {str(e)}", exc_info=True)
@@ -173,7 +174,7 @@ async def create_chat_completion(
 
     answer = result["answer"]
 
-    if result.get("sources"):
+    if answer.strip() and result.get("sources"):
         # Filter out sources with very low relevance (< 5%)
         import os
         relevant_sources = [src for src in result["sources"] if src['relevance_score'] >= 0.05]

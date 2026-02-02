@@ -12,12 +12,23 @@ from src.api.models_ollama import (
     RagToolResponse,
     RagFileLocationResponse,
     RagFileMetadataResponse,
+    AnswerModesPayload,
+    AnswerModesResponse,
+    AnswerModeConfig,
 )
 from src.conf import settings
 from src.workflows.ingestion.orchestrator import IngestionOrchestrator
 from src.workflows.ingestion.options import IngestionOptions
 from src.workflows.ingestion.preprocessor import get_preprocessor
 from src.workflows.query.pipeline.rag_orchestrator import RAGOrchestrator
+from src.middleware.thread_manager import get_thread_id
+from src.workflows.query.answer_modes import (
+    get_answer_modes,
+    update_answer_modes,
+    get_answer_mode,
+    upsert_answer_mode,
+    delete_answer_mode,
+)
 
 router = APIRouter(prefix="/rag", tags=["rag"])
 
@@ -36,6 +47,7 @@ async def get_ingestion_orchestrator() -> IngestionOrchestrator:
 async def rag_query(
     request: RagQueryRequest,
     rag: RAGOrchestrator = Depends(get_rag_orchestrator),
+    thread_id: str = Depends(get_thread_id),
 ) -> RagQueryResponse:
     # Use default values with early assignment
     temperature = request.temperature or settings.RAG_DEFAULT_TEMPERATURE
@@ -48,12 +60,73 @@ async def rag_query(
         temperature=temperature,
         max_tokens=max_tokens,
         system_prompt=request.system,
+        session_id=thread_id,
     )
     sources = result.get("sources", []) if request.include_sources else []
     return RagQueryResponse(
         answer=result["answer"],
         sources=sources,
         metadata=result.get("metadata", {}),
+    )
+
+
+@router.get("/answer-modes", response_model=AnswerModesResponse)
+async def list_answer_modes() -> AnswerModesResponse:
+    modes = get_answer_modes()
+    return AnswerModesResponse(
+        default_mode=modes.get("default_mode", "detailed"),
+        modes=modes.get("modes", {}),
+    )
+
+
+@router.put("/answer-modes", response_model=AnswerModesResponse)
+async def put_answer_modes(payload: AnswerModesPayload) -> AnswerModesResponse:
+    data = payload.model_dump(exclude_none=True)
+    merge = data.pop("merge", True)
+    try:
+        updated = update_answer_modes(payload=data, merge=bool(merge))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return AnswerModesResponse(
+        default_mode=updated.get("default_mode", "detailed"),
+        modes=updated.get("modes", {}),
+    )
+
+
+@router.get("/answer-modes/{mode_name}", response_model=AnswerModeConfig)
+async def get_answer_mode_by_name(mode_name: str) -> AnswerModeConfig:
+    mode = get_answer_mode(mode_name)
+    if mode is None:
+        raise HTTPException(status_code=404, detail="Answer mode not found.")
+    return AnswerModeConfig.model_validate(mode)
+
+
+@router.put("/answer-modes/{mode_name}", response_model=AnswerModeConfig)
+async def put_answer_mode_by_name(
+    mode_name: str,
+    payload: AnswerModeConfig,
+    merge: bool = True,
+) -> AnswerModeConfig:
+    try:
+        updated = upsert_answer_mode(
+            mode_name=mode_name,
+            config=payload.model_dump(exclude_none=True),
+            merge=merge,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return AnswerModeConfig.model_validate(updated)
+
+
+@router.delete("/answer-modes/{mode_name}", response_model=AnswerModesResponse)
+async def delete_answer_mode_by_name(mode_name: str) -> AnswerModesResponse:
+    try:
+        updated = delete_answer_mode(mode_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return AnswerModesResponse(
+        default_mode=updated.get("default_mode", "detailed"),
+        modes=updated.get("modes", {}),
     )
 
 

@@ -36,25 +36,31 @@ class LanguageDetector:
 Guidelines:
 - Answer the question using ONLY the information from the provided context.
 - If the context doesn't contain enough information to answer, say so clearly.
-- Be concise but complete in your answers.
+- Provide detailed, well-structured answers; prefer depth over brevity.
+- Use bullet points or short sections when helpful.
+- When multiple relevant sources exist, synthesize them.
 - Cite sources when relevant (mention document names/paths).
 - If multiple sources provide conflicting information, acknowledge this.
 """,
-        'es': """You are a helpful assistant that answers questions based on the provided context.
+        'es': """Eres un asistente útil que responde preguntas con base en el contexto proporcionado.
 
-Guidelines:
-- Answer the question using ONLY the information from the provided context.
-- If the context doesn't contain enough information to answer, say so clearly.
-- Be concise but complete in your answers.
-- Cite sources when relevant (mention document names/paths).
-- If multiple sources provide conflicting information, acknowledge this.
+Guías:
+- Responde la pregunta usando SOLO la información del contexto proporcionado.
+- Si el contexto no contiene suficiente información para responder, dilo claramente.
+- Ofrece respuestas detalladas y bien estructuradas; prioriza la profundidad sobre la brevedad.
+- Usa viñetas o secciones cortas cuando sea útil.
+- Cuando haya varias fuentes relevantes, sintetízalas.
+- Cita fuentes cuando sea relevante (menciona nombres/rutas de documentos).
+- Si varias fuentes aportan información contradictoria, reconócelo.
 """,
         'zh-cn': """你是一个有用的助手，根据提供的上下文回答问题。
 
 指南：
 - 仅使用提供的上下文中的信息回答问题。
 - 如果上下文不包含足够的信息来回答，请明确说明。
-- 答案要简洁但完整。
+- 提供详细且结构良好的回答，优先深度而非简短。
+- 需要时使用要点或简短小节。
+- 当有多个相关来源时，进行综合总结。
 - 在相关时引用来源（提及文档名称/路径）。
 - 如果多个来源提供相互矛盾的信息，请承认这一点。
 """,
@@ -63,7 +69,9 @@ Guidelines:
 ガイドライン：
 - 提供されたコンテキストの情報のみを使用して質問に答えてください。
 - コンテキストに十分な情報が含まれていない場合は、明確に述べてください。
-- 簡潔かつ完全な回答をしてください。
+- 詳細で構造化された回答を提供し、簡潔さより深さを優先してください。
+- 必要に応じて箇条書きや短いセクションを使用してください。
+- 複数の関連ソースがある場合は統合してください。
 - 関連する場合はソースを引用してください（ドキュメント名/パスを記載）。
 - 複数のソースが矛盾する情報を提供している場合は、それを認めてください。
 """,
@@ -72,7 +80,9 @@ Guidelines:
 지침:
 - 제공된 맥락의 정보만을 사용하여 질문에 답하십시오.
 - 맥락에 답변하기에 충분한 정보가 없으면 명확하게 말하십시오.
-- 간결하지만 완전한 답변을 제공하십시오.
+- 자세하고 구조적인 답변을 제공하고, 간결함보다 깊이를 우선하세요.
+- 필요할 때 글머리표나 짧은 섹션을 사용하세요.
+- 관련 출처가 여러 개라면 통합하여 요약하세요.
 - 관련이 있을 때 출처를 인용하십시오(문서 이름/경로 언급).
 - 여러 출처가 상충되는 정보를 제공하는 경우 이를 인정하십시오.
 """,
@@ -81,7 +91,9 @@ Guidelines:
 Рекомендации:
 - Отвечайте на вопрос, используя ТОЛЬКО информацию из предоставленного контекста.
 - Если контекст не содержит достаточно информации для ответа, четко укажите это.
-- Будьте кратки, но полны в своих ответах.
+- Давайте подробные и структурированные ответы, отдавая приоритет глубине, а не краткости.
+- При необходимости используйте пункты или короткие разделы.
+- Если есть несколько релевантных источников, синтезируйте их.
 - Цитируйте источники, когда это уместно (упоминайте имена/пути документов).
 - Если несколько источников предоставляют противоречивую информацию, признайте это.
 """,
@@ -90,7 +102,9 @@ Guidelines:
 إرشادات:
 - أجب على السؤال باستخدام المعلومات الواردة في السياق المقدم فقط.
 - إذا كان السياق لا يحتوي على معلومات كافية للإجابة، فقل ذلك بوضوح.
-- كن موجزًا ولكن كاملاً في إجاباتك.
+- قدّم إجابات مفصّلة ومنظمة، وفضّل العمق على الإيجاز.
+- استخدم النقاط أو الأقسام القصيرة عند الحاجة.
+- عند وجود عدة مصادر ذات صلة، قم بدمجها.
 - استشهد بالمصادر عند الاقتضاء (اذكر أسماء/مسارات المستندات).
 - إذا قدمت مصادر متعددة معلومات متضاربة، فاعترف بذلك.
 """,
@@ -99,7 +113,9 @@ Guidelines:
 Directives :
 - Répondez à la question en utilisant UNIQUEMENT les informations du contexte fourni.
 - Si le contexte ne contient pas suffisamment d'informations pour répondre, dites-le clairement.
-- Soyez concis mais complet dans vos réponses.
+- Fournissez des réponses détaillées et structurées ; privilégiez la profondeur plutôt que la brièveté.
+- Utilisez des puces ou de courtes sections lorsque c'est utile.
+- Lorsqu'il existe des sources pertinentes multiples, synthétisez-les.
 - Citez les sources le cas échéant (mentionnez les noms/chemins de documents).
 - Si plusieurs sources fournissent des informations contradictoires, reconnaissez-le.
 """,
@@ -108,7 +124,9 @@ Directives :
 Richtlinien:
 - Beantworten Sie die Frage NUR mit den Informationen aus dem bereitgestellten Kontext.
 - Wenn der Kontext nicht genügend Informationen enthält, um zu antworten, sagen Sie dies klar.
-- Seien Sie prägnant, aber vollständig in Ihren Antworten.
+- Geben Sie ausführliche, gut strukturierte Antworten; bevorzugen Sie Tiefe gegenüber Kürze.
+- Verwenden Sie bei Bedarf Aufzählungspunkte oder kurze Abschnitte.
+- Wenn mehrere relevante Quellen vorhanden sind, fassen Sie sie zusammen.
 - Zitieren Sie Quellen, wenn relevant (erwähnen Sie Dokumentnamen/-pfade).
 - Wenn mehrere Quellen widersprüchliche Informationen liefern, erkennen Sie dies an.
 """,
@@ -117,7 +135,9 @@ Richtlinien:
 Diretrizes:
 - Responda à pergunta usando APENAS as informações do contexto fornecido.
 - Se o contexto não contiver informações suficientes para responder, diga isso claramente.
-- Seja conciso, mas completo em suas respostas.
+- Forneça respostas detalhadas e bem estruturadas; priorize a profundidade em vez da brevidade.
+- Use marcadores ou seções curtas quando útil.
+- Quando houver várias fontes relevantes, sintetize-as.
 - Cite as fontes quando relevante (mencione nomes/caminhos de documentos).
 - Se várias fontes fornecerem informações conflitantes, reconheça isso.
 """,

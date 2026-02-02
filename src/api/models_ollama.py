@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union, Literal
 
 from pydantic import BaseModel, Field
+from pydantic.config import ConfigDict
 from src.conf import settings
 
 
@@ -106,6 +107,30 @@ class RagQueryResponse(BaseModel):
     answer: str
     sources: List[Dict[str, Any]] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AnswerModeConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    description: Optional[str] = None
+    instruction: Optional[str] = None
+    instruction_by_lang: Optional[Dict[str, str]] = None
+    triggers: List[str] = Field(default_factory=list)
+    persist_triggers: List[str] = Field(default_factory=list)
+    preanalysis: Optional[Dict[str, Any]] = None
+    pipeline: Optional[List[Dict[str, Any]]] = None
+
+
+class AnswerModesPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    default_mode: Optional[str] = None
+    modes: Dict[str, AnswerModeConfig] = Field(default_factory=dict)
+    merge: Optional[bool] = True
+
+
+class AnswerModesResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    default_mode: str
+    modes: Dict[str, AnswerModeConfig]
 
 
 class RagIngestRequest(BaseModel):

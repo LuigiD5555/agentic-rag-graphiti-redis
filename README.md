@@ -308,6 +308,86 @@ Weaviate collections require a consistent vector length. If you change embedding
 
 ---
 
+## Code Quality and Monitoring
+
+The system includes comprehensive code quality monitoring tools to detect legacy code, bloat, and unused code.
+
+### Monitoring Features
+
+The monitoring system provides:
+
+1. **Static Analysis with Vulture**: Detects dead/unused code across the entire codebase
+2. **Dynamic Analysis with Coverage**: Tracks code execution during development to identify unused code paths
+3. **Real-time Monitoring**: Optional background monitoring that aggregates coverage data across all pipelines
+4. **Pipeline Classification**: Identifies which code belongs to specific pipelines (ingestion, web queries, RAG queries, file processing, etc.)
+5. **Detailed Reports**: Generates reports in CSV, TXT, and Markdown formats showing:
+   - Code snippets with context
+   - File locations and line numbers
+   - Status (unused, rarely used, legacy)
+   - Object type (function, class, variable)
+   - Pipeline classification
+
+### Usage
+
+#### Development Mode
+When running in development mode, the system automatically enables coverage monitoring:
+
+```bash
+./start-everything.sh
+```
+
+The script will prompt you:
+- "Are you running in development mode? (y/N):" - Answer 'y' to enable coverage
+- "Enable monitoring features? (y/N):" - Answer 'y' to enable optional monitoring features
+
+#### Environment Variables
+Control monitoring behavior with these environment variables in `.env`:
+
+```bash
+# Monitoring Configuration
+ENABLE_COVERAGE_MONITORING=true          # Enable coverage.py dynamic analysis
+ENABLE_VULTURE_MONITORING=true           # Enable vulture static analysis
+ENABLE_REALTIME_MONITORING=false         # Enable real-time background monitoring
+MONITORING_MODE=development              # development or production
+```
+
+#### Manual Monitoring
+Run the monitoring tools manually:
+
+```bash
+# Run bloat analyzer
+python -m tools.monitoring.src.bloat_analyzer
+
+# Run real-time monitor
+python -m tools.monitoring.src.realtime_monitor
+
+# Run monitoring daemon (full analysis)
+python -m tools.monitoring.src.monitor_daemon
+```
+
+### Legacy Code Cleanup
+
+A dedicated script is available to remove legacy integration artifacts:
+
+```bash
+./legacy-cleanup.sh
+```
+
+This interactive script will:
+1. Find and remove qdrant integration artifacts
+2. Find and remove redis integration artifacts
+3. Clean up requirements.txt, Dockerfile, and configuration files
+4. Remove Python imports related to removed integrations
+5. Run bloat analyzer for further detection
+
+**Important**: The script creates backup files with `.backup` extension before making changes.
+
+### Reports
+Monitoring reports are saved to `/app/reports/` in the monitoring container:
+- `bloat/` - Bloat analysis reports
+- `coverage/` - Coverage reports
+- `vulture/` - Vulture static analysis reports
+
 ## Roadmap
 
 - Support for additional document formats
@@ -315,6 +395,7 @@ Weaviate collections require a consistent vector length. If you change embedding
 - Improved relation extraction with prompt templates
 - Lightweight web-based query interface
 - External apps / providers via registry
+- Enhanced monitoring with AI-powered code suggestions
 
 ---
 

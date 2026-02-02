@@ -84,6 +84,7 @@ async def generate(
             system_prompt=request.system,
             model=request.model,
             thread_id=thread_id,
+            session_id=thread_id,
         )
         sources = result.get("sources", []) if include_sources else None
         return OllamaGenerateResponse(
@@ -138,6 +139,7 @@ async def chat(
             user_id=user_id,
             conversation_history=conversation_history,
             thread_id=thread_id,
+            session_id=thread_id,
         )
         sources = result.get("sources", []) if include_sources else None
         response = OllamaChatResponse(

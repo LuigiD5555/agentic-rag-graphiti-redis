@@ -30,6 +30,11 @@ An Ollama-like API to expose the RAG system as a REST service. This API prioriti
 
 - POST `/rag/ingest`
 - POST `/rag/query`
+- GET `/rag/answer-modes`
+- PUT `/rag/answer-modes`
+- GET `/rag/answer-modes/{mode}`
+- PUT `/rag/answer-modes/{mode}`
+- DELETE `/rag/answer-modes/{mode}`
 - POST `/rag/tools/zip`
 - POST `/rag/tools/office`
 - POST `/rag/tools/ocr`
@@ -106,6 +111,27 @@ An Ollama-like API to expose the RAG system as a REST service. This API prioriti
   "top_k": 5,
   "filters": {"source": "notes.pdf"}
 }
+```
+
+### Example: Answer modes (runtime)
+
+**List modes**
+```bash
+curl -sS http://localhost:8000/rag/answer-modes | jq
+```
+
+**Create/Update one mode**
+```bash
+curl -sS -X PUT "http://localhost:8000/rag/answer-modes/analitico?merge=true" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "Respuesta con análisis previo",
+    "triggers": ["modo analitico"],
+    "pipeline": [
+      {"type": "preanalysis", "config": {"enabled": true, "max_tokens": 256}},
+      {"type": "answer"}
+    ]
+  }' | jq
 ```
 
 ### Example: `/rag/ingest`

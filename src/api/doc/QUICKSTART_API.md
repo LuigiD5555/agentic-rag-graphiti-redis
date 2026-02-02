@@ -128,6 +128,18 @@ curl -X POST http://localhost:8000/rag/query \
   }' | jq
 ```
 
+### Answer Modes (runtime)
+
+```bash
+# List modes
+curl -sS http://localhost:8000/rag/answer-modes | jq
+
+# Create/update one mode
+curl -sS -X PUT "http://localhost:8000/rag/answer-modes/concise?merge=true" \
+  -H "Content-Type: application/json" \
+  -d '{"description":"Short answers","triggers":["concise","brief"]}' | jq
+```
+
 ---
 
 ## 🔧 Configuration

@@ -8,6 +8,11 @@ from src.workflows.query.temporal.retriever import MultiTenantRetriever
 from src.apps.websearch import SearXNGClient
 from src.workflows.query.intent import IntentClassifier
 from src.workflows.query.sanitizer import get_sanitizer
+from src.workflows.query.answer_modes import (
+    resolve_mode,
+    get_mode_config,
+    get_mode_instruction,
+)
 from src.workflows.query.reranker import get_reranker
 from src.conf import settings
 
@@ -25,7 +30,9 @@ class RAGOrchestrator:
         "- Remember and reference previous messages when relevant.\n"
         "- If asked to repeat or translate previous responses, use the history.\n"
         "- If the context doesn't contain enough information, say so clearly.\n"
-        "- Be concise but complete in your answers.\n"
+        "- Provide detailed, well-structured answers; prefer depth over brevity.\n"
+        "- Use bullet points or short sections when helpful.\n"
+        "- When multiple relevant sources exist, synthesize them.\n"
         "- Cite sources when relevant (mention document names/paths).\n"
         "- If multiple sources provide conflicting information, acknowledge this.\n"
     )
@@ -620,6 +627,44 @@ class RAGOrchestrator:
                 log.info("Using conversational system prompt (no RAG context)")
             else:
                 final_prompt = system_prompt or self.system_prompt
+            detected_lang = self.language_detector.detect_language(sanitized_question)
+
+        mode_name = resolve_mode(sanitized_question, session_id)
+        mode_config = get_mode_config(mode_name)
+        mode_instruction = get_mode_instruction(mode_config, detected_lang)
+        if mode_instruction:
+            prefix = "IMPORTANTE" if detected_lang == "es" else "IMPORTANT"
+            final_prompt = final_prompt + f"\n\n{prefix}: {mode_instruction}"
+
+        preanalysis_notes = ""
+        pipeline_steps = mode_config.get("pipeline")
+        if isinstance(pipeline_steps, list) and pipeline_steps:
+            for step in pipeline_steps:
+                if not isinstance(step, dict):
+                    continue
+                if step.get("type") == "preanalysis":
+                    preanalysis_notes = self._run_preanalysis(
+                        mode_config=self._merge_preanalysis_config(
+                            mode_config.get("preanalysis"),
+                            step.get("config"),
+                        ),
+                        question=sanitized_question,
+                        context=sanitized_context if not is_conversational else "",
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        model=model,
+                        language=detected_lang,
+                    )
+        else:
+            preanalysis_notes = self._run_preanalysis(
+                mode_config=mode_config.get("preanalysis"),
+                question=sanitized_question,
+                context=sanitized_context if not is_conversational else "",
+                temperature=temperature,
+                max_tokens=max_tokens,
+                model=model,
+                language=detected_lang,
+            )
 
         # Build messages with conversation history if provided
         messages = [{"role": "system", "content": final_prompt}]
@@ -633,23 +678,36 @@ class RAGOrchestrator:
                 })
             log.info("Added %d historical messages to context", len(conversation_history))
 
+        analysis_block = ""
+        if preanalysis_notes:
+            analysis_block = f"Analysis notes:\n{preanalysis_notes}\n\n"
+
         # Format user message based on whether we have RAG context
         if is_conversational:
             # Simple conversational message without context formatting
+            user_content = f"{analysis_block}{sanitized_question}".strip()
+            fallback_user_content = sanitized_question
             messages.append({
                 "role": "user",
-                "content": sanitized_question
+                "content": user_content
             })
         else:
             # RAG-style message with context
-            messages.append({
-                "role": "user",
-                "content": f"""Context:
+            user_content = f"""Context:
+{sanitized_context}
+
+{analysis_block}Question: {sanitized_question}
+
+Answer:"""
+            fallback_user_content = f"""Context:
 {sanitized_context}
 
 Question: {sanitized_question}
 
 Answer:"""
+            messages.append({
+                "role": "user",
+                "content": user_content
             })
 
         answer = self.chat_service.chat(
@@ -659,7 +717,89 @@ Answer:"""
             model=model,
         )
 
+        if not answer.strip() and analysis_block:
+            log.warning("Empty answer detected; retrying without analysis notes.")
+            fallback_messages = messages[:-1] + [{"role": "user", "content": fallback_user_content}]
+            answer = self.chat_service.chat(
+                messages=fallback_messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                model=model,
+            )
+
+        if not answer.strip():
+            if detected_lang == "es":
+                answer = (
+                    "No pude generar una respuesta útil con el contexto disponible. "
+                    "¿Podrías reformular la pregunta o indicar un documento específico?"
+                )
+            else:
+                answer = (
+                    "I couldn't generate a useful answer with the available context. "
+                    "Please rephrase the question or point to a specific document."
+                )
+
         return answer
+
+    def _run_preanalysis(
+        self,
+        mode_config: Optional[Dict[str, Any]],
+        question: str,
+        context: str,
+        temperature: float,
+        max_tokens: int,
+        model: Optional[str],
+        language: str,
+    ) -> str:
+        preanalysis = mode_config if isinstance(mode_config, dict) else None
+        if not isinstance(preanalysis, dict):
+            return ""
+        if "enabled" not in preanalysis:
+            preanalysis["enabled"] = True
+        if not preanalysis.get("enabled"):
+            return ""
+
+        prompt = preanalysis.get(
+            "prompt",
+            "Create a short bullet list of key points, assumptions, and missing details. "
+            "Do not include chain-of-thought or step-by-step reasoning.",
+        )
+        if language == "es" and preanalysis.get("prompt_es"):
+            prompt = preanalysis.get("prompt_es")
+
+        include_context = preanalysis.get("include_context", True)
+        user_content = f"Pregunta: {question}" if language == "es" else f"Question: {question}"
+        if include_context and context:
+            user_content = f"Context:\n{context}\n\n{user_content}"
+
+        pre_messages = [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": user_content},
+        ]
+
+        pre_temperature = preanalysis.get("temperature")
+        pre_max_tokens = preanalysis.get("max_tokens")
+        pre_model = preanalysis.get("model")
+
+        try:
+            return self.chat_service.chat(
+                messages=pre_messages,
+                temperature=temperature if pre_temperature is None else pre_temperature,
+                max_tokens=max_tokens if pre_max_tokens is None else pre_max_tokens,
+                model=pre_model or model,
+            ).strip()
+        except Exception as exc:
+            log.debug("Preanalysis failed: %s", exc)
+            return ""
+
+    @staticmethod
+    def _merge_preanalysis_config(base: Optional[Dict[str, Any]], override: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        if not isinstance(base, dict) and not isinstance(override, dict):
+            return {}
+        merged = dict(base) if isinstance(base, dict) else {}
+        if isinstance(override, dict):
+            merged.update(override)
+        return merged
 
     def _extract_sources(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Extract unique sources from retrieved documents.

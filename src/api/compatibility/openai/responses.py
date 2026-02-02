@@ -76,6 +76,7 @@ async def create_response(
             max_tokens=request.max_tokens,
             thread_id=thread_id,
             model=selected_model,
+            session_id=thread_id,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"RAG query failed: {str(e)}")
