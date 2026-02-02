@@ -166,7 +166,6 @@ async def create_chat_completion(
             thread_id=thread_id,
             model=selected_model,
             conversation_history=state["messages"],
-            session_id=thread_id,
         )
     except Exception as e:
         logger.error(f"RAG query failed: {str(e)}", exc_info=True)
