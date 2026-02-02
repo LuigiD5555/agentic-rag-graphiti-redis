@@ -727,6 +727,27 @@ Answer:"""
                 model=model,
             )
 
+        # Fallback: retry once with a shorter context if the model returns empty.
+        if not answer.strip() and not is_conversational and sanitized_context:
+            log.warning("Empty answer detected; retrying with truncated context.")
+            truncated_context = sanitized_context[:4000]
+            fallback_messages = [{"role": "system", "content": final_prompt}]
+            fallback_messages.append({
+                "role": "user",
+                "content": f"""Context:
+{truncated_context}
+
+Question: {sanitized_question}
+
+Answer:"""
+            })
+            answer = self.chat_service.chat(
+                messages=fallback_messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                model=model,
+            )
+
         if not answer.strip():
             if detected_lang == "es":
                 answer = (
