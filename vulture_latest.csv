@@ -1,0 +1,22 @@
+file,line,message,confidence
+/workspace/src/api/compatibility/openai/responses.py,125,unused variable 'response_id',100
+/workspace/src/api/compatibility/openai/responses.py,138,unused variable 'response_id',100
+/workspace/src/api/runtime.py,45,unused variable 'exc_value',100
+/workspace/src/apps/websearch/searxng_client.py,57,unused variable 'exc_tb',100
+/workspace/src/apps/websearch/searxng_client.py,57,unused variable 'exc_val',100
+/workspace/src/core/contracts.py,98,unused variable 'ids',100
+/workspace/src/core/mapper_chain.py,82,unused import 'ErrEvent',90
+/workspace/src/workflows/ingestion/checkpoint/chunk_registry.py,94,unused variable 'embedding_hash',100
+/workspace/src/workflows/ingestion/jobs/worker.py,164,unused variable 'gate_result',100
+/workspace/src/workflows/ingestion/pipeline/stage_reporting.py,91,unused variable 'tb',100
+/workspace/src/workflows/ingestion/resource_pools.py,250,unused variable 'exc_tb',100
+/workspace/src/workflows/ingestion/resource_pools.py,250,unused variable 'exc_val',100
+/workspace/src/workflows/ingestion/watermark_cleanup.py,494,unused variable 'exc_tb',100
+/workspace/src/workflows/ingestion/watermark_cleanup.py,494,unused variable 'exc_val',100
+/workspace/src/workflows/ingestion/wave_planner.py,53,unused variable 'embedded',100
+/workspace/src/workflows/memory/core/checkpointer.py,42,unused variable 'new_versions',100
+/workspace/src/workflows/memory/core/state.py,9,unused import 'Annotated',90
+/workspace/src/workflows/memory/core/state.py,13,unused import 'add_messages',90
+/workspace/src/workflows/query/interfaces/storage_plugin_interface.py,16,unused variable 'vector_size',100
+/workspace/src/workflows/query/retrieval/weaviate_retriever.py,370,unused variable 'exc_tb',100
+/workspace/src/workflows/query/retrieval/weaviate_retriever.py,370,unused variable 'exc_val',100
