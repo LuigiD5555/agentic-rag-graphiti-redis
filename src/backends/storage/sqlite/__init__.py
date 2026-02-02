@@ -180,7 +180,11 @@ class SQLiteControlPlane:
         if self.is_memory_db:
             # For in-memory databases, use shared cache with a named database
             # This ensures all connections share the same in-memory database
-            return sqlite3.connect("file:rag_control_plane?mode=memory&cache=shared", uri=True)
+            return sqlite3.connect(
+                "file:rag_control_plane?mode=memory&cache=shared",
+                uri=True,
+                isolation_level=None  # Enable autocommit mode
+            )
         else:
             return sqlite3.connect(self.db_path)
     
