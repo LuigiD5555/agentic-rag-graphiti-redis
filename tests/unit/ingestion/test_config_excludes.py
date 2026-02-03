@@ -1,5 +1,6 @@
 import pytest
 
+from src.workflows.ingestion.helpers import build_ingestion_options_from_args
 from src.workflows.query.conf import Config
 
 
@@ -60,3 +61,42 @@ def test_config_loads_default_ingestignore(tmp_path, monkeypatch):
 
     assert "secrets.txt" in excluded_globs
     assert "data/private/**" in excluded_globs
+
+
+def test_helper_loads_ingestignore_entries(tmp_path):
+    ignore_file = tmp_path / ".ingestignore"
+    ignore_file.write_text(
+        """
+        custom-dir
+        logs/**
+        *.cache
+        """,
+        encoding="utf-8",
+    )
+
+    class Args:
+        paths = None
+        exts = None
+        exclude_dirs = None
+        exclude_patterns = None
+        enabled_paths = None
+        follow_symlinks = False
+        dry_run = False
+        per_file = False
+        max_files = 0
+        streaming = None
+        log_level = None
+        scan_progress = 0
+        strategy = None
+        phased_ingestion = None
+        max_ram_percent = None
+        run_id = None
+
+    options = build_ingestion_options_from_args(
+        Args(),
+        Config(DOCS_EXCLUDE_FILE=str(ignore_file)),
+    )
+
+    assert "custom-dir" in options.excluded_directory_names
+    assert "logs/**" in options.excluded_path_globs
+    assert "*.cache" in options.excluded_path_globs

@@ -111,7 +111,7 @@ def build_ingestion_options_from_args(args: argparse.Namespace, config: object) 
 
     # Always start with built-in defaults, then add user-specified exclusions
     # We need to classify entries as directory names vs glob patterns
-    from src.utils.path_discovery import classify_exclude_entries
+    from src.utils.path_discovery import classify_exclude_entries, load_excludes_from_files
     
     # Collect all exclusion entries
     all_exclusion_entries = set()
@@ -136,6 +136,15 @@ def build_ingestion_options_from_args(args: argparse.Namespace, config: object) 
     # Add CLI exclusions if provided
     if getattr(args, "exclude_dirs", None) is not None:
         all_exclusion_entries.update(args.exclude_dirs)
+
+    # Add entries from file-based exclusion lists (.ingestignore or custom file)
+    exclude_file = getattr(config, "DOCS_EXCLUDE_FILE", None)
+    if isinstance(exclude_file, str) and not exclude_file:
+        exclude_file = None
+    base_dir = getattr(config, "BASE_DIR", None)
+    cwd = str(base_dir) if base_dir else None
+    file_entries = load_excludes_from_files(exclude_file, cwd=cwd)
+    all_exclusion_entries.update(file_entries)
     
     # Classify entries into directory names and glob patterns
     excluded_directory_names, excluded_path_globs = classify_exclude_entries(all_exclusion_entries)
