@@ -1,0 +1,10 @@
+{
+  "timestamp": 1769834322.4128273,
+  "source_directories": [
+    "/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RAG Project/rag-agentic-graphiti/src"
+  ],
+  "phases": {},
+  "summary": {
+    "error": "'CoverageData' object has no attribute 'numb_statements'"
+  }
+}

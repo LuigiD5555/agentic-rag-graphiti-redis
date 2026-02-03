@@ -1,0 +1,12 @@
+{
+  "excluded_files": [
+    "/mnt/resources/Libros/Aprendizaje/Ciencias de la Computación/Python/Python (MEGA)/Como abrir Archivos Archivos/likebox_data/Nuevo Presentación de Microsoft PowerPoint.pptx"
+  ],
+  "excluded_patterns": [
+    "*.pptx",
+    "*.ppt"
+  ],
+  "max_file_size_mb": 50,
+  "timeout_seconds": 300,
+  "retry_attempts": 2
+}
