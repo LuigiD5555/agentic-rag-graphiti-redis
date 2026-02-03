@@ -431,7 +431,6 @@ _DEFAULT_EXCLUDED_FILES = {
     ".ipynb_checkpoints",
 
     # Virtual environments / package dirs
-    ".venv",
     "venv",
     "env",
     "__pypackages__",

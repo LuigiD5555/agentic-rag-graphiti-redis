@@ -9,13 +9,8 @@
 
 set -e
 
-# Prefer the project's virtual environment python if available.
+# Use the explicitly provided Python, otherwise default to system python3.
 PYTHON_CMD="${PYTHON_CMD:-python3}"
-if [ -x "./.venv/bin/python" ]; then
-    PYTHON_CMD="./.venv/bin/python"
-elif [ -x "./.venv/bin/python3" ]; then
-    PYTHON_CMD="./.venv/bin/python3"
-fi
 
 # Colors
 RED='\033[0;31m'

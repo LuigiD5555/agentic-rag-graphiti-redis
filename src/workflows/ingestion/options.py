@@ -57,7 +57,6 @@ class IngestionOptions:
             ".svn",
             "__pycache__",
             "node_modules",
-            ".venv",
             "venv",
             ".idea",
             ".vscode",

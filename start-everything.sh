@@ -14,13 +14,9 @@
 
 set -e
 
-# Prefer the project's virtual environment python if available.
+# Use the explicitly provided Python, otherwise default to system python3.
+# We intentionally do NOT auto-select a project-specific interpreter to avoid surprising environment clashes.
 PYTHON_CMD="${PYTHON_CMD:-python3}"
-if [ -x "./.venv/bin/python" ]; then
-    PYTHON_CMD="./.venv/bin/python"
-elif [ -x "./.venv/bin/python3" ]; then
-    PYTHON_CMD="./.venv/bin/python3"
-fi
 
 # Ensure Podman Compose does not emit the Bake warning when we delegate.
 export COMPOSE_BAKE=false
@@ -97,6 +93,15 @@ if [ "$deps_ok" = false ]; then
 fi
 
 print_success "All dependencies are installed"
+
+# Verify Python dependencies for host-side tooling.
+print_step "Checking Python host dependencies..."
+if ! "$PYTHON_CMD" -c "import dotenv" >/dev/null 2>&1; then
+    print_error "Missing python dependency: python-dotenv"
+    print_info "Install host dependencies with:"
+    print_info "  $PYTHON_CMD -m pip install -r requirements.txt"
+    exit 1
+fi
 
 # ============================================================================
 # STEP 2: BUILD TOOL IMAGES

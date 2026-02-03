@@ -60,7 +60,7 @@ class MonitoringDaemon:
             os.environ.get("VULTURE_TARGETS", "/workspace/src")
         )
         self.vulture_exclude = self._split_env_list(
-            os.environ.get("VULTURE_EXCLUDE", ".git,.venv,venv,dist,build,__pycache__")
+            os.environ.get("VULTURE_EXCLUDE", ".git,dist,build,__pycache__")
         )
         self._last_vulture_run = 0.0
         self._memory_thread = None

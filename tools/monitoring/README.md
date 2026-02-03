@@ -144,7 +144,7 @@ VULTURE_MIN_CONFIDENCE=80
 VULTURE_TARGETS=/workspace/src
 
 # Vulture exclude paths (comma-separated)
-VULTURE_EXCLUDE=.git,.venv,venv,dist,build,__pycache__
+VULTURE_EXCLUDE=.git,dist,build,__pycache__
 
 # Memory monitor mode: auto | podman | cgroup | system
 MEMORY_MONITOR_MODE=auto

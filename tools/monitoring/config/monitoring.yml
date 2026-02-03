@@ -29,8 +29,6 @@ vulture:
   # Directories/patterns to exclude
   exclude:
     - .git
-    - .venv
-    - venv
     - env
     - dist
     - build
