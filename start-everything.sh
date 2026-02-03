@@ -15,7 +15,7 @@
 set -e
 
 # Use the explicitly provided Python, otherwise default to system python3.
-# We intentionally do NOT auto-select a project-specific interpreter to avoid surprising environment clashes.
+# We intentionally do NOT auto-select .venv to avoid surprising environment clashes.
 PYTHON_CMD="${PYTHON_CMD:-python3}"
 
 # Ensure Podman Compose does not emit the Bake warning when we delegate.
