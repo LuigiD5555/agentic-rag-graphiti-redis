@@ -138,13 +138,15 @@ If you want certain files to be ingested even when their content is identical (b
 
 ### OpenAI-Compatible REST API ✨
 
-The RAG API is **automatically started** when you run `podman-compose up --build -d`. It's accessible at `http://localhost:5555`.
+The RAG API is **automatically started** when you run `podman-compose up --build -d`. It's accessible at `http://localhost:8000` (default).
+
+This API can run in **OpenAI** or **Ollama** compatibility mode (controlled by `API_MODE`). To see what your instance is currently exposing, call `GET /` and inspect `api_mode` + `endpoints`.
 
 **Alternative: Run API locally (without containers):**
 
 ```bash
 # Local with auto-reload (services must be running)
-uvicorn src.api.app:app --host 0.0.0.0 --port 5555 --reload
+uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 **Available endpoints:**
@@ -157,8 +159,8 @@ uvicorn src.api.app:app --host 0.0.0.0 --port 5555 --reload
 
 **Interactive docs:**
 
-- Swagger UI: http://localhost:5555/docs
-- ReDoc: http://localhost:5555/redoc
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
 
 **Example usage with the OpenAI SDK:**
 
@@ -166,7 +168,7 @@ uvicorn src.api.app:app --host 0.0.0.0 --port 5555 --reload
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://localhost:5555/v1",
+    base_url="http://localhost:8000/v1",
     api_key="not-needed"
 )
 
@@ -210,7 +212,44 @@ To ignore files/directories from ingestion, add patterns and paths to `.ingestig
 
 **Interactive CLI mode**
 
+```bash
+python -m src.query.cli
+```
+
 **Single query**
+
+```bash
+python -m src.query.cli "Explain the architecture"
+python -m src.query.cli "Explain the architecture" --top-k 10
+```
+
+**HTTP (recommended for integrations)**
+
+```bash
+# Direct RAG endpoint
+curl -X POST http://localhost:8000/rag/query \
+  -H "Content-Type: application/json" \
+  -d '{"query":"What are the main topics?","top_k":5}' | jq
+
+# OpenAI-compatible
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"rag-local","messages":[{"role":"user","content":"hello"}],"top_k":5}' | jq
+```
+
+**Answer Modes (runtime, configurable)**
+
+```bash
+# List modes
+curl -sS http://localhost:8000/rag/answer-modes | jq
+
+# Create/update a mode
+curl -sS -X PUT "http://localhost:8000/rag/answer-modes/conciso?merge=true" \
+  -H "Content-Type: application/json" \
+  -d '{"description":"Respuesta corta","triggers":["conciso"]}' | jq
+```
+
+More detailed guide: `docs/QUERYING_GUIDE.md`
 
 ---
 
