@@ -128,7 +128,7 @@ services:
       RAG_OPENAI_API_KEY: "not-needed"
 
       # Skip alembic migrations on startup (DB already exists)
-      SKIP_DB_MIGRATIONS: "false"
+      SKIP_DB_MIGRATIONS: "true"
       # Avoid slow torch import during env initialization
       SKIP_TORCH_IMPORT: "true"
       # Avoid parsing CHANGELOG at startup
@@ -141,14 +141,14 @@ services:
       WEAVIATE_GRPC_PORT: "${WEAVIATE_GRPC_PORT:-50051}"
 
     volumes:
-      - ${HOST_OPEN_WEBUI_DATA:-open-webui_data}:/app/backend/data:Z
+      - ${HOST_OPEN_WEBUI_DATA:-./data/open-webui}:/app/backend/data:Z
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:${HOST_OPEN_WEBUI_PORT:-5555}/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      interval: 45s
+      timeout: 20s
+      retries: 5
+      start_period: 60s
     stop_grace_period: 20s
     ulimits:
       nofile: { soft: 65536, hard: 65536 }
@@ -264,10 +264,10 @@ services:
     # App binds to 127.0.0.1:8000 inside container via host network mode
     healthcheck:
       test: ["CMD", "python", "-c", "import os, requests; requests.get(f'http://127.0.0.1:{os.getenv(\"API_PORT\", \"8000\")}/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      interval: 45s
+      timeout: 20s
+      retries: 5
+      start_period: 60s
 
     stop_grace_period: 30s
     ulimits:

@@ -315,12 +315,8 @@ if podman ps | grep -q "weaviate\|neo4j\|app\|open-webui\|monitoring"; then
             print_info "open-webui service not available (profile not enabled)"
         fi
 
-        print_step "Starting all services..."
-        if podman-compose config --services | grep -q "open-webui"; then
-            podman-compose --profile webui up -d
-        else
-            podman-compose up -d
-        fi
+    print_step "Starting all services (excluding Open WebUI - managed by systemd)..."
+    podman-compose up -d
 
         print_step "Waiting for services to initialize..."
         sleep 10
@@ -347,12 +343,8 @@ else
         print_info "open-webui service not available (profile not enabled)"
     fi
 
-    print_step "Starting all services (Weaviate, Neo4j, App, Open WebUI, Monitoring, RabbitMQ)..."
-    if podman-compose config --services | grep -q "open-webui"; then
-        podman-compose --profile webui up -d
-    else
-        podman-compose up -d
-    fi
+    print_step "Starting all services (Weaviate, Neo4j, App, Monitoring, RabbitMQ - Open WebUI managed by systemd)..."
+    podman-compose up -d
 
     print_step "Waiting for services to initialize..."
     sleep 10
