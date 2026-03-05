@@ -158,7 +158,7 @@ print_step "Checking for orphaned processes..."
 # Kill any remaining processes that might be related to the project
 if command -v pkill >/dev/null 2>&1; then
     # Look for processes with project-related names
-    for proc_name in weaviate neo4j rabbitmq rag-agentic open-webui; do
+    for proc_name in weaviate neo4j rag-agentic open-webui; do
         pkill -f "$proc_name" 2>/dev/null || true
     done
     # Give processes time to terminate

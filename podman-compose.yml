@@ -410,41 +410,6 @@ services:
           cpus: "${MONITORING_CPUS:-0.5}"
           memory: "${MONITORING_MEMORY:-512m}"
 
-  rabbitmq:
-    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_rabbitmq_1"
-    image: "docker.io/library/rabbitmq:${RABBITMQ_IMAGE_TAG:-4.2.3-management-alpine}"
-    restart: "no"
-    logging:
-      driver: journald
-    # Use bridge networking with port mapping instead of host networking
-    ports:
-      - "127.0.0.1:5673:5672"
-      - "127.0.0.1:15672:15672"
-    # Remove explicit user specification to let RabbitMQ run with default permissions
-    environment:
-      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-admin}
-      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-change-me-rabbitmq}
-      - RABBITMQ_DEFAULT_VHOST=${RABBITMQ_VHOST:-/rag}
-      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbit log_levels [{connection,error},{default,error}]
-      - RABBITMQ_LOGS=-
-      - RABBITMQ_SASL_LOGS=-
-    volumes:
-      - ${HOST_RABBITMQ_DATA:-rabbitmq_data}:/var/lib/rabbitmq:Z
-      - ${HOST_RABBITMQ_LOGS:-rabbitmq_logs}:/var/log/rabbitmq:Z
-      - ./config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:Z
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    stop_grace_period: 30s
-    deploy:
-      resources:
-        limits:
-          cpus: "${RABBITMQ_CPUS:-0.5}"
-          memory: "${RABBITMQ_MEMORY:-512m}"
-
 volumes:
   neo4j_data: {}
   neo4j_logs: {}
@@ -453,5 +418,3 @@ volumes:
   monitoring_logs: {}
   monitoring_reports: {}
   monitoring_data: {}
-  rabbitmq_data: {}
-  rabbitmq_logs: {}
