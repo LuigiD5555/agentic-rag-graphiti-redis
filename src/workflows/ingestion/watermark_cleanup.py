@@ -324,8 +324,8 @@ class WatermarkCleanup:
                         file_path = Path(root) / f
                         try:
                             size_bytes += file_path.stat().st_size
-                        except:
-                            pass
+                        except OSError as exc:
+                            logger.debug("Could not stat %s during cleanup size calculation: %s", file_path, exc)
                 
                 # Remove directory
                 shutil.rmtree(str(item), ignore_errors=True)
