@@ -26,6 +26,7 @@ import uuid
 from typing import Dict, Any, List, Optional, Callable
 
 from src.messaging.broker import get_broker
+from src.messaging.config import config as broker_config
 from src.messaging.models.message import Message, MessagePayload
 from src.workflows.ingestion.jobs.models import IngestionJobMessage, IngestionPhase, ProcessingDecision
 from src.workflows.ingestion.state.job_state_repository import JobStateRepository
@@ -37,10 +38,10 @@ log = get_logger(__name__)
 class RabbitMQIngestQueue:
     """RabbitMQ-based ingestion queue with SQLite idempotence gating."""
     
-    # Queue names
-    WORK_QUEUE = "ingest.work"
-    RETRY_QUEUE = "ingest.retry"
-    DLQ_QUEUE = "ingest.dlq"
+    # Queue names — must match broker_config.ingest_*_queue
+    WORK_QUEUE = broker_config.ingest_work_queue
+    RETRY_QUEUE = broker_config.ingest_retry_queue
+    DLQ_QUEUE = broker_config.ingest_dlq_queue
     
     # Configuration
     MAX_RETRIES = 3

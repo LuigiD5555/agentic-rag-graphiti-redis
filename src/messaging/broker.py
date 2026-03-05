@@ -104,11 +104,18 @@ class RabbitMQBroker(MessageBroker):
             type=ExchangeType.TOPIC,
             durable=True
         )
-        
+
         # Fanout exchange for notifications
         self.exchanges["fanout"] = await self.channel.declare_exchange(
             name=config.fanout_exchange,
             type=ExchangeType.FANOUT,
+            durable=True
+        )
+
+        # Topic exchange for ingestion workers
+        self.exchanges["ingest"] = await self.channel.declare_exchange(
+            name=config.ingest_exchange,
+            type=ExchangeType.TOPIC,
             durable=True
         )
     
@@ -127,7 +134,7 @@ class RabbitMQBroker(MessageBroker):
             exchange=self.exchanges["topic"],
             routing_key="document.*"
         )
-        
+
         # Vector storage queue
         self.queues["vector"] = await self.channel.declare_queue(
             name=config.vector_queue,
@@ -141,7 +148,7 @@ class RabbitMQBroker(MessageBroker):
             exchange=self.exchanges["topic"],
             routing_key="vector.*"
         )
-        
+
         # System notifications queue
         self.queues["notification"] = await self.channel.declare_queue(
             name=config.notification_queue,
@@ -154,12 +161,53 @@ class RabbitMQBroker(MessageBroker):
             exchange=self.exchanges["fanout"]
         )
 
+        # Ingestion work queue
+        self.queues["ingest_work"] = await self.channel.declare_queue(
+            name=config.ingest_work_queue,
+            durable=True,
+            arguments={
+                "x-max-priority": 10,
+                "x-dead-letter-exchange": config.ingest_exchange,
+                "x-dead-letter-routing-key": "ingest.dlq",
+            }
+        )
+        await self.queues["ingest_work"].bind(
+            exchange=self.exchanges["ingest"],
+            routing_key="ingest.work"
+        )
+
+        # Ingestion retry queue
+        self.queues["ingest_retry"] = await self.channel.declare_queue(
+            name=config.ingest_retry_queue,
+            durable=True,
+            arguments={
+                "x-max-priority": 10,
+            }
+        )
+        await self.queues["ingest_retry"].bind(
+            exchange=self.exchanges["ingest"],
+            routing_key="ingest.retry"
+        )
+
+        # Ingestion dead-letter queue
+        self.queues["ingest_dlq"] = await self.channel.declare_queue(
+            name=config.ingest_dlq_queue,
+            durable=True,
+        )
+        await self.queues["ingest_dlq"].bind(
+            exchange=self.exchanges["ingest"],
+            routing_key="ingest.dlq"
+        )
+
     def _get_exchange_info(self, queue: str, message: MessageModel) -> Optional[tuple]:
         """Get exchange and routing key info for a queue."""
         queue_mappings = {
             config.document_queue: (self.exchanges["topic"], f"document.{message.payload.operation}"),
             config.vector_queue: (self.exchanges["topic"], f"vector.{message.payload.operation}"),
             config.notification_queue: (self.exchanges["fanout"], ""),
+            config.ingest_work_queue: (self.exchanges["ingest"], "ingest.work"),
+            config.ingest_retry_queue: (self.exchanges["ingest"], "ingest.retry"),
+            config.ingest_dlq_queue: (self.exchanges["ingest"], "ingest.dlq"),
         }
         return queue_mappings.get(queue)
 
@@ -169,6 +217,9 @@ class RabbitMQBroker(MessageBroker):
             config.document_queue: self.queues["document"],
             config.vector_queue: self.queues["vector"],
             config.notification_queue: self.queues["notification"],
+            config.ingest_work_queue: self.queues["ingest_work"],
+            config.ingest_retry_queue: self.queues["ingest_retry"],
+            config.ingest_dlq_queue: self.queues["ingest_dlq"],
         }
         return queue_mappings.get(queue)
 

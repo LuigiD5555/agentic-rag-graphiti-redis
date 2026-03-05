@@ -20,10 +20,16 @@ class RabbitMQConfig(BaseSettings):
     document_queue: str = "document-processing"
     vector_queue: str = "vector-storage"
     notification_queue: str = "system-notifications"
-    
+
+    # Ingestion worker queues
+    ingest_work_queue: str = "ingest.work"
+    ingest_retry_queue: str = "ingest.retry"
+    ingest_dlq_queue: str = "ingest.dlq"
+
     # Exchange configurations
     topic_exchange: str = "processing.topic"
     fanout_exchange: str = "notifications.fanout"
+    ingest_exchange: str = "ingest.topic"
     
     # Dead letter exchanges
     processing_dlx: str = "processing.dlx"
