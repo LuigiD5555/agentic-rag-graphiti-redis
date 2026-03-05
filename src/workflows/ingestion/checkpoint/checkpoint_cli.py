@@ -214,46 +214,67 @@ class CheckpointCLI:
     # ============================================================================
 
     def _queue_stats(self):
-        print("\nIngestion Queue Statistics:")
+        from src.workflows.ingestion.checkpoint.ingest_queue import IngestQueue
+
+        queue = IngestQueue()
+        stats = queue.get_stats()
+
+        print("\nIngestion Queue Statistics (SQLite):")
         print("=" * 80)
-        print("Note: SQLite-based queue is deprecated.")
-        print("RabbitMQ is now the only queue (per specification).")
-        print("\nUse RabbitMQ management interface for queue statistics:")
-        print("  - http://localhost:15672 (management UI)")
-        print("  - rabbitmqctl list_queues (CLI)")
-        print("\nFor ledger/checkpoint statistics, use the new ledger repository.")
+        print(f"Total Enqueued: {stats['total_enqueued']}")
+        print(f"Pending:        {stats['pending']}")
+        print(f"Processing:     {stats['processing']}")
+        print(f"Completed:      {stats['completed']}")
+        print(f"Failed (DLQ):   {stats['failed']}")
 
     def _queue_list(self, limit: int):
-        print("\nPending Jobs List:")
+        from src.workflows.ingestion.checkpoint.ingest_queue import IngestQueue
+        import socket, os
+
+        queue = IngestQueue()
+        consumer_name = f"{socket.gethostname()}_{os.getpid()}_cli"
+        jobs = queue.dequeue(consumer_name=consumer_name, count=limit, block=0)
+
+        print("\nPending Jobs (SQLite):")
         print("=" * 80)
-        print("Note: SQLite-based queue is deprecated.")
-        print("RabbitMQ is now the only queue (per specification).")
-        print("\nSQLite queue data shown below is for historical reference only.")
-        print("Active jobs are managed by RabbitMQ.")
-        print("\nTo view active RabbitMQ queues:")
-        print("  - RabbitMQ management UI: http://localhost:15672")
-        print("  - CLI: rabbitmqctl list_queues")
+        if not jobs:
+            print("No pending jobs.")
+            return
+        for job_id, job in jobs:
+            print(f"  {job_id}: {job.file_path} (run_id={job.run_id}, retries={job.retry_count})")
 
     def _queue_dlq(self, limit: int):
-        print("\nDead Letter Queue:")
+        from src.backends.storage.sqlite.manager import get_sqlite_manager
+
+        manager = get_sqlite_manager()
+        with manager.control_plane.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT job_id, file_path, run_id, retry_count, error FROM ingest_jobs "
+                "WHERE status = 'dlq' ORDER BY updated_at DESC LIMIT ?",
+                (limit,),
+            )
+            rows = cursor.fetchall()
+
+        print("\nDead Letter Queue (SQLite):")
         print("=" * 80)
-        print("Note: SQLite-based queue is deprecated.")
-        print("RabbitMQ is now the only queue (per specification).")
-        print("\nSQLite DLQ data shown below is for historical reference only.")
-        print("Active DLQ is managed by RabbitMQ.")
-        print("\nTo view RabbitMQ DLQ:")
-        print("  - RabbitMQ management UI: http://localhost:15672")
-        print("  - Look for queues with '.dlq' suffix")
+        if not rows:
+            print("No failed jobs in DLQ.")
+            return
+        for row in rows:
+            print(f"  {row[0]}: {row[1]} (run_id={row[2]}, retries={row[3]})")
+            if row[4]:
+                print(f"    Error: {row[4][:100]}")
 
     def _queue_clear(self, force: bool):
-        print("\nQueue Clear Operation:")
-        print("=" * 80)
-        print("Note: SQLite-based queue is deprecated.")
-        print("RabbitMQ is now the only queue (per specification).")
-        print("\nTo clear RabbitMQ queues, use:")
-        print("  - RabbitMQ management UI: http://localhost:15672")
-        print("  - CLI: rabbitmqctl purge_queue <queue_name>")
-        print("\nSQLite queue data is no longer used for active processing.")
+        from src.workflows.ingestion.checkpoint.ingest_queue import IngestQueue
+
+        if not force:
+            print("Pass --force to confirm clearing the SQLite ingestion queue.")
+            return
+
+        queue = IngestQueue()
+        queue.clear_queue()
+        print("SQLite ingestion queue cleared.")
 
     # ============================================================================
     # Chunk Commands

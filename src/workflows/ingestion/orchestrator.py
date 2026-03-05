@@ -26,6 +26,7 @@ from src.workflows.ingestion.watermark_cleanup import create_default_cleanup
 
 # Checkpoint system
 from src.workflows.ingestion.checkpoint.scan_checkpointer import ScanCheckpointer
+from src.workflows.ingestion.checkpoint.ingest_queue import IngestQueue
 
 logger = get_logger(__name__)
 
@@ -345,11 +346,16 @@ class IngestionOrchestrator:
             include_duplicates_patterns=tuple(getattr(self._config, "INGEST_DUPLICATE_PATTERNS", ()) or ()),
         )
 
+        ingest_queue = None
+        if getattr(self._config, "INGESTION_RESUMABLE_ENABLED", False):
+            ingest_queue = IngestQueue()
+
         pipeline = IngestionPipeline.from_options(
             embedding_service=embedding_service,
             vector_store=vector_store,
             options=pipeline_options,
             cache_manager=self._cache_manager,
+            ingest_queue=ingest_queue,
         )
         pipeline.ledger = self._ledger
 
@@ -400,9 +406,8 @@ class IngestionOrchestrator:
                 wave_orchestrator = create_default_wave_orchestrator()
                 logger.info("Wave Planner enabled for wave-based processing")
 
-                # Resource Pools
+                # Resource Pools (initialized for future use)
                 resource_pools = get_global_ingestion_pools(self._config)
-                logger.info("Resource Pools enabled for concurrency control")
 
                 # Watermark Cleanup
                 watermark_cleanup = create_default_cleanup(self._config)
@@ -467,7 +472,6 @@ class IngestionOrchestrator:
             except Exception as e:
                 logger.warning("Error configuring Resource Pools: %s", e)
         
-        self._configure_resumable_ingestion(pipeline)
         logger.info("Starting ingestion phase (run=%s)", phase_id)
         
         # Run the embedding phase with optimized components
@@ -533,26 +537,6 @@ class IngestionOrchestrator:
             self._cleanup_preprocessed_outputs(preprocessed_records, result)
 
         return result, strategy.__class__.__name__
-
-    def _configure_resumable_ingestion(self, pipeline: IngestionPipeline) -> None:
-        """Configure RabbitMQ-based resumable ingestion.
-        
-        According to specification: Planner publishes to RabbitMQ, Worker executes.
-        SQLite is used for state/idempotence, not as a queue.
-        """
-        # Early returns for guard conditions
-        if not getattr(self._config, "INGESTION_RESUMABLE_ENABLED", False):
-            return
-
-        # Note: We don't configure ingest_queue in pipeline anymore
-        # because RabbitMQ is the only queue (per specification).
-        # The pipeline should work in "local mode" when called directly,
-        # and in "RabbitMQ mode" when jobs are published separately.
-        
-        logger.info(
-            "RabbitMQ-based resumable ingestion enabled. "
-            "Jobs will be published to RabbitMQ, not executed locally."
-        )
 
     def _cleanup_preprocessed_outputs(self, records: List[Any], result: dict) -> None:
         # Early returns for guard conditions
