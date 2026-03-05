@@ -23,7 +23,6 @@ from src.utils.text import effective_limit
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from src.workflows.ingestion.resource_pools import IngestionPools
-    from src.workflows.ingestion.idempotency import IdempotencyManager
 
 
 CATALOG_PATH = os.environ.get(
@@ -58,6 +57,7 @@ class IngestionPipeline:
         # New optimization components
         self.resource_pools = None
         self.idempotency_manager = None
+        self.ledger = None  # LedgerRepository — set by orchestrator
 
         self.owner_id = options.owner_id
         self.visibility = options.visibility

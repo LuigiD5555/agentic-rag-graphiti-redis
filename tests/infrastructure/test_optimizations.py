@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from src.workflows.ingestion.wave_planner import WavePlanner, WaveOrchestrator
 from src.workflows.ingestion.resource_pools import ResourcePool, IngestionPools
 from src.workflows.ingestion.watermark_cleanup import WatermarkCleanup
-from src.workflows.ingestion.idempotency import IdempotencyManager, ProcessingStage
+from src.ingestion.ledger.ledger_repository import LedgerRepository, Stage
 from src.workflows.ingestion.metrics import MetricsCollector, IngestionMetrics
 
 
@@ -160,51 +160,55 @@ def test_watermark_cleanup():
     return True
 
 
-def test_idempotency_manager():
-    """Tests the Idempotency Manager."""
-    print("=== Testing Idempotency Manager ===")
-    
-    # Create a temporary test file
+def test_ledger_repository():
+    """Tests the LedgerRepository (replaces IdempotencyManager)."""
+    print("=== Testing LedgerRepository ===")
+
+    # Use unique content to avoid collisions with a persistent SQLite DB
+    unique_marker = str(time.monotonic())
     test_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
-    test_file.write("Sample content for idempotency\n" * 10)
+    test_file.write(f"Unique ledger test content {unique_marker}\n" * 10)
     test_file.close()
-    
-    # Test IdempotencyManager
-    manager = IdempotencyManager(ttl_seconds=3600)
-    
-    # Compute file hash
-    file_hash = manager.compute_file_hash(test_file.name)
-    print(f"File hash: {file_hash[:16]}...")
-    
-    # Check initial state
-    initial_state = manager.get_file_state(test_file.name)
-    print(f"Initial state: {'Exists' if initial_state else 'Not found'}")
-    
-    # Mark stages
-    manager.mark_stage_completed(test_file.name, ProcessingStage.DISCOVERED)
-    manager.mark_stage_completed(test_file.name, ProcessingStage.PREPROCESSED)
-    
-    # Check next stage
-    next_stage = manager.get_next_stage(test_file.name)
-    print(f"Next stage: {next_stage.value if next_stage else 'Completed'}")
-    
-    # Check if file should be skipped
-    should_skip, reason = manager.should_skip_file(test_file.name)
-    print(f"Should skip: {should_skip} ({reason if reason else 'N/A'})")
-    
-    # Test batch check
-    batch_result = manager.batch_check_states([test_file.name])
-    print(f"Batch check: {len(batch_result)} results")
-    
-    # Retrieve metrics
-    metrics = manager.get_metrics()
-    print(f"Cache size: {metrics['cache_size']}")
-    print(f"Hit ratio: {metrics['hit_ratio']:.2%}")
-    
-    # Clean up
+
+    ledger = LedgerRepository()
+
+    # First call: file is new, should be processed
+    skip, reason = ledger.should_skip_file(test_file.name)
+    print(f"First call — skip: {skip}, reason: {reason}")
+    assert not skip, "New file should not be skipped"
+
+    # Simulate completing UPSERT stage
+    doc_id = ledger.get_or_create_document(test_file.name)
+    active_version = ledger.get_active_version(doc_id)
+    import time as _time
+    if active_version:
+        ledger.mark_stage_done(active_version, Stage.CHUNK, int(_time.time()))
+        ledger.mark_stage_done(active_version, Stage.EMBED, int(_time.time()))
+        ledger.mark_stage_done(active_version, Stage.UPSERT, int(_time.time()))
+
+    # Second call: UPSERT is DONE, file should be skipped
+    skip, reason = ledger.should_skip_file(test_file.name)
+    print(f"Second call — skip: {skip}, reason: {reason}")
+    assert skip and reason == "cache_hit", f"Fully processed file should be cache_hit, got: {reason}"
+
+    # Stage status check
+    if active_version:
+        upsert_status = ledger.get_stage_status(active_version, Stage.UPSERT)
+        print(f"UPSERT status: {upsert_status['status']}")
+
+    # Content deduplication: second file with same content should be skipped as duplicate
+    test_file2 = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+    test_file2.write("Sample content for ledger test\n" * 10)  # Same content
+    test_file2.close()
+
+    skip2, reason2 = ledger.should_skip_file(test_file2.name)
+    print(f"Duplicate file — skip: {skip2}, reason: {reason2}")
+    assert skip2 and reason2 == "duplicate", f"Duplicate content should be skipped, got: {reason2}"
+
     os.unlink(test_file.name)
-    
-    print("✓ Idempotency Manager tested successfully\n")
+    os.unlink(test_file2.name)
+
+    print("✓ LedgerRepository tested successfully\n")
     return True
 
 
@@ -274,14 +278,14 @@ def test_integration():
         wave_planner = WavePlanner(max_mb_per_wave=5.0, max_files_per_wave=10)
         resource_pools = IngestionPools()
         watermark_cleanup = WatermarkCleanup(staging_dir=test_dir)
-        idempotency_manager = IdempotencyManager()
+        ledger = LedgerRepository()
         metrics_collector = MetricsCollector()
-        
+
         print("Components initialized:")
         print(f"  - WavePlanner: {wave_planner}")
         print(f"  - IngestionPools: {resource_pools}")
         print(f"  - WatermarkCleanup: {watermark_cleanup}")
-        print(f"  - IdempotencyManager: {idempotency_manager}")
+        print(f"  - LedgerRepository: {ledger}")
         print(f"  - MetricsCollector: {metrics_collector}")
         
         # Create test files
@@ -298,13 +302,17 @@ def test_integration():
         waves = wave_planner.plan_waves(test_files)
         print(f"  1. Wave Planning: {len(waves)} waves created")
         
-        # 2. Idempotency check
+        # 2. Ledger skip check
         for file_path in test_files:
-            should_skip, reason = idempotency_manager.should_skip_file(file_path)
-            if not should_skip:
-                idempotency_manager.mark_stage_completed(file_path, ProcessingStage.DISCOVERED)
-        
-        print(f"  2. Idempotency: {len(test_files)} files marked as discovered")
+            skip, reason = ledger.should_skip_file(file_path)
+            if not skip:
+                doc_id = ledger.get_or_create_document(file_path)
+                active_ver = ledger.get_active_version(doc_id)
+                if active_ver:
+                    import time as _t
+                    ledger.mark_stage_done(active_ver, Stage.DISCOVER, int(_t.time()))
+
+        print(f"  2. Ledger: {len(test_files)} files checked and DISCOVER marked")
         
         # 3. Resource Pool processing (simulated)
         def process_file(file_path):
@@ -358,7 +366,7 @@ def main():
         ("Wave Planner", test_wave_planner),
         ("Resource Pools", test_resource_pools),
         ("Watermark Cleanup", test_watermark_cleanup),
-        ("Idempotency Manager", test_idempotency_manager),
+        ("Ledger Repository", test_ledger_repository),
         ("Metrics Collector", test_metrics_collector),
         ("Full Integration", test_integration),
     ]

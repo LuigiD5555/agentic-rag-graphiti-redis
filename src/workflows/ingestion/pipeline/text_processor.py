@@ -217,6 +217,18 @@ def process_text_document(pipeline: Any, loader: object) -> None:
 
     _log_with_file_prefix(file_context, "Split into %d chunk(s) from %s", len(chunks), source)
 
+    # Ledger: mark CHUNK stage done
+    ledger = getattr(pipeline, "ledger", None)
+    if ledger is not None:
+        try:
+            from src.ingestion.ledger.ledger_repository import Stage
+            doc_id = ledger.get_or_create_document(source)
+            active_version = ledger.get_active_version(doc_id)
+            if active_version:
+                ledger.mark_stage_done(active_version, Stage.CHUNK, int(time.time()))
+        except Exception as _exc:
+            logger.debug("Ledger CHUNK mark failed for %s: %s", source, _exc)
+
     with IngestionStageReporter(
         logger=logger,
         stage_name="prepare_segments",
@@ -384,6 +396,18 @@ def process_text_document(pipeline: Any, loader: object) -> None:
 
                 # Clear batch for next iteration
                 batch_records.clear()
+
+    # Ledger: mark EMBED stage done
+    ledger = getattr(pipeline, "ledger", None)
+    if ledger is not None:
+        try:
+            from src.ingestion.ledger.ledger_repository import Stage
+            doc_id = ledger.get_or_create_document(source)
+            active_version = ledger.get_active_version(doc_id)
+            if active_version:
+                ledger.mark_stage_done(active_version, Stage.EMBED, int(time.time()))
+        except Exception as _exc:
+            logger.debug("Ledger EMBED mark failed for %s: %s", source, _exc)
 
     finalize_file_ingestion(pipeline, file_info, chunk_total=segment_total)
 

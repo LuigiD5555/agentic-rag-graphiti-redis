@@ -8,10 +8,11 @@
 - list_expired_artifacts
 """
 
+import os
 import time
 import hashlib
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass
 from enum import Enum
 
@@ -154,6 +155,16 @@ class LedgerRepository:
                 "CREATE INDEX IF NOT EXISTS idx_artifacts_expires "
                 "ON artifacts(expires_at)"
             )
+
+            # Content deduplication table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS content_fingerprints (
+                    fingerprint TEXT NOT NULL,
+                    canonical_document_id TEXT NOT NULL,
+                    PRIMARY KEY (fingerprint),
+                    FOREIGN KEY(canonical_document_id) REFERENCES documents(document_id)
+                )
+            """)
     
     def _normalize_path(self, file_path: str) -> str:
         """Normalize file path."""
@@ -419,29 +430,31 @@ class LedgerRepository:
                 raise
     
     def mark_stage_done(self, version_id: str, stage: Stage, now: int) -> None:
-        """Mark stage as successfully completed."""
+        """Mark stage as successfully completed (upserts the row if not yet claimed)."""
         with self.control_plane.get_connection() as conn:
             conn.execute("""
-                UPDATE version_stage_state 
-                SET status = 'DONE',
-                    updated_at = ?,
+                INSERT INTO version_stage_state (version_id, stage, status, owner, attempt, updated_at, error_last)
+                VALUES (?, ?, 'DONE', NULL, 1, ?, NULL)
+                ON CONFLICT(version_id, stage) DO UPDATE SET
+                    status = 'DONE',
+                    updated_at = excluded.updated_at,
                     error_last = NULL
-                WHERE version_id = ? AND stage = ?
-            """, (now, version_id, stage.value))
-    
+            """, (version_id, stage.value, now))
+
     def mark_stage_failed(
         self, version_id: str, stage: Stage, now: int,
         error_summary: str
     ) -> None:
-        """Mark stage as failed."""
+        """Mark stage as failed (upserts the row if not yet claimed)."""
         with self.control_plane.get_connection() as conn:
             conn.execute("""
-                UPDATE version_stage_state 
-                SET status = 'FAILED',
-                    updated_at = ?,
-                    error_last = ?
-                WHERE version_id = ? AND stage = ?
-            """, (now, error_summary, version_id, stage.value))
+                INSERT INTO version_stage_state (version_id, stage, status, owner, attempt, updated_at, error_last)
+                VALUES (?, ?, 'FAILED', NULL, 1, ?, ?)
+                ON CONFLICT(version_id, stage) DO UPDATE SET
+                    status = 'FAILED',
+                    updated_at = excluded.updated_at,
+                    error_last = excluded.error_last
+            """, (version_id, stage.value, now, error_summary))
     
     def register_artifact(
         self, version_id: str, artifact_kind: str,
@@ -493,11 +506,11 @@ class LedgerRepository:
                 FROM version_stage_state
                 WHERE version_id = ? AND stage = ?
             """, (version_id, stage.value))
-            
+
             row = cursor.fetchone()
             if not row:
                 return None
-            
+
             return {
                 "status": row[0],
                 "owner": row[1],
@@ -505,3 +518,84 @@ class LedgerRepository:
                 "updated_at": row[3],
                 "error_last": row[4]
             }
+
+    # -------------------------------------------------------------------------
+    # File-skip decision (replaces FileCacheOperations + IdempotencyManager)
+    # -------------------------------------------------------------------------
+
+    def _compute_fingerprint(self, file_path: str, paranoid: bool = False) -> str:
+        """Compute a file fingerprint.
+
+        Fast path (default): "<size>:<mtime_ms>" — no file reads.
+        Paranoid path: full SHA-256 of file content (used for deduplication).
+        """
+        stat = Path(file_path).stat()
+        if not paranoid:
+            return f"{stat.st_size}:{stat.st_mtime:.3f}"
+        h = hashlib.sha256()
+        with open(file_path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
+    def should_skip_file(self, file_path: str) -> Tuple[bool, str]:
+        """Answer whether this file should be skipped during ingestion.
+
+        Returns:
+            (skip, reason) where reason is one of:
+              'cache_hit'  — file already fully ingested at this fingerprint
+              'duplicate'  — identical content already ingested under another path
+              'process'    — file must be (re)processed
+        """
+        try:
+            # Fast fingerprint: size + mtime, no content read
+            fast_fp = self._compute_fingerprint(file_path, paranoid=False)
+            document_id = self.get_or_create_document(file_path)
+            decision = self.ensure_version(document_id, fast_fp)
+
+            if decision.decision == VersionDecision.ALREADY_ACTIVE:
+                upsert = self.get_stage_status(decision.new_version_id, Stage.UPSERT)
+                if upsert and upsert["status"] == "DONE":
+                    return True, "cache_hit"
+
+            # Content-level deduplication (only when file is new/changed)
+            try:
+                content_hash = self._compute_fingerprint(file_path, paranoid=True)
+                canonical = self.find_duplicate(content_hash)
+                if canonical and canonical != document_id:
+                    return True, "duplicate"
+                # Register this file as canonical for its content hash
+                self.register_canonical(content_hash, document_id)
+            except OSError as exc:
+                log.debug("Could not compute content hash for %s: %s", file_path, exc)
+
+            return False, "process"
+
+        except Exception as exc:
+            log.warning("should_skip_file failed for %s: %s — defaulting to process", file_path, exc)
+            return False, "process"
+
+    # -------------------------------------------------------------------------
+    # Content deduplication
+    # -------------------------------------------------------------------------
+
+    def find_duplicate(self, content_hash: str) -> Optional[str]:
+        """Return the canonical document_id for this content hash, or None."""
+        with self.control_plane.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT canonical_document_id FROM content_fingerprints WHERE fingerprint = ?",
+                (content_hash,)
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+
+    def register_canonical(self, content_hash: str, document_id: str) -> None:
+        """Register document_id as the canonical owner of this content hash.
+
+        Uses INSERT OR IGNORE so that the first writer wins (stable canonical).
+        """
+        with self.control_plane.get_connection() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO content_fingerprints (fingerprint, canonical_document_id) VALUES (?, ?)",
+                (content_hash, document_id)
+            )

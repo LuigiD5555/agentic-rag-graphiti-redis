@@ -47,7 +47,24 @@ def _update_file_cache(
     status: str = "processed",
     error_message: str | None = None,
 ) -> None:
-    """Update cache with processed file metadata."""
+    """Update cache and ledger with processed file metadata."""
+    # --- LedgerRepository: mark UPSERT stage as done/failed ---
+    ledger = getattr(pipeline, "ledger", None)
+    if ledger is not None:
+        try:
+            from src.ingestion.ledger.ledger_repository import Stage
+            doc_id = ledger.get_or_create_document(full_path)
+            active_version = ledger.get_active_version(doc_id)
+            if active_version:
+                now_ts = int(time.time())
+                if status == "processed":
+                    ledger.mark_stage_done(active_version, Stage.UPSERT, now_ts)
+                else:
+                    ledger.mark_stage_failed(active_version, Stage.UPSERT, now_ts, error_message or "unknown error")
+        except Exception as exc:
+            logger.warning("Ledger update failed for %s: %s", full_path, exc)
+
+    # --- Legacy cache (kept until ledger is fully validated) ---
     cache_manager = getattr(pipeline, "cache_manager", None)
     if not cache_manager:
         logger.warning("Cache manager not available for pipeline, skipping cache update for %s", full_path)
@@ -58,7 +75,6 @@ def _update_file_cache(
         return
 
     try:
-        # Compute file hash
         logger.debug("Computing file hash for %s", full_path)
         content_hash = cache_manager.compute_file_hash(full_path)
         if not content_hash:
@@ -67,14 +83,11 @@ def _update_file_cache(
 
         logger.debug("File hash computed: %s for %s", content_hash[:16], full_path)
 
-        # Get file stats
         stat = Path(full_path).stat()
         logger.debug("File stats: size=%d, mtime=%f for %s", stat.st_size, stat.st_mtime, full_path)
 
-        # Import FileMetadata
         from src.backends.storage.cache.ingestion import FileMetadata
 
-        # Create metadata
         metadata = FileMetadata(
             file_path=full_path,
             content_hash=content_hash,
@@ -87,9 +100,6 @@ def _update_file_cache(
             error_message=error_message,
         )
 
-        logger.debug("Created metadata object for %s", full_path)
-
-        # Save to cache
         success = cache_manager.set_file_metadata(metadata)
         if success:
             logger.info(
@@ -133,18 +143,26 @@ def process_candidate_file(
     file_info = gather_file_metadata(full_path)
     register_observed_file(pipeline, full_path)
 
-    # Check cache if available
-    cache_manager = getattr(pipeline, "cache_manager", None)
-    if cache_manager and cache_manager.enabled:
-        # Check if file is unchanged using content hash
+    # LedgerRepository: single source of truth for skip decisions
+    ledger = getattr(pipeline, "ledger", None)
+    if ledger is not None:
+        skip, reason = ledger.should_skip_file(full_path)
+        if skip:
+            logger.info(
+                "LEDGER HIT: Skipping %s (%s)",
+                os.path.basename(full_path),
+                reason,
+            )
+            pipeline._current_file_info = None
+            return
+    elif (cache_manager := getattr(pipeline, "cache_manager", None)) and cache_manager.enabled:
+        # Fallback: legacy cache path (kept until LedgerRepository is fully validated)
         if cache_manager.is_file_unchanged(full_path):
             cached_meta = cache_manager.get_file_metadata(full_path)
             if cached_meta and cached_meta.status == "processed":
-                # Calculate time saved
                 import datetime
                 last_processed = datetime.datetime.fromtimestamp(cached_meta.last_processed)
                 time_ago = datetime.datetime.now() - last_processed
-
                 logger.info(
                     "CACHE HIT: Skipping %s (processed %s ago, %d chunks, %d embeddings) [%s]",
                     os.path.basename(full_path),
@@ -156,23 +174,17 @@ def process_candidate_file(
                 pipeline._current_file_info = None
                 return
 
-        # Content-based deduplication: check if identical file was already processed.
-        # Some files are intentionally excluded from deduplication when their location matters.
         include_patterns = getattr(getattr(pipeline, "options", None), "include_duplicates_patterns", ())
         preserve_dupes = should_preserve_duplicates(full_path, include_patterns)
-
         content_hash = None if preserve_dupes else cache_manager.compute_file_hash(full_path)
 
         if content_hash:
             duplicate_meta = cache_manager.find_processed_file_by_hash(content_hash)
             if duplicate_meta and duplicate_meta.file_path != full_path:
-                # Found a duplicate! Reuse its metadata without processing
                 import datetime
                 from src.backends.storage.cache.ingestion import FileMetadata
-
                 last_processed = datetime.datetime.fromtimestamp(duplicate_meta.last_processed)
                 time_ago = datetime.datetime.now() - last_processed
-
                 logger.info(
                     "DUPLICATE: Skipping %s (identical to %s, processed %s ago, %d chunks, %d embeddings)",
                     os.path.basename(full_path),
@@ -181,8 +193,6 @@ def process_candidate_file(
                     duplicate_meta.chunk_count,
                     duplicate_meta.embedding_count,
                 )
-
-                # Cache this file with the same processing results
                 stat = Path(full_path).stat()
                 cache_manager.set_file_metadata(
                     FileMetadata(

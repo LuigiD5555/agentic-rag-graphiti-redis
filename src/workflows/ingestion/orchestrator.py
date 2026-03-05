@@ -11,6 +11,7 @@ from src.workflows.ingestion.phases import PhaseManager
 from src.workflows.ingestion.preprocessor import get_ingestion_preprocessor
 from src.workflows.ingestion.strategies import select_strategy
 from src.backends.storage.cache.ingestion.manager import IngestionCacheManager
+from src.ingestion.ledger.ledger_repository import LedgerRepository
 from src.backends.storage.vector import get_vector_store
 from src.workflows.query.embeddings_factory import get_embedding_service
 from src.backends.llm.factory import ProviderFactory
@@ -22,7 +23,6 @@ from src.conf import settings as runtime_settings
 from src.workflows.ingestion.wave_planner import create_default_wave_orchestrator
 from src.workflows.ingestion.resource_pools import get_global_ingestion_pools
 from src.workflows.ingestion.watermark_cleanup import create_default_cleanup
-from src.workflows.ingestion.idempotency import create_default_idempotency_manager
 
 # Checkpoint system
 from src.workflows.ingestion.checkpoint.scan_checkpointer import ScanCheckpointer
@@ -45,6 +45,9 @@ class IngestionOrchestrator:
 
         # Initialize cache manager (SQLite-only control plane)
         self._cache_manager = IngestionCacheManager.from_settings(self._export_settings_dict(self._config))
+
+        # LedgerRepository — single source of truth for file-skip decisions
+        self._ledger = LedgerRepository()
 
         # Initialize scan checkpointer for resumable scanning
         scan_checkpointer = None
@@ -348,6 +351,7 @@ class IngestionOrchestrator:
             options=pipeline_options,
             cache_manager=self._cache_manager,
         )
+        pipeline.ledger = self._ledger
 
         logger.info("Ingestion pipeline built successfully.")
         return pipeline
@@ -386,29 +390,26 @@ class IngestionOrchestrator:
         wave_orchestrator = None
         resource_pools = None
         watermark_cleanup = None
-        idempotency_manager = None
-        
+
         # Determine whether to use the optimized components
         use_optimized_pipeline = getattr(self._config, "OPTIMIZED_INGESTION_ENABLED", True)
-        
+
         if use_optimized_pipeline:
             try:
-                # Wave Planner (Phase 3)
+                # Wave Planner
                 wave_orchestrator = create_default_wave_orchestrator()
                 logger.info("Wave Planner enabled for wave-based processing")
-                
-                # Resource Pools (Phase 4)
+
+                # Resource Pools
                 resource_pools = get_global_ingestion_pools(self._config)
                 logger.info("Resource Pools enabled for concurrency control")
-                
-                # Watermark Cleanup (Phase 5)
+
+                # Watermark Cleanup
                 watermark_cleanup = create_default_cleanup(self._config)
                 logger.info("Watermark Cleanup enabled for disk management")
-                
-                # Idempotency Manager (Phase 6)
-                idempotency_manager = create_default_idempotency_manager(self._config)
-                logger.info("Idempotency Manager enabled for safe retries")
-                
+
+                # Note: IdempotencyManager removed — LedgerRepository handles retries/skip logic
+
             except Exception as e:
                 logger.warning("Error initializing optimized components: %s", e)
                 logger.info("Continuing with standard pipeline")
@@ -472,10 +473,6 @@ class IngestionOrchestrator:
         # Run the embedding phase with optimized components
         if use_optimized_pipeline:
             try:
-                # Configurar Idempotency Manager en el pipeline
-                if idempotency_manager:
-                    pipeline.idempotency_manager = idempotency_manager
-                
                 # Run embedding with Wave Planner if enabled
                 if wave_orchestrator:
                     wave_result = wave_orchestrator.execute_waves(
