@@ -297,6 +297,14 @@ RAG_EMBED_LOG_EVERY_N_CHUNKS = 20
 RAG_PARALLEL_WORKERS = int(os.getenv("RAG_PARALLEL_WORKERS", "1"))  # Reduced for saver mode
 RAG_PIPELINE_WORKERS = int(os.getenv("RAG_PIPELINE_WORKERS", "1"))  # Reduced for saver mode
 
+# Adaptive worker scaling (adjusts thread count based on live RAM/CPU)
+RAG_ADAPTIVE_WORKERS = os.getenv("RAG_ADAPTIVE_WORKERS", "true").lower() not in ("false", "0", "no")
+RAG_ADAPTIVE_BATCH_SIZE = int(os.getenv("RAG_ADAPTIVE_BATCH_SIZE", "10"))
+RAG_ADAPTIVE_RAM_HIGH = float(os.getenv("RAG_ADAPTIVE_RAM_HIGH", "75"))   # % RAM to trigger scale-down
+RAG_ADAPTIVE_RAM_LOW = float(os.getenv("RAG_ADAPTIVE_RAM_LOW", "60"))    # % RAM to allow scale-up
+RAG_ADAPTIVE_CPU_HIGH = float(os.getenv("RAG_ADAPTIVE_CPU_HIGH", "2.5")) # load/cpu to trigger scale-down
+RAG_ADAPTIVE_CPU_LOW = float(os.getenv("RAG_ADAPTIVE_CPU_LOW", "1.5"))   # load/cpu to allow scale-up
+
 # RAG Document Splitting Optimizations
 RAG_SPLIT_BATCH_SIZE = 128  # Batch size for document splitting
 RAG_SPLIT_LOG_EVERY_SECONDS = 15  # Log splitting progress every N seconds

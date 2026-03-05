@@ -18,6 +18,11 @@ from .file_processor import process_candidate_file
 from .splitters import SplitterStrategy, build_text_splitter
 from .state_helpers import finalize_ingestion_run, record_directory_listing
 from src.utils.text import effective_limit
+from src.workflows.ingestion.adaptive_workers import (
+    AdaptiveWorkerController,
+    is_adaptive_enabled,
+    get_adaptive_batch_size,
+)
 
 # Importaciones para type hints de nuevos componentes
 from typing import TYPE_CHECKING
@@ -223,34 +228,47 @@ class IngestionPipeline:
                 min_interval_seconds=1.0,
             )
 
+        adaptive = is_adaptive_enabled()
+        controller = AdaptiveWorkerController(
+            min_workers=max(1, min(2, self._max_workers)),
+            max_workers=self._max_workers,
+        )
+        batch_size = get_adaptive_batch_size() if adaptive else len(file_paths)
+
         try:
             completed_count = 0
-            with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
-                future_to_file = {
-                    executor.submit(
-                        self._process_single_file_safe,
-                        full_path,
-                        idx + 1,
-                        total_files,
-                        directory_path or os.path.dirname(full_path),
-                    ): (full_path, idx + 1)
-                    for idx, full_path in enumerate(file_paths)
-                }
+            # Process in sub-batches so the worker count can be re-evaluated
+            # between batches when adaptive mode is on.
+            for batch_start in range(0, total_files, batch_size):
+                sub_batch = file_paths[batch_start:batch_start + batch_size]
+                workers = controller.get_workers() if adaptive else self._max_workers
 
-                for future in as_completed(future_to_file):
-                    file_path, _ = future_to_file[future]
-                    _, success, _ = future.result()
-                    completed_count += 1
-                    if success:
-                        ingested += 1
-                    else:
-                        failed += 1
+                with ThreadPoolExecutor(max_workers=workers) as executor:
+                    future_to_file = {
+                        executor.submit(
+                            self._process_single_file_safe,
+                            full_path,
+                            batch_start + idx + 1,
+                            total_files,
+                            directory_path or os.path.dirname(full_path),
+                        ): full_path
+                        for idx, full_path in enumerate(sub_batch)
+                    }
 
-                    if bar:
-                        bar.update(
-                            completed_count,
-                            message=os.path.basename(file_path) or file_path,
-                        )
+                    for future in as_completed(future_to_file):
+                        file_path = future_to_file[future]
+                        _, success, _ = future.result()
+                        completed_count += 1
+                        if success:
+                            ingested += 1
+                        else:
+                            failed += 1
+
+                        if bar:
+                            bar.update(
+                                completed_count,
+                                message=os.path.basename(file_path) or file_path,
+                            )
         finally:
             if bar:
                 bar.finish(message="done")
@@ -324,13 +342,21 @@ class IngestionPipeline:
                 min_interval_seconds=1.0,
             )
 
+        adaptive = is_adaptive_enabled()
+        controller = AdaptiveWorkerController(
+            min_workers=max(1, min(2, self._max_workers)),
+            max_workers=self._max_workers,
+        )
+
         try:
             # Process until queue is empty
             while True:
+                workers = controller.get_workers() if adaptive else self._max_workers
+
                 # Dequeue jobs (blocking with 1 second timeout)
                 jobs = self.ingest_queue.dequeue(
                     consumer_name=consumer_name,
-                    count=self._max_workers,
+                    count=workers,
                     block=1000,  # 1 second timeout
                 )
 
@@ -338,7 +364,7 @@ class IngestionPipeline:
                     # Check if there are abandoned jobs to claim
                     abandoned = self.ingest_queue.claim_abandoned(
                         consumer_name=consumer_name,
-                        count=self._max_workers,
+                        count=workers,
                     )
 
                     if not abandoned:
@@ -347,8 +373,8 @@ class IngestionPipeline:
 
                     jobs = abandoned
 
-                # Process jobs (in parallel if max_workers > 1)
-                if self._max_workers <= 1:
+                # Process jobs (in parallel if workers > 1)
+                if workers <= 1:
                     # Sequential processing
                     for job_id, job in jobs:
                         success, error = self._process_job(job)
@@ -368,7 +394,7 @@ class IngestionPipeline:
                             )
                 else:
                     # Parallel processing
-                    with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+                    with ThreadPoolExecutor(max_workers=workers) as executor:
                         future_to_job = {
                             executor.submit(self._process_job, job): (job_id, job)
                             for job_id, job in jobs
