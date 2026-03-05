@@ -22,6 +22,22 @@ from .code_processor import process_code_document
 from src.workflows.ingestion.loaders.helpers import should_skip_path
 from .state_helpers import register_observed_file
 from .text_processor import process_text_document
+from src.workflows.ingestion.discovery.score_cache import set_file_score
+
+
+def _get_exts_hash(pipeline: Any) -> str:
+    """Return the current exts_hash from the pipeline, computing it if needed."""
+    cached = getattr(pipeline, "_exts_hash", None)
+    if cached:
+        return cached
+    try:
+        from src.workflows.ingestion.discovery.score_cache import compute_exts_hash
+        import src.settings as _settings
+        h = compute_exts_hash(_settings)
+        pipeline._exts_hash = h
+        return h
+    except Exception:
+        return ""
 
 
 def _format_timedelta(td):
@@ -229,6 +245,14 @@ def process_candidate_file(
             if processed_path is None:
                 # Preprocessing failed - skip this file
                 logger.warning("Preprocessing failed for %s, skipping file", full_path)
+                try:
+                    _mtime = file_path.stat().st_mtime
+                    set_file_score(
+                        str(file_path), _mtime, 0, "preprocessing_failed",
+                        _get_exts_hash(pipeline)
+                    )
+                except Exception as _exc:
+                    logger.debug("score_cache write failed for %s: %s", full_path, _exc)
                 pipeline._current_file_info = None
                 return
 

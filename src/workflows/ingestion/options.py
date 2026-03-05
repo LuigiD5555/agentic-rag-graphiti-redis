@@ -74,6 +74,7 @@ class IngestionOptions:
     phased_ingestion: Optional[bool] = None
     max_ram_usage_percent: Optional[int] = None
     run_id: Optional[str] = None
+    reclassify: bool = False
 
 
 @dataclass(frozen=True)

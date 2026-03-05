@@ -194,6 +194,7 @@ def build_ingestion_options_from_args(args: argparse.Namespace, config: object) 
             else None
         ),
         run_id=getattr(args, "run_id", None),
+        reclassify=bool(getattr(args, "reclassify", False)),
     )
 
 

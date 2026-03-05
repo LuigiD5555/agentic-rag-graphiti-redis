@@ -21,6 +21,26 @@ from src.conf import settings
 from src.workflows.ingestion.loaders.helpers import call_loader, resolve_loader_source
 from .splitters import split_documents
 from .stage_reporting import IngestionFileContext, IngestionStageReporter
+from src.workflows.ingestion.discovery.score_cache import set_file_score
+
+
+def _score_file(pipeline, source: str, score: int, reason: str) -> None:
+    """Write a file score; silently ignores all errors."""
+    try:
+        import os
+        exts_hash = getattr(pipeline, "_exts_hash", "") or ""
+        if not exts_hash:
+            try:
+                from src.workflows.ingestion.discovery.score_cache import compute_exts_hash
+                import src.settings as _settings
+                exts_hash = compute_exts_hash(_settings)
+                pipeline._exts_hash = exts_hash
+            except Exception:
+                pass
+        mtime = os.stat(source).st_mtime
+        set_file_score(source, mtime, score, reason, exts_hash)
+    except Exception as exc:
+        logger.debug("score_cache write failed for %s: %s", source, exc)
 from .state_helpers import finalize_file_ingestion
 from .utils.splitting import prepare_embedding_segments
 from src.utils.file_operations import gather_file_metadata
@@ -172,6 +192,7 @@ def process_text_document(pipeline: Any, loader: object) -> None:
         documents = call_loader(pipeline, loader, "load")
 
     if not documents:
+        _score_file(pipeline, source, 0, "no_text")
         pipeline.progress.add_total(0, source=source)
         pipeline._current_file_info = None
         return
@@ -211,6 +232,7 @@ def process_text_document(pipeline: Any, loader: object) -> None:
 
     if not chunks:
         logger.warning("Skipping %s; no chunks produced after splitting.", source)
+        _score_file(pipeline, source, 0, "no_chunks")
         pipeline.progress.add_total(0, source=source)
         pipeline._current_file_info = None
         return
@@ -240,6 +262,7 @@ def process_text_document(pipeline: Any, loader: object) -> None:
 
     if not prepared_chunks:
         logger.warning("Skipping %s; splitting produced no embedding-ready chunks.", source)
+        _score_file(pipeline, source, 0, "no_embeddings")
         pipeline.progress.add_total(0, source=source)
         pipeline._current_file_info = None
         return
@@ -409,6 +432,7 @@ def process_text_document(pipeline: Any, loader: object) -> None:
         except Exception as _exc:
             logger.debug("Ledger EMBED mark failed for %s: %s", source, _exc)
 
+    _score_file(pipeline, source, 1, "extracted_ok")
     finalize_file_ingestion(pipeline, file_info, chunk_total=segment_total)
 
     # Update cache with processing results

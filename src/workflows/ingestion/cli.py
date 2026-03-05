@@ -132,6 +132,15 @@ class IngestionCLI:
             default=None,
             help="Python log level (DEBUG, INFO, WARNING, ERROR). Defaults to .env INGEST_LOG_LEVEL or INFO.",
         )
+        parser.add_argument(
+            "--reclassify",
+            action="store_true",
+            default=False,
+            help=(
+                "Invalidate all score-cache entries before scanning, forcing re-evaluation "
+                "of every file/directory regardless of previous classification."
+            ),
+        )
         return parser
 
     def _configure_logging(self, level_from_cli: str | None) -> None:
@@ -140,6 +149,7 @@ class IngestionCLI:
         level_value = resolve_level(log_level_name)
         configure_logging(level_value, fmt="%(levelname)s: %(message)s")
         self._log.debug("Logging configured at level=%s", log_level_name)
+
 
 def main() -> None:
     """Entrypoint for `python -m src.main --ingest ...`."""

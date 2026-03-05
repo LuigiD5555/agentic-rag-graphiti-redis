@@ -12,6 +12,7 @@ from .cache import DiscoveryCacheManager
 from .pattern_matching import PatternMatcher
 from .filters import build_filters
 from .scanner import DirectoryScanner
+from .score_cache import compute_exts_hash
 
 log = get_logger(__name__)
 
@@ -27,7 +28,15 @@ class FileDiscoveryService:
     ):
         self.cache_mgr = DiscoveryCacheManager(cache_file, cache_manager)
         self.pattern_matcher = PatternMatcher()
-        self.scanner = DirectoryScanner(self.cache_mgr, self.pattern_matcher, scan_checkpointer)
+        # Compute once per discovery session so all scan methods share the same hash
+        try:
+            import src.settings as _settings
+            _exts_hash = compute_exts_hash(_settings)
+        except Exception:
+            _exts_hash = ""
+        self.scanner = DirectoryScanner(
+            self.cache_mgr, self.pattern_matcher, scan_checkpointer, exts_hash=_exts_hash
+        )
         self._last_visited_dirs = 0
         self.scan_checkpointer = scan_checkpointer
 
@@ -134,6 +143,14 @@ class FileDiscoveryService:
                 scan_stats['paths_skipped_excluded'],
                 scan_stats['path_tree']['total_nodes']
             )
+            sc_files = scan_stats.get('score_cache_file_skipped', 0)
+            sc_dirs = scan_stats.get('score_cache_dir_skipped', 0)
+            sc_partial = scan_stats.get('score_cache_dir_partial', 0)
+            if sc_files or sc_dirs or sc_partial:
+                log.info(
+                    "Score cache: %d files skipped, %d dirs skipped, %d dirs partial",
+                    sc_files, sc_dirs, sc_partial
+                )
 
             total_skipped = (
                 scan_stats['paths_skipped_visited'] +
@@ -251,6 +268,14 @@ class FileDiscoveryService:
                     scan_stats['paths_skipped_excluded'],
                     scan_stats['path_tree']['total_nodes']
                 )
+                sc_files = scan_stats.get('score_cache_file_skipped', 0)
+                sc_dirs = scan_stats.get('score_cache_dir_skipped', 0)
+                sc_partial = scan_stats.get('score_cache_dir_partial', 0)
+                if sc_files or sc_dirs or sc_partial:
+                    log.info(
+                        "Score cache: %d files skipped, %d dirs skipped, %d dirs partial",
+                        sc_files, sc_dirs, sc_partial
+                    )
 
                 total_skipped = (
                     scan_stats['paths_skipped_visited'] +

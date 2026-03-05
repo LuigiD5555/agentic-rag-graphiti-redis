@@ -6,6 +6,7 @@ from typing import Set, Optional
 
 from src.workflows.query.audit import get_logger
 from .path_tree import PathTree
+from .score_cache import get_file_score, set_dir_score, get_dir_score
 
 log = get_logger(__name__)
 
@@ -13,7 +14,7 @@ log = get_logger(__name__)
 class DirectoryScanner:
     """Handles the actual filesystem traversal and file collection."""
 
-    def __init__(self, cache_manager, pattern_matcher, scan_checkpointer=None):
+    def __init__(self, cache_manager, pattern_matcher, scan_checkpointer=None, exts_hash: str = ""):
         """
         Initialize scanner with cache manager and pattern matcher.
 
@@ -21,15 +22,21 @@ class DirectoryScanner:
             cache_manager: DiscoveryCacheManager instance
             pattern_matcher: PatternMatcher instance
             scan_checkpointer: Optional ScanCheckpointer for resumable scanning
+            exts_hash: Reproducible hash of the current extension/OCR config (from compute_exts_hash).
+                       When provided, enables score-cache lookups for fast skipping.
         """
         self.cache_manager = cache_manager
         self.pattern_matcher = pattern_matcher
         self.scan_checkpointer = scan_checkpointer
+        self.exts_hash = exts_hash
         self.path_tree = PathTree()
         self._scan_stats = {
             'paths_skipped_visited': 0,
             'paths_skipped_excluded': 0,
-            'cache_hits_tree': 0
+            'cache_hits_tree': 0,
+            'score_cache_file_skipped': 0,
+            'score_cache_dir_skipped': 0,
+            'score_cache_dir_partial': 0,
         }
         self._last_dirs_scanned = 0
 
@@ -63,6 +70,8 @@ class DirectoryScanner:
         stack = [(current_path, "")]
         dirs_scanned = 0
         last_progress = time.monotonic()
+        # dir_score_accum: dirpath -> {"score": int, "extractable": list[str]}
+        dir_score_accum: dict = {}
 
         while stack:
             dirpath, rel_dirpath = stack.pop()
@@ -78,6 +87,42 @@ class DirectoryScanner:
                 self._scan_stats['paths_skipped_excluded'] += 1
                 log.debug("SKIP tree exclusion for: %s", dirpath)
                 continue
+
+            # SCORE CACHE: check directory score before even calling cache/scandir
+            if self.exts_hash:
+                try:
+                    dir_stat = os.stat(dirpath)
+                    dir_mtime = dir_stat.st_mtime
+                    dir_cached_score = get_dir_score(dirpath, dir_mtime, self.exts_hash)
+                    if dir_cached_score is not None:
+                        dir_total, extractable = dir_cached_score
+                        if dir_total == 0:
+                            # Nothing extractable in this subtree — skip entirely
+                            self._scan_stats['score_cache_dir_skipped'] += 1
+                            log.debug("SCORE CACHE skip dir (score=0): %s", dirpath)
+                            self.path_tree.mark_visited(dirpath)
+                            dirs_scanned += 1
+                            continue
+                        # dir_total > 0: only scan extractable_paths, skip full scandir
+                        if extractable:
+                            self._scan_stats['score_cache_dir_partial'] += 1
+                            log.debug("SCORE CACHE partial dir (%d extractable): %s", len(extractable), dirpath)
+                            for ep in extractable:
+                                try:
+                                    ep_mtime = os.stat(ep).st_mtime
+                                    ep_score = get_file_score(ep, ep_mtime, self.exts_hash)
+                                    if ep_score == 0:
+                                        self._scan_stats['score_cache_file_skipped'] += 1
+                                        continue
+                                    # score=1 or None: let ledger decide
+                                    files.append(ep)
+                                except OSError:
+                                    pass
+                            self.path_tree.mark_visited(dirpath)
+                            dirs_scanned += 1
+                            continue
+                except OSError:
+                    pass  # fall through to normal scan
 
             # OPTIMIZATION 3: Check cache for this specific directory
             cached = self.cache_manager.is_dir_unchanged(dirpath, options_hash)
@@ -151,6 +196,17 @@ class DirectoryScanner:
                                     continue
 
                                 if all(s.allow_file(rel_dirpath, entry.name, entry.path) for s in filters):
+                                    # SCORE CACHE: skip files with score=0
+                                    if self.exts_hash:
+                                        try:
+                                            f_mtime = entry.stat().st_mtime
+                                            f_score = get_file_score(entry.path, f_mtime, self.exts_hash)
+                                            if f_score == 0:
+                                                self._scan_stats['score_cache_file_skipped'] += 1
+                                                log.debug("SCORE CACHE skip file (score=0): %s", entry.path)
+                                                continue
+                                        except OSError:
+                                            pass
                                     files.append(entry.path)
                                     dir_files.append(entry.path)
 
@@ -167,9 +223,25 @@ class DirectoryScanner:
                 # Mark as visited in path tree
                 self.path_tree.mark_visited(dirpath)
 
+                # SCORE CACHE: record accumulator entry for this directory
+                if self.exts_hash:
+                    dir_score_accum[dirpath] = {
+                        "score": len(dir_files),
+                        "extractable": list(dir_files),
+                    }
+
             except (OSError, PermissionError) as e:
                 log.warning("Cannot access directory %s: %s", dirpath, e)
                 continue
+
+        # Persist directory scores after full scan
+        if self.exts_hash:
+            for dpath, acc in dir_score_accum.items():
+                try:
+                    d_mtime = os.stat(dpath).st_mtime
+                    set_dir_score(dpath, d_mtime, acc["score"], acc["extractable"], self.exts_hash)
+                except OSError:
+                    pass
 
         return dirs_scanned
 
@@ -193,6 +265,8 @@ class DirectoryScanner:
         dirs_scanned = 0
         accepted_files = 0
         last_progress = time.monotonic()
+        # dir_score_accum: dirpath -> {"score": int, "extractable": list[str]}
+        dir_score_accum: dict = {}
 
         try:
             while stack:
@@ -209,6 +283,42 @@ class DirectoryScanner:
                     self._scan_stats['paths_skipped_excluded'] += 1
                     log.debug("SKIP tree exclusion for: %s", dirpath)
                     continue
+
+                # SCORE CACHE: check directory score before even calling cache/scandir
+                if self.exts_hash:
+                    try:
+                        dir_mtime = os.stat(dirpath).st_mtime
+                        dir_cached_score = get_dir_score(dirpath, dir_mtime, self.exts_hash)
+                        if dir_cached_score is not None:
+                            dir_total, extractable = dir_cached_score
+                            if dir_total == 0:
+                                self._scan_stats['score_cache_dir_skipped'] += 1
+                                log.debug("SCORE CACHE skip dir (score=0): %s", dirpath)
+                                self.path_tree.mark_visited(dirpath)
+                                dirs_scanned += 1
+                                yield dirpath, []
+                                continue
+                            if extractable:
+                                self._scan_stats['score_cache_dir_partial'] += 1
+                                log.debug("SCORE CACHE partial dir (%d extractable): %s", len(extractable), dirpath)
+                                partial_files = []
+                                for ep in extractable:
+                                    try:
+                                        ep_mtime = os.stat(ep).st_mtime
+                                        ep_score = get_file_score(ep, ep_mtime, self.exts_hash)
+                                        if ep_score == 0:
+                                            self._scan_stats['score_cache_file_skipped'] += 1
+                                            continue
+                                        partial_files.append(ep)
+                                    except OSError:
+                                        pass
+                                self.path_tree.mark_visited(dirpath)
+                                dirs_scanned += 1
+                                accepted_files += len(partial_files)
+                                yield dirpath, partial_files
+                                continue
+                    except OSError:
+                        pass  # fall through to normal scan
 
                 # OPTIMIZATION 3: Check cache for this specific directory
                 cached = self.cache_manager.is_dir_unchanged(dirpath, options_hash)
@@ -281,6 +391,17 @@ class DirectoryScanner:
                                         continue
 
                                     if all(s.allow_file(rel_dirpath, entry.name, entry.path) for s in filters):
+                                        # SCORE CACHE: skip files with score=0
+                                        if self.exts_hash:
+                                            try:
+                                                f_mtime = entry.stat().st_mtime
+                                                f_score = get_file_score(entry.path, f_mtime, self.exts_hash)
+                                                if f_score == 0:
+                                                    self._scan_stats['score_cache_file_skipped'] += 1
+                                                    log.debug("SCORE CACHE skip file (score=0): %s", entry.path)
+                                                    continue
+                                            except OSError:
+                                                pass
                                         dir_files.append(entry.path)
 
                             except (OSError, PermissionError) as e:
@@ -296,6 +417,13 @@ class DirectoryScanner:
                     # Mark as visited in path tree
                     self.path_tree.mark_visited(dirpath)
 
+                    # SCORE CACHE: record accumulator entry for this directory
+                    if self.exts_hash:
+                        dir_score_accum[dirpath] = {
+                            "score": len(dir_files),
+                            "extractable": list(dir_files),
+                        }
+
                     accepted_files += len(dir_files)
                     yield dirpath, dir_files
 
@@ -305,6 +433,14 @@ class DirectoryScanner:
 
         finally:
             self._last_dirs_scanned = dirs_scanned
+            # Persist directory scores after full streaming scan
+            if self.exts_hash:
+                for dpath, acc in dir_score_accum.items():
+                    try:
+                        d_mtime = os.stat(dpath).st_mtime
+                        set_dir_score(dpath, d_mtime, acc["score"], acc["extractable"], self.exts_hash)
+                    except OSError:
+                        pass
 
     def get_scan_stats(self) -> dict:
         """Get scanning statistics including path tree optimizations."""
@@ -317,7 +453,10 @@ class DirectoryScanner:
         self._scan_stats = {
             'paths_skipped_visited': 0,
             'paths_skipped_excluded': 0,
-            'cache_hits_tree': 0
+            'cache_hits_tree': 0,
+            'score_cache_file_skipped': 0,
+            'score_cache_dir_skipped': 0,
+            'score_cache_dir_partial': 0,
         }
         self.path_tree.clear_visited()
         self._last_dirs_scanned = 0

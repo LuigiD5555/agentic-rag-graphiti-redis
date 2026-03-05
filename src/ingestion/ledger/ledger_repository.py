@@ -165,6 +165,38 @@ class LedgerRepository:
                     FOREIGN KEY(canonical_document_id) REFERENCES documents(document_id)
                 )
             """)
+
+            # Score cache — per-file extractability scores
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS file_scores (
+                    abs_path       TEXT PRIMARY KEY,
+                    file_mtime     REAL NOT NULL,
+                    score          INTEGER NOT NULL,
+                    reason         TEXT,
+                    exts_hash      TEXT NOT NULL,
+                    classified_at  INTEGER NOT NULL
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_file_scores_exts_hash "
+                "ON file_scores(exts_hash)"
+            )
+
+            # Score cache — per-directory aggregated scores
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS directory_scores (
+                    abs_path           TEXT PRIMARY KEY,
+                    dir_mtime          REAL NOT NULL,
+                    score              INTEGER NOT NULL,
+                    extractable_paths  TEXT,
+                    exts_hash          TEXT NOT NULL,
+                    classified_at      INTEGER NOT NULL
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_directory_scores_exts_hash "
+                "ON directory_scores(exts_hash)"
+            )
     
     def _normalize_path(self, file_path: str) -> str:
         """Normalize file path."""

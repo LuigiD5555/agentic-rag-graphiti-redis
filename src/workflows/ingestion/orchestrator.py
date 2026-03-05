@@ -122,6 +122,18 @@ class IngestionOrchestrator:
         # Ensure settings are synced before running
         sync_settings_json()
 
+        # --reclassify: invalidate all score-cache entries before scanning
+        if getattr(options, "reclassify", False):
+            try:
+                from src.workflows.ingestion.discovery.score_cache import invalidate_all_scores
+                f_del, d_del = invalidate_all_scores()
+                logger.info(
+                    "--reclassify: invalidated %d file scores and %d directory scores",
+                    f_del, d_del
+                )
+            except Exception as exc:
+                logger.warning("--reclassify: invalidation failed: %s", exc)
+
         # Initialize coverage tracking if enabled
         coverage_enabled = getattr(self._config, "INGESTION_COVERAGE_ENABLED", False)
         coverage_report = None
