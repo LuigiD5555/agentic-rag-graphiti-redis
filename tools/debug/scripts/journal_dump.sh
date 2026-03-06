@@ -1,6 +1,52 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# journal_dump.sh
+#
+# Exports logs for every Podman container that belongs to a `podman-compose`
+# project, using journald as the source of truth.
+#
+# What it does:
+# - Discovers containers by the `io.podman.compose.project` label.
+# - Captures a reproducible time window (`SINCE` -> `UNTIL`) per container.
+# - Tries the system journal first and falls back to `journalctl --user`
+#   for rootless setups when needed.
+# - Writes per-container logs, `podman inspect` output, metadata, and a merged
+#   `all_containers.log`.
+# - Updates the `tools/debug/logs/latest` symlink to point at the newest dump.
+#
+# Output layout:
+#   tools/debug/logs/YYYY-MM-DD/HHMMSS/
+#     meta.txt
+#     window.txt
+#     all_containers.log
+#     containers/
+#       <container>.journal.log
+#       <container>.podman.inspect.json
+#       <container>.meta.txt
+#
+# Environment variables:
+# - `COMPOSE_PROJECT_NAME`: compose project name. Default: `rag-graphiti-agentic`.
+# - `COMPOSE_FILE`: compose file path stored in metadata for traceability.
+# - `SINCE`: `journalctl` start window. Default: `24 hours ago`.
+# - `UNTIL`: `journalctl` end window. Default: `now`.
+#
+# Examples:
+#   # Export the last 24 hours for the default project
+#   tools/debug/scripts/journal_dump.sh
+#
+#   # Export only the last hour for a different compose project
+#   COMPOSE_PROJECT_NAME=my-stack SINCE="1 hour ago" tools/debug/scripts/journal_dump.sh
+#
+#   # Export an absolute time range and inspect the latest merged log
+#   SINCE="2026-03-06 08:00:00" UNTIL="2026-03-06 10:00:00" \
+#     tools/debug/scripts/journal_dump.sh
+#   less tools/debug/logs/latest/all_containers.log
+#
+# Integration:
+# - `tools/debug/scripts/podman_event_logexport.sh` calls this script
+#   automatically after `die|stop|kill` events to preserve post-mortem logs.
+#
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-$ROOT_DIR/podman-compose.yml}"
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}"
@@ -72,7 +118,8 @@ dump_one() {
     echo "until=$UNTIL"
   } >"$meta_file"
 
-  # Try the system journal first; if empty, fall back to --user (rootless).
+  # Query the system journal first. If the dump is empty, retry against
+  # the user journal for rootless installations.
   journalctl \
     -o short-iso \
     "CONTAINER_NAME=$container_name" \
@@ -86,6 +133,7 @@ dump_one() {
   fi
 }
 
+# Useful merged log for quick grep/attachments without opening one file per container.
 COMBINED="$OUT_DIR/all_containers.log"
 : >"$COMBINED"
 

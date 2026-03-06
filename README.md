@@ -18,9 +18,14 @@ This system is built for scenarios that require **document ingestion**, **code i
 - **Hybrid retrieval:** Combines semantic similarity search with graph-based relationship queries.
 - **LM Studio integration:** Uses local embedding and language models via API endpoints.
 - **Control plane:** Persists operational metadata for resumable scans and runtime state.
-- **Document & code ingestion:** Processes text, markdown, and source code with automatic entity/relation extraction.
-- **Socket server option:** Enables network-based queries from external clients.
+- **Document & code ingestion:** Processes 15+ file formats (PDF, DOCX, XLSX, PPTX, ODF, CSV, email, Markdown, plain text, and source code in Python, JS/TS, Java, Go, C#, C/C++, Ruby, PHP).
+- **Resumable ingestion queue:** SQLite-backed persistent queue with retry, crash recovery, and priority support.
+- **Adaptive worker pool:** Automatically adjusts thread count based on real-time RAM and CPU load.
+- **Auto-scan:** Background scheduler re-scans configured paths periodically without manual intervention.
+- **Answer modes:** Runtime-configurable response styles (detailed, concise, technical, ELI5) with keyword triggers and per-language instructions.
+- **Multi-tenant memory:** Per-session Weaviate tenants for conversation isolation; TTL-based cleanup.
 - **Modular architecture:** Each service (vector store, graph store, cache, LLM) can be replaced or extended without affecting the rest of the pipeline.
+- **Multiple LLM providers:** LM Studio (default), OpenAI, Ollama, HuggingFace, AnythingLLM, LiteLLM — swappable via `INSTALLED_APPS`.
 
 ---
 
@@ -59,16 +64,28 @@ Key `.env` entries you may need to adjust:
 
 ## Starting Required Services
 
-You can run **all services** (Weaviate, Neo4j, and RAG API) using the provided **Podman Compose** file:
+### First-time setup
+
+Run the full setup script once to build tool images, install systemd units, permanently enable the tool sockets, and start all services:
 
 ```bash
-podman-compose up --build -d
+./start-everything.sh
 ```
 
-This will start:
+### Subsequent starts
+
+Once the sockets are enabled (after first-time setup) you can use `podman-compose` directly — no extra steps:
+
+```bash
+COMPOSE_BAKE=false podman-compose up --build -d
+```
+
+The preprocessing tool sockets (`tool-document-processor` on port 9106, `tool-extractor` on 9101, `tool-websearch` on 9105) are **permanently enabled** at the user systemd level. They survive reboots and start on-demand when needed — they require no manual intervention when using `podman-compose up`.
+
+This starts:
 - **Weaviate** (vector store) on port 8080
 - **Neo4j** (graph store) on port 7687
-- **RAG API** (OpenAI-compatible REST API) on port 5555
+- **RAG API** (OpenAI-compatible REST API) on port 8000
 
 **Note:** Make sure LM Studio is running on your host machine (port 1234) with both an embedding model and a chat model loaded.
 
@@ -151,11 +168,29 @@ uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
 
 **Available endpoints:**
 
-- `GET /v1/models` - List available models
-- `POST /v1/chat/completions` - Chat completion (OpenAI-compatible)
-- `POST /v1/responses` - Modern endpoint with structured metadata
-- `POST /v1/embeddings` - Generate embeddings/vectors
-- `GET /health` - Health check
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/v1/models` | List available models |
+| `POST` | `/v1/chat/completions` | Chat completion (OpenAI-compatible) |
+| `POST` | `/v1/responses` | Modern endpoint with structured metadata |
+| `POST` | `/v1/embeddings` | Generate embeddings/vectors |
+| `POST` | `/rag/query` | Direct RAG query with metadata |
+| `POST` | `/rag/ingest` | Trigger ingestion via API |
+| `GET` | `/rag/answer-modes` | List answer modes |
+| `PUT` | `/rag/answer-modes/{name}` | Create/update an answer mode |
+| `DELETE` | `/rag/answer-modes/{name}` | Delete an answer mode |
+| `GET` | `/api/stats/rag` | Overall stats: objects, tenants, graph counts |
+| `GET` | `/api/stats/graph` | Neo4j node/relation breakdown by type |
+| `GET` | `/api/stats/vector` | Weaviate collection stats per tenant |
+| `GET` | `/exclusions/` | Read `.ingestignore` entries |
+| `POST` | `/exclusions/` | Update `.ingestignore` entries at runtime |
+| `GET` | `/volumes/` | List configured external volumes |
+| `GET` | `/volumes/status` | Check mount availability of each volume |
+| `POST` | `/volumes/{name}/mark-available` | Mark a volume as available |
+| `GET` | `/api/system/autostart` | Get systemd autostart status |
+| `POST` | `/api/system/autostart` | Enable/disable systemd autostart |
+| `GET` | `/api/files/` | List tracked ingested files |
+| `GET` | `/health` | Health check |
 
 **Interactive docs:**
 
@@ -193,18 +228,46 @@ print(response.choices[0].message.content)
 
 Supported formats:
 
-- `.pdf`, `.docx`, `.txt`, `.md` → processed as text
-- `.py`, `.js` → structural summaries (functions, classes)
+| Category | Extensions |
+|---|---|
+| Documents | `.pdf`, `.docx`, `.doc`, `.txt`, `.md`, `.rst`, `.log` |
+| Spreadsheets | `.xlsx`, `.ods`, `.csv` |
+| Presentations | `.pptx`, `.ppt` |
+| Email | `.eml`, `.msg` |
+| Source code | `.py`, `.js`, `.ts`, `.java`, `.go`, `.cs`, `.c`, `.cpp`, `.h`, `.rb`, `.php` |
 
 During ingestion:
 
-- Text is split into chunks
+- Text is split into chunks (with Markdown-aware and semantic splitting options)
 - Embeddings are generated via LM Studio
 - Data is inserted into Weaviate
-- Entities and relationships are extracted and inserted into Neo4j
+- Entities and relationships are extracted and inserted into Neo4j (when `NEO4J_ENABLED=true`)
+- Each file is tracked in the ledger for content-level deduplication (SHA-256) and mtime-based skip logic
 
 To ignore files/directories from ingestion, add patterns and paths to `.ingestignore`
-(supports relative or absolute entries).
+(supports relative or absolute entries). You can also manage exclusions at runtime via the REST API:
+
+```bash
+# Read current exclusions
+curl http://localhost:8000/exclusions/
+
+# Update exclusions (replaces entire list)
+curl -X POST http://localhost:8000/exclusions/ \
+  -H "Content-Type: application/json" \
+  -d '{"excludes": ["node_modules/", "**/__pycache__/**", "data/private/**"]}'
+```
+
+#### Resumable ingestion
+
+Enable with `INGESTION_RESUMABLE_ENABLED=true`. Files are queued persistently in SQLite and retried with exponential backoff on failure. Crashes mid-run are recovered automatically on next start.
+
+```bash
+# Inspect queue state
+python -m src.workflows.ingestion.checkpoint.checkpoint_cli status
+
+# Re-run with reclassification (ignores all cached scores)
+python -m src.main --ingest /path --reclassify
+```
 
 ---
 
@@ -239,6 +302,8 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 
 **Answer Modes (runtime, configurable)**
 
+Answer modes let you control the response style without restarting the API. Built-in modes: `detailed` (default), `concise`, `technical`, `eli5`. Modes activate automatically when the query contains a trigger keyword (e.g. "explain briefly" → concise mode), or you can specify one explicitly.
+
 ```bash
 # List modes
 curl -sS http://localhost:8000/rag/answer-modes | jq
@@ -246,7 +311,10 @@ curl -sS http://localhost:8000/rag/answer-modes | jq
 # Create/update a mode
 curl -sS -X PUT "http://localhost:8000/rag/answer-modes/conciso?merge=true" \
   -H "Content-Type: application/json" \
-  -d '{"description":"Respuesta corta","triggers":["conciso"]}' | jq
+  -d '{"description":"Respuesta corta","triggers":["conciso","breve"]}' | jq
+
+# Delete a mode
+curl -sS -X DELETE http://localhost:8000/rag/answer-modes/conciso | jq
 ```
 
 More detailed guide: `docs/QUERYING_GUIDE.md`
@@ -260,6 +328,33 @@ Start the server:
 Connect from another machine:
 
 ---
+
+## Neo4j Graph Store
+
+Neo4j is **optional and off by default**. Enable it by setting `NEO4J_ENABLED=true` in your `.env` or `data/settings.json`. When enabled:
+
+- `RuntimeFactory` initializes `Neo4jRepository` on startup and closes it on shutdown.
+- The `/api/stats/graph` endpoint returns real node/relation counts grouped by type.
+- The `/api/stats/rag` endpoint includes live `graph_nodes` and `graph_relations` counts.
+- Ingestion extracts entities and relationships from documents and writes them to Neo4j.
+
+When `NEO4J_ENABLED=false` (default), all graph endpoints return empty stats — no errors.
+
+## External Volumes
+
+The API can manage external mount points (USB drives, NFS shares) via `data/settings.json`:
+
+```bash
+# Add a volume
+curl -X POST http://localhost:8000/volumes/add \
+  -H "Content-Type: application/json" \
+  -d '{"name":"usb","primary":"/mnt/usb","fallback":"/data/fallback","mount":"/mnt/usb"}'
+
+# Check mount status
+curl http://localhost:8000/volumes/status
+```
+
+Volumes with a `.volume-available` marker file in their `primary` path are considered mounted.
 
 ## Integrating on Another Machine
 
@@ -388,13 +483,31 @@ Monitoring reports are saved to `/app/reports/` in the monitoring container:
 - `coverage/` - Coverage reports
 - `vulture/` - Vulture static analysis reports
 
+## Environment Variables Reference
+
+Key variables beyond the basics:
+
+| Variable | Default | Description |
+|---|---|---|
+| `NEO4J_ENABLED` | `false` | Enable Neo4j graph store |
+| `NEO4J_URI` | `bolt://neo4j:7687` | Neo4j connection URI |
+| `INGESTION_RESUMABLE_ENABLED` | `true` | Enable SQLite-backed resumable queue |
+| `RAG_ADAPTIVE_WORKERS` | `true` | Enable adaptive thread pool sizing |
+| `RAG_ADAPTIVE_RAM_HIGH` | `75` | RAM% threshold to reduce workers |
+| `RAG_ADAPTIVE_RAM_LOW` | `60` | RAM% threshold to increase workers |
+| `RAG_ADAPTIVE_CPU_HIGH` | `2.5` | CPU load avg threshold to reduce workers |
+| `RAG_ADAPTIVE_BATCH_SIZE` | `10` | Files per ingestion sub-batch |
+| `AUTO_SCAN_ENABLED` | `false` | Enable background auto-scan |
+| `AUTO_SCAN_INTERVAL` | `300` | Seconds between auto-scans |
+| `RESOURCE_MODE` | `SAVER` | `SAVER` / `BALANCED` / `PERFORMANCE` |
+| `API_MODE` | `openai` | `openai` or `ollama` compatibility mode |
+| `WEB_SEARCH_ENABLED` | `false` | Enable SearXNG web fallback |
+| `DUPLICATES_DOC_EXCEPTIONS` | `("__init__.py",)` | Paths ingested even when duplicate |
+
 ## Roadmap
 
-- Support for additional document formats
-- Custom preprocessing plugins
 - Improved relation extraction with prompt templates
 - Lightweight web-based query interface
-- External apps / providers via registry
 - Enhanced monitoring with AI-powered code suggestions
 
 ---

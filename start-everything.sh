@@ -164,25 +164,14 @@ else
         exit 1
     fi
 
-    # Do not enable sockets on boot; start them only for this session.
-    # Document processor runs as a direct service (no socket activation).
-    print_step "Disabling tool socket autostart..."
-    systemctl --user disable --now tool-extractor.socket || true
-    systemctl --user disable --now tool-document-processor.socket || true
-    systemctl --user disable --now tool-websearch.socket || true
-
-    print_step "Enabling tool sockets for this session..."
-    RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-    mkdir -p "$RUNTIME_DIR"
-    touch "$RUNTIME_DIR/rag-tools-enabled"
-
-    SOCKET_START_TIME="$(date --iso-8601=seconds)"
-
-    print_step "Starting tool sockets/services (session only)..."
+    # Enable sockets permanently so they survive reboots and work with
+    # plain `podman-compose up` without needing start-everything.sh each time.
+    # Idle sockets consume no resources — containers only start on first connection.
+    print_step "Enabling tool sockets permanently..."
     systemctl --user daemon-reload || true
-    systemctl --user start tool-extractor.socket || true
-    systemctl --user start tool-document-processor.service || true
-    systemctl --user start tool-websearch.socket || true
+    systemctl --user enable --now tool-extractor.socket || true
+    systemctl --user enable --now tool-document-processor.socket || true
+    systemctl --user enable --now tool-websearch.socket || true
 
     print_step "Checking tool sockets..."
     if systemctl --user list-sockets | grep -q "tool-"; then
@@ -358,43 +347,24 @@ print_header "STEP 5.5: Starting Tool Services"
 
 print_step "Starting tool services via systemd..."
 if command -v systemctl >/dev/null 2>&1; then
-    # Solo habilitar servicios si RAG_AUTOSTART=true
-    if [ "$RAG_AUTOSTART_CONFIG" = "true" ]; then
-        print_info "Autostart enabled - configuring services for automatic startup"
-        
-        # Start Open WebUI service (independent)
-        if [ -f "/home/luiginorp/.config/systemd/user/rag-tool-ui.service" ]; then
-            print_step "Configuring Open WebUI for autostart..."
-            systemctl --user daemon-reload
+    # Tool sockets are always enabled permanently (survive reboot, work with
+    # plain `podman-compose up`). RAG_AUTOSTART only controls Open WebUI.
+    print_step "Ensuring tool sockets are enabled and running..."
+    systemctl --user daemon-reload
+    systemctl --user enable --now tool-extractor.socket || print_warning "Failed to start tool-extractor.socket"
+    systemctl --user enable --now tool-document-processor.socket || print_warning "Failed to start tool-document-processor.socket"
+    systemctl --user enable --now tool-websearch.socket || print_warning "Failed to start tool-websearch.socket"
+    print_success "Tool sockets enabled permanently"
+
+    # Open WebUI respects RAG_AUTOSTART
+    if [ -f "/home/luiginorp/.config/systemd/user/rag-tool-ui.service" ]; then
+        if [ "$RAG_AUTOSTART_CONFIG" = "true" ]; then
+            print_step "Enabling Open WebUI for autostart..."
             systemctl --user enable --now rag-tool-ui.service || print_warning "Failed to start rag-tool-ui.service"
-        fi
-        
-        # Start tool sockets (will activate services on-demand)
-        # Document processor runs as a direct service (no socket activation).
-        print_step "Configuring tool sockets/services for autostart..."
-        systemctl --user daemon-reload
-        systemctl --user enable --now tool-extractor.socket || print_warning "Failed to start tool-extractor.socket"
-        systemctl --user enable --now tool-document-processor.service || print_warning "Failed to start tool-document-processor.service"
-        systemctl --user enable --now tool-websearch.socket || print_warning "Failed to start tool-websearch.socket"
-        
-        print_success "Services configured for autostart"
-    else
-        print_info "Autostart disabled - starting services for this session only"
-        
-        # Only start services for this session, do not enable them at boot
-        if [ -f "/home/luiginorp/.config/systemd/user/rag-tool-ui.service" ]; then
+        else
             print_step "Starting Open WebUI for this session..."
-            systemctl --user daemon-reload
             systemctl --user start rag-tool-ui.service || print_warning "Failed to start rag-tool-ui.service"
         fi
-        
-        print_step "Starting tool sockets/services for this session..."
-        systemctl --user daemon-reload
-        systemctl --user start tool-extractor.socket || print_warning "Failed to start tool-extractor.socket"
-        systemctl --user start tool-document-processor.service || print_warning "Failed to start tool-document-processor.service"
-        systemctl --user start tool-websearch.socket || print_warning "Failed to start tool-websearch.socket"
-        
-        print_success "Services started for this session (they will not auto-start on boot)"
     fi
 else
     print_warning "systemctl not available; tool services must be started manually"
