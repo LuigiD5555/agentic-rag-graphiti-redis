@@ -529,10 +529,11 @@ class IngestionOrchestrator:
         # Run Watermark Cleanup if enabled
         if use_optimized_pipeline and watermark_cleanup:
             try:
-                # Clean up preprocessed files
+                # Clean up preprocessed files (only temp copies, not originals)
                 for record in preprocessed_records:
+                    original_path = getattr(record, 'original_path', None)
                     processed_path = getattr(record, 'processed_path', None)
-                    if processed_path:
+                    if processed_path and processed_path != original_path:
                         watermark_cleanup.cleanup_completed_file(processed_path, immediate=True)
                 
                 # Run general cleanup if needed
