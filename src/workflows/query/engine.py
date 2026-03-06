@@ -184,7 +184,7 @@ class AppConfig(BaseSettings):
     INGESTION_PREPROCESS_WORKERS: int = Field(default_factory=lambda: settings.INGESTION_PREPROCESS_WORKERS)
     INGESTION_LOW_MEMORY_BATCH_SIZE: int = Field(default_factory=lambda: settings.INGESTION_LOW_MEMORY_BATCH_SIZE)
     MAX_RAM_USAGE_PERCENT: int = Field(default_factory=lambda: settings.MAX_RAM_USAGE_PERCENT)
-    INGESTION_RESUMABLE_ENABLED: bool = Field(default_factory=lambda: settings.INGESTION_RESUMABLE_ENABLED)
+    INGESTION_RESUMABLE_ENABLED: bool = True
     INGESTION_CLEANUP_PREPROCESSED: bool = Field(default_factory=lambda: settings.INGESTION_CLEANUP_PREPROCESSED)
     INGESTION_PREPROCESS_RETRY_FAILED: bool = Field(default_factory=lambda: settings.INGESTION_PREPROCESS_RETRY_FAILED)
 

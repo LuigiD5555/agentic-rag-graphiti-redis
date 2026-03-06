@@ -111,10 +111,7 @@ class IngestionStrategy(ABC):
         phase_manager: PhaseManager,
     ) -> dict:
         """Run ingestion using resumable queue when configured."""
-        use_resumable = bool(
-            getattr(self.config, "INGESTION_RESUMABLE_ENABLED", False) and getattr(pipeline, "ingest_queue", None)
-        )
-        if not use_resumable:
+        if not getattr(pipeline, "ingest_queue", None):
             return pipeline.process_batch(file_paths, options)
 
         pipeline.start_ingestion_run()

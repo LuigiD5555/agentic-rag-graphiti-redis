@@ -358,9 +358,7 @@ class IngestionOrchestrator:
             include_duplicates_patterns=tuple(getattr(self._config, "INGEST_DUPLICATE_PATTERNS", ()) or ()),
         )
 
-        ingest_queue = None
-        if getattr(self._config, "INGESTION_RESUMABLE_ENABLED", False):
-            ingest_queue = IngestQueue()
+        ingest_queue = IngestQueue()
 
         pipeline = IngestionPipeline.from_options(
             embedding_service=embedding_service,
