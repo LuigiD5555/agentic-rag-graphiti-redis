@@ -24,11 +24,6 @@ from src.workflows.ingestion.adaptive_workers import (
     get_adaptive_batch_size,
 )
 
-# Importaciones para type hints de nuevos componentes
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from src.workflows.ingestion.resource_pools import IngestionPools
-
 
 CATALOG_PATH = os.environ.get(
     "INGESTION_CATALOG_PATH",
@@ -60,7 +55,6 @@ class IngestionPipeline:
         self.chunk_registry = chunk_registry
 
         # New optimization components
-        self.resource_pools = None
         self.idempotency_manager = None
         self.ledger = None  # LedgerRepository — set by orchestrator
 

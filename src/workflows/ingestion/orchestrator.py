@@ -21,7 +21,6 @@ from src.conf import settings as runtime_settings
 
 # New optimization components
 from src.workflows.ingestion.wave_planner import create_default_wave_orchestrator
-from src.workflows.ingestion.resource_pools import get_global_ingestion_pools
 from src.workflows.ingestion.watermark_cleanup import create_default_cleanup
 
 # Checkpoint system
@@ -407,7 +406,6 @@ class IngestionOrchestrator:
 
         # Initialize optimization components
         wave_orchestrator = None
-        resource_pools = None
         watermark_cleanup = None
 
         # Determine whether to use the optimized components
@@ -419,14 +417,9 @@ class IngestionOrchestrator:
                 wave_orchestrator = create_default_wave_orchestrator()
                 logger.info("Wave Planner enabled for wave-based processing")
 
-                # Resource Pools (initialized for future use)
-                resource_pools = get_global_ingestion_pools(self._config)
-
                 # Watermark Cleanup
                 watermark_cleanup = create_default_cleanup(self._config)
                 logger.info("Watermark Cleanup enabled for disk management")
-
-                # Note: IdempotencyManager removed — LedgerRepository handles retries/skip logic
 
             except Exception as e:
                 logger.warning("Error initializing optimized components: %s", e)
@@ -476,14 +469,6 @@ class IngestionOrchestrator:
 
         pipeline = self._build_pipeline()
         pipeline.disable_preprocessing = True
-        
-        # Configure Resource Pools on the pipeline if enabled
-        if use_optimized_pipeline and resource_pools:
-            try:
-                pipeline.resource_pools = resource_pools
-                logger.info("Resource Pools configured on the pipeline")
-            except Exception as e:
-                logger.warning("Error configuring Resource Pools: %s", e)
         
         logger.info("Starting ingestion phase (run=%s)", phase_id)
         
