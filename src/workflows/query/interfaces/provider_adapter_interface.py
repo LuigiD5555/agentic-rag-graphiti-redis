@@ -5,8 +5,10 @@ from src.workflows.query.interfaces.chat_interface import ChatInterface
 
 class ProviderAdapterInterface(ABC):
     """
-    Provider adapter exposes unified EmbeddingInterface and ChatInterface
-    regardless of the underlying provider (LM Studio, OpenAI, etc.).
+    Provider adapter for selecting between multiple LLM APIs.
+
+    This interface exposes unified EmbeddingInterface and ChatInterface
+    regardless of the underlying provider (LM Studio, OpenAI, Ollama, etc.).
     """
 
     @abstractmethod

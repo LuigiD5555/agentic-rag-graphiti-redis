@@ -14,7 +14,8 @@ def register_provider(name: str, factory: ProviderFactoryFn) -> None:
     """
     Register a provider adapter factory under a short name (e.g. "lmstudio").
 
-    This is the extension point external apps can use from their AppConfig.ready().
+    This is the extension point for selecting between multiple LLM APIs via
+    ProviderAdapterInterface implementations.
     """
     normalized = (name or "").strip().lower()
     if not normalized:

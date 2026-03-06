@@ -8,7 +8,8 @@ from src.workflows.query.interfaces.chat_interface import ChatInterface
 class ProviderAdapterBase(ProviderAdapterInterface):
     """
     Concrete helper that stores embedding/chat services.
-    Not abstract: it satisfies the interface directly.
+    Not abstract: it satisfies the interface directly and can be used by any
+    LLM provider adapter to unify API selection.
     """
 
     _embedding: EmbeddingInterface

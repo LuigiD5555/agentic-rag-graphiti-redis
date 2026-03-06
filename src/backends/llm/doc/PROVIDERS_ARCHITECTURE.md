@@ -4,21 +4,20 @@ This document describes the provider system architecture in the RAG project.
 
 ## Overview
 
-The provider system implements an adapter pattern to support multiple LLM and embedding providers with a unified interface. This allows the application to seamlessly switch between different backends (OpenAI, Ollama, LM Studio, HuggingFace, etc.) without changing business logic.
+The provider system implements an adapter pattern to support multiple LLM and embedding APIs with a unified interface. This allows the application to seamlessly switch between different providers (OpenAI, Ollama, LM Studio, HuggingFace, etc.) without changing business logic.
 
 ## Core Concepts
 
 ### Provider Adapter Interface
 
-All providers implement the `ProviderAdapterInterface` defined in [src/providers/adapters/base.py](../adapters/base.py). This interface defines:
+All providers implement the `ProviderAdapterInterface` defined in `src/workflows/query/interfaces/provider_adapter_interface.py`. This interface defines:
 
-- **Chat completion methods**: For conversational interactions
+- **Chat methods**: For conversational interactions
 - **Embedding methods**: For text vectorization
-- **Model management**: For listing and selecting models
 
 ### Embedding Interface
 
-The embedding functionality is abstracted through `EmbeddingInterface` defined in [src/rag/interfaces/embedding_interface.py](../../rag/interfaces/embedding_interface.py). Key methods:
+The embedding functionality is abstracted through `EmbeddingInterface` defined in `src/workflows/query/interfaces/embedding_interface.py`. Key methods:
 
 - `embed_texts(texts: List[str]) -> List[List[float]]`: Batch embedding
 - `embed_text(text: str) -> List[float]`: Single text embedding
@@ -27,59 +26,59 @@ The embedding functionality is abstracted through `EmbeddingInterface` defined i
 
 ### 1. OpenAI
 
-**Location**: [src/providers/openai/](../openai/)
+**Location**: `src/backends/llm/openai/`
 
 - Uses OpenAI API (GPT models, text-embedding models)
 - Configured via `OPENAI_API_KEY` environment variable
-- Adapter: [src/providers/adapters/openai_adapter.py](../adapters/openai_adapter.py)
+- Adapter: `src/backends/llm/adapters/openai_adapter.py`
 
 ### 2. Ollama
 
-**Location**: [src/providers/ollama/](../ollama/)
+**Location**: `src/backends/llm/ollama/`
 
 - Local LLM provider
 - Requires Ollama server running locally
 - Configured via `OLLAMA_BASE_URL` (default: http://localhost:11434)
-- Adapter: [src/providers/ollama/adapter.py](../ollama/adapter.py)
+- Adapter: `src/backends/llm/ollama/adapter.py`
 
 ### 3. LM Studio
 
-**Location**: [src/providers/lmstudio/](../lmstudio/)
+**Location**: `src/backends/llm/lmstudio/`
 
 - Local LLM provider with OpenAI-compatible API
 - Configured via `LMSTUDIO_BASE_URL` (default: http://localhost:1234)
-- Adapter: [src/providers/adapters/lmstudio_adapter.py](../adapters/lmstudio_adapter.py)
+- Adapter: `src/backends/llm/adapters/lmstudio_adapter.py`
 
 ### 4. HuggingFace
 
-**Location**: [src/providers/huggingface/](../huggingface/)
+**Location**: `src/backends/llm/huggingface/`
 
 - Inference API integration
 - Configured via `HUGGINGFACE_API_KEY`
-- Adapter: [src/providers/huggingface/adapter.py](../huggingface/adapter.py)
+- Adapter: `src/backends/llm/huggingface/adapter.py`
 
 ### 5. LiteLLM Gateway
 
-**Location**: [src/providers/litellm_gateway/](../litellm_gateway/)
+**Location**: `src/backends/llm/litellm_gateway/`
 
 - Unified gateway for multiple providers
 - Configured via `LITELLM_BASE_URL`
-- Adapter: [src/providers/litellm_gateway/adapter.py](../litellm_gateway/adapter.py)
+- Adapter: `src/backends/llm/litellm_gateway/adapter.py`
 
 ## Provider Selection
 
-The provider is selected based on configuration in [src/rag/conf.py](../../rag/conf.py):
+The provider is selected based on configuration in `src/backends/llm/factory.py` (settings `PROVIDER` or `PROVIDERS`):
 
 ```python
 # Example configuration priority:
-1. RAG_PROVIDER environment variable
-2. Default provider from settings
-3. Fallback to OpenAI
+1. `PROVIDER` environment variable
+2. Default provider from `PROVIDERS.default` in settings
+3. Fallback to `lmstudio`
 ```
 
 ## Provider Registry
 
-The [src/providers/registry.py](../registry.py) and [src/providers/app_registry.py](../app_registry.py) modules manage:
+The `src/backends/llm/registry.py` and `src/backends/llm/app_registry.py` modules manage:
 
 - Provider registration
 - Provider discovery
@@ -89,17 +88,17 @@ The [src/providers/registry.py](../registry.py) and [src/providers/app_registry.
 
 To add a new provider:
 
-1. **Create provider directory**: `src/providers/newprovider/`
+1. **Create provider directory**: `src/backends/llm/newprovider/`
 2. **Implement adapter**: Extend `ProviderAdapterInterface`
 3. **Implement embedding service** (optional): Extend `EmbeddingInterface`
 4. **Register provider**: Update `app_registry.py`
-5. **Add configuration**: Update `src/rag/conf.py` and `.env`
+5. **Add configuration**: Update `src/settings.py` or `data/settings.json` and `.env`
 6. **Document**: Add to this file and create provider-specific docs
 
 ### Example Structure
 
 ```
-src/providers/newprovider/
+src/backends/llm/newprovider/
 ├── __init__.py
 ├── adapter.py         # ProviderAdapterInterface implementation
 ├── client.py          # API client (optional)
@@ -115,6 +114,6 @@ Provider tests are located in:
 
 ## Related Documentation
 
-- [Embedding Factory](../../rag/embeddings_factory.py): Factory for creating embedding instances
-- [RAG Engine](../../rag/engine.py): How providers are used in the RAG pipeline
-- [API Routers](../../api/routers/): Provider usage in API endpoints
+- `src/backends/llm/factory.py`: Provider selection and adapter construction
+- `src/workflows/query/engine.py`: How providers are used in the RAG pipeline
+- `src/api/routes/`: Provider usage in API endpoints
