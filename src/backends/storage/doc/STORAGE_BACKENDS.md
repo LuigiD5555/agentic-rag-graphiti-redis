@@ -109,14 +109,28 @@ CONTROL_PLANE_DB_PATH=./data/control_plane.db
 
 ## Storage Interfaces
 
-Storage backends implement storage-focused interfaces and protocols. In the
-current codebase, the relevant query-layer contracts live under
-`src/workflows/query/interfaces/`, but they are conceptually distinct from
-query-time knowledge sources used by the RAG workflow.
+Internal storage backends (vector, graph, cache) implement low-level
+interfaces under `src/workflows/query/interfaces/`:
 
 - [cache_interface.py](../../../../src/workflows/query/interfaces/cache_interface.py): Caching operations
 - [graph_interface.py](../../../../src/workflows/query/interfaces/graph_interface.py): Graph operations
 - [vector_interface.py](../../../../src/workflows/query/interfaces/vector_interface.py): Vector operations
+
+## Pluggable Query Sources
+
+Distinct from storage backends, **query sources** are external stores that
+the RAG orchestrator consults at query time to retrieve knowledge.  They are
+defined by two interfaces in `src/workflows/query/interfaces/query_source_interface.py`:
+
+| Interface | Use case | Examples |
+|---|---|---|
+| `QuerySourceInterface` | Read-only sources managed externally or derived from Weaviate | Weaviate, Neo4j |
+| `WritableQuerySourceInterface` | Sources the RAG pipeline also populates | MongoDB, pgvector/Postgres |
+
+Concrete implementations live in `src/workflows/query/sources/`.  Each
+source can be enabled or disabled at runtime via its `enabled` property
+without restarting the service.  Ingestion into each store is handled by
+the ingestion pipeline independently — query sources are query-time only.
 
 ## Data Flow Example
 

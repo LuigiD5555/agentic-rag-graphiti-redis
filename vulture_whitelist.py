@@ -14,7 +14,6 @@ whitelist.exc_tb      # searxng_client.py, resource_pools.py, watermark_cleanup.
 whitelist.tb          # stage_reporting.py
 
 # --- Abstract / interface method parameters (contract for subclasses) ---
-whitelist.vector_size   # knowledge_source_interface.py — abstract method signature
 whitelist.new_versions  # checkpointer.py — LangGraph override signature
 whitelist.embedded      # wave_planner.py — abstract upsert_phase(embedded, wave_id)
 whitelist.ids           # contracts.py — abstract delete(ids)

@@ -24,7 +24,7 @@ This system is built for scenarios that require **document ingestion**, **code i
 - **Auto-scan:** Background scheduler re-scans configured paths periodically without manual intervention.
 - **Answer modes:** Runtime-configurable response styles (detailed, concise, technical, ELI5) with keyword triggers and per-language instructions.
 - **Multi-tenant memory:** Per-session Weaviate tenants for conversation isolation; TTL-based cleanup.
-- **Modular architecture:** Each service (vector store, graph store, cache, LLM) can be replaced or extended without affecting the rest of the pipeline.
+- **Modular architecture:** Each service (vector store, graph store, cache, LLM) can be replaced or extended without affecting the rest of the pipeline. Knowledge sources consulted at query time are pluggable via `QuerySourceInterface` — add MongoDB, pgvector, or any other store without touching the core pipeline.
 - **Multiple LLM providers:** LM Studio (default), OpenAI, Ollama, HuggingFace, AnythingLLM, LiteLLM — swappable via `INSTALLED_APPS`.
 
 ---
