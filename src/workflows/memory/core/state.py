@@ -6,11 +6,10 @@ Defines the complete state structure for conversations, including:
 - Tool execution memory
 - Current context tracking
 """
-from typing import Annotated, Optional
+from typing import Optional
 from typing_extensions import TypedDict
 
 from langgraph.graph import MessagesState
-from langgraph.graph.message import add_messages
 
 
 class ToolExecution(TypedDict, total=False):

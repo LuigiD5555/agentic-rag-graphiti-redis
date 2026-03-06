@@ -79,7 +79,7 @@ class MapperChain:
         Returns:
             Result object with ErrorEvent or PressureEvent
         """
-        from .result import Result, ErrorEvent as ErrEvent
+        from .result import Result
         
         event = self.map_exception(exception, context)
         
