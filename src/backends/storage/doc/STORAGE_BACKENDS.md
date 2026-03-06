@@ -109,12 +109,14 @@ CONTROL_PLANE_DB_PATH=./data/control_plane.db
 
 ## Storage Interfaces
 
-All storage backends implement standardized interfaces defined in [src/rag/interfaces/](../../rag/interfaces/):
+Storage backends implement storage-focused interfaces and protocols. In the
+current codebase, the relevant query-layer contracts live under
+`src/workflows/query/interfaces/`, but they are conceptually distinct from
+query-time knowledge sources used by the RAG workflow.
 
-- [cache_interface.py](../../rag/interfaces/cache_interface.py): Caching operations
-- [graph_interface.py](../../rag/interfaces/graph_interface.py): Graph operations
-- [vector_interface.py](../../rag/interfaces/vector_interface.py): Vector operations
-- [storage_plugin_interface.py](../../rag/interfaces/storage_plugin_interface.py): Plugin system
+- [cache_interface.py](../../../../src/workflows/query/interfaces/cache_interface.py): Caching operations
+- [graph_interface.py](../../../../src/workflows/query/interfaces/graph_interface.py): Graph operations
+- [vector_interface.py](../../../../src/workflows/query/interfaces/vector_interface.py): Vector operations
 
 ## Data Flow Example
 
