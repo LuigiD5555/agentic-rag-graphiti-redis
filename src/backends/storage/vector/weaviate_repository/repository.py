@@ -428,7 +428,7 @@ class WeaviateRepository:
         cursor: Optional[str] = None
 
         while True:
-            result = coll.query.fetch_objects(limit=batch_size, cursor=cursor)
+            result = coll.query.fetch_objects(limit=batch_size, after=cursor)
             objects = getattr(result, "objects", []) or []  # type: ignore[attr-defined]
             if not objects:
                 break
@@ -436,18 +436,21 @@ class WeaviateRepository:
             for obj in objects:
                 yield getattr(obj, "properties", {}) or {}
 
-            page_info = getattr(result, "page_info", None)
-            cursor = getattr(page_info, "end_cursor", None)
-            if not getattr(page_info, "has_next_page", False):
+            # In the weaviate-client v4, cursor-based pagination uses the UUID
+            # of the last returned object as the `after` value for the next page.
+            last_uuid = getattr(objects[-1], "uuid", None)
+            if last_uuid is None or len(objects) < batch_size:
                 break
+            cursor = str(last_uuid)
 
     def archive_file(self, file_id: str, tenant_id: Optional[str] = None) -> None:
         coll = self._coll(tenant_id)
         where = Filter.by_property("file_id").equal(file_id)
         cursor: Optional[str] = None
+        PAGE = 200
 
         while True:
-            result = coll.query.fetch_objects(limit=200, cursor=cursor, filters=where)
+            result = coll.query.fetch_objects(limit=PAGE, after=cursor, filters=where)
             objects = getattr(result, "objects", []) or []  # type: ignore[attr-defined]
             if not objects:
                 break
@@ -458,10 +461,11 @@ class WeaviateRepository:
                     continue
                 coll.data.update(uuid=uuid_id, properties={"archived": True})
 
-            page_info = getattr(result, "page_info", None)
-            cursor = getattr(page_info, "end_cursor", None)
-            if not getattr(page_info, "has_next_page", False):
+            # Cursor-based pagination: use UUID of last object as next `after` value.
+            last_uuid = getattr(objects[-1], "uuid", None)
+            if last_uuid is None or len(objects) < PAGE:
                 break
+            cursor = str(last_uuid)
 
     def upsert_failure(self, record: Dict[str, Any]) -> None:
         logger.warning("Failure record: %s", record)
