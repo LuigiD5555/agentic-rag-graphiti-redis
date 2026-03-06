@@ -582,24 +582,62 @@ class LedgerRepository:
         try:
             # Fast fingerprint: size + mtime, no content read
             fast_fp = self._compute_fingerprint(file_path, paranoid=False)
-            document_id = self.get_or_create_document(file_path)
-            decision = self.ensure_version(document_id, fast_fp)
+            normalized_path = self._normalize_path(file_path)
 
-            if decision.decision == VersionDecision.ALREADY_ACTIVE:
-                upsert = self.get_stage_status(decision.new_version_id, Stage.UPSERT)
-                if upsert and upsert["status"] == "DONE":
-                    return True, "cache_hit"
+            # Single connection for all read + conditional write operations
+            with self.control_plane.get_connection() as conn:
+                # 1. Get or create document
+                cursor = conn.execute(
+                    "SELECT document_id FROM documents WHERE file_path = ?",
+                    (normalized_path,)
+                )
+                row = cursor.fetchone()
+                if row:
+                    document_id = row[0]
+                else:
+                    document_id = __import__("hashlib").sha256(normalized_path.encode()).hexdigest()
+                    now_ts = int(time.time())
+                    conn.execute(
+                        "INSERT INTO documents (document_id, file_path, active_version_id, "
+                        "last_seen_fingerprint, created_at, updated_at) VALUES (?, ?, NULL, NULL, ?, ?)",
+                        (document_id, normalized_path, now_ts, now_ts)
+                    )
 
-            # Content-level deduplication (only when file is new/changed)
-            try:
-                content_hash = self._compute_fingerprint(file_path, paranoid=True)
-                canonical = self.find_duplicate(content_hash)
-                if canonical and canonical != document_id:
-                    return True, "duplicate"
-                # Register this file as canonical for its content hash
-                self.register_canonical(content_hash, document_id)
-            except OSError as exc:
-                log.debug("Could not compute content hash for %s: %s", file_path, exc)
+                # 2. Check if already active at this fingerprint with UPSERT done
+                cursor = conn.execute(
+                    "SELECT active_version_id, last_seen_fingerprint FROM documents WHERE document_id = ?",
+                    (document_id,)
+                )
+                doc_row = cursor.fetchone()
+                if doc_row:
+                    active_version_id, last_seen_fingerprint = doc_row
+                    if last_seen_fingerprint == fast_fp and active_version_id == fast_fp:
+                        # Check UPSERT stage done
+                        cursor = conn.execute(
+                            "SELECT status FROM version_stage_state WHERE version_id = ? AND stage = ?",
+                            (fast_fp, Stage.UPSERT.value)
+                        )
+                        stage_row = cursor.fetchone()
+                        if stage_row and stage_row[0] == "DONE":
+                            return True, "cache_hit"
+
+                # 3. Content-level deduplication (SHA-256 — reads the file)
+                try:
+                    content_hash = self._compute_fingerprint(file_path, paranoid=True)
+                    cursor = conn.execute(
+                        "SELECT canonical_document_id FROM content_fingerprints WHERE fingerprint = ?",
+                        (content_hash,)
+                    )
+                    dup_row = cursor.fetchone()
+                    if dup_row and dup_row[0] != document_id:
+                        return True, "duplicate"
+                    # Register as canonical (first writer wins)
+                    conn.execute(
+                        "INSERT OR IGNORE INTO content_fingerprints (fingerprint, canonical_document_id) VALUES (?, ?)",
+                        (content_hash, document_id)
+                    )
+                except OSError as exc:
+                    log.debug("Could not compute content hash for %s: %s", file_path, exc)
 
             return False, "process"
 

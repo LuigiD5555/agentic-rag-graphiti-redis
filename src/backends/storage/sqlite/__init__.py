@@ -567,10 +567,14 @@ class SQLiteControlPlane:
         """Get a database connection."""
         if self.is_memory_db:
             # For in-memory databases, use shared cache with the same named database
-            conn = sqlite3.connect("file:rag_control_plane?mode=memory&cache=shared", uri=True)
+            conn = sqlite3.connect(
+                "file:rag_control_plane?mode=memory&cache=shared",
+                uri=True,
+                timeout=30,
+            )
         else:
-            conn = sqlite3.connect(self.db_path)
-        
+            conn = sqlite3.connect(self.db_path, timeout=30)
+
         conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA busy_timeout=30000")
         return conn

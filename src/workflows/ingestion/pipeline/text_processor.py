@@ -284,6 +284,70 @@ def process_text_document(pipeline: Any, loader: object) -> None:
     log_every_n_chunks = settings.RAG_EMBED_LOG_EVERY_N_CHUNKS
     supports_batch = hasattr(pipeline.embedding_service, "generate_batch")
 
+    # --- Chunk-level resume setup ---
+    chunk_registry = getattr(pipeline, "chunk_registry", None)
+    file_id = file_info.get("file_id") or source
+    run_id = getattr(pipeline, "_current_run_id", None) or "default"
+
+    # Pre-compute all chunk IDs so we can register them and detect already-done ones
+    chunk_id_map: dict[int, str] = {}  # chunk_index (1-based) -> chunk_id
+    if chunk_registry is not None:
+        for _ci, (_seg_text, _) in enumerate(prepared_chunks, start=1):
+            _san = sanitize_text(_seg_text)
+            _trunc = truncate_to_token_limit_presanitized(
+                _san, pipeline.embedding_effective_limit, pipeline.tokenizer_model_name
+            )
+            _hash = generate_hash_presanitized(_trunc)
+            _chunk_id = chunk_registry.generate_chunk_id(file_id, _ci, _hash)
+            chunk_id_map[_ci] = _chunk_id
+
+        try:
+            chunk_registry.initialize_file_chunking(
+                file_id=file_id,
+                file_path=source,
+                total_chunks=segment_total,
+                run_id=run_id,
+            )
+            for _ci, _chunk_id in chunk_id_map.items():
+                # INSERT OR IGNORE — won't overwrite an existing UPSERTED row
+                _san = sanitize_text(prepared_chunks[_ci - 1][0])
+                _trunc = truncate_to_token_limit_presanitized(
+                    _san, pipeline.embedding_effective_limit, pipeline.tokenizer_model_name
+                )
+                _hash = generate_hash_presanitized(_trunc)
+                from src.backends.storage.sqlite import ChunkStatus
+                chunk_registry.register_chunk(
+                    chunk_id=_chunk_id,
+                    file_id=file_id,
+                    file_path=source,
+                    chunk_index=_ci,
+                    content_hash=_hash,
+                    status=ChunkStatus.NEW,
+                )
+        except Exception as _exc:
+            logger.warning("ChunkRegistry pre-registration failed for %s: %s", source, _exc)
+            chunk_registry = None  # degrade gracefully; proceed without registry
+
+    # Fetch already-completed chunk IDs to skip them on resume
+    completed_chunk_ids: set[str] = set()
+    if chunk_registry is not None:
+        try:
+            from src.backends.storage.sqlite import ChunkStatus as _CS
+            all_chunks = chunk_registry.get_file_chunks(file_id)
+            completed_chunk_ids = {
+                cid for cid, st in all_chunks.items() if st == _CS.UPSERTED
+            }
+            if completed_chunk_ids:
+                logger.info(
+                    "CHUNK RESUME: %d/%d chunks already completed for %s — skipping them",
+                    len(completed_chunk_ids),
+                    segment_total,
+                    os.path.basename(source),
+                )
+        except Exception as _exc:
+            logger.warning("ChunkRegistry lookup failed for %s: %s", source, _exc)
+    # --- end resume setup ---
+
     with IngestionStageReporter(
         logger=logger,
         stage_name="embed+upsert",
@@ -297,6 +361,12 @@ def process_text_document(pipeline: Any, loader: object) -> None:
         skipped_count = 0
 
         for chunk_index, (segment_text, chunk_meta) in enumerate(prepared_chunks, start=1):
+            # Skip chunks already successfully upserted (resume support)
+            chunk_id = chunk_id_map.get(chunk_index) if chunk_registry is not None else None
+            if chunk_id and chunk_id in completed_chunk_ids:
+                skipped_count += 1
+                continue
+
             # Sanitize once, then reuse for truncation and hashing (optimization)
             sanitized_text = sanitize_text(segment_text)
             truncated_text = truncate_to_token_limit_presanitized(
@@ -326,6 +396,7 @@ def process_text_document(pipeline: Any, loader: object) -> None:
                 "source": source_value,
                 "chunk_index": chunk_index,
                 "chunk_meta": chunk_meta,
+                "chunk_id": chunk_id,
             })
 
             # Process batch when full or at end
@@ -384,15 +455,39 @@ def process_text_document(pipeline: Any, loader: object) -> None:
                     }
                     metadata = prune_metadata(metadata)
 
-                    pipeline.vector_store.upsert(
-                        record["hash"],
-                        embedding,
-                        metadata,
-                        tenant_id=pipeline.tenant_id,
-                    )
+                    try:
+                        pipeline.vector_store.upsert(
+                            record["hash"],
+                            embedding,
+                            metadata,
+                            tenant_id=pipeline.tenant_id,
+                        )
+                        pipeline.add_hash(record["hash"])
+                        processed_count += 1
 
-                    pipeline.add_hash(record["hash"])
-                    processed_count += 1
+                        # Mark chunk as UPSERTED in registry
+                        if chunk_registry is not None and record.get("chunk_id"):
+                            try:
+                                from src.backends.storage.sqlite import ChunkStatus as _CS2
+                                chunk_registry.update_chunk_status(
+                                    record["chunk_id"], _CS2.UPSERTED, vector_id=record["hash"]
+                                )
+                            except Exception as _exc:
+                                logger.debug("ChunkRegistry UPSERTED update failed: %s", _exc)
+                    except Exception as _upsert_exc:
+                        logger.error(
+                            "Upsert failed for chunk %d of %s: %s",
+                            record["chunk_index"], os.path.basename(source), _upsert_exc,
+                        )
+                        if chunk_registry is not None and record.get("chunk_id"):
+                            try:
+                                from src.backends.storage.sqlite import ChunkStatus as _CS3
+                                chunk_registry.update_chunk_status(
+                                    record["chunk_id"], _CS3.FAILED, error=str(_upsert_exc)
+                                )
+                            except Exception:
+                                pass
+                        continue
 
                     # Only log progress every N chunks or on the last chunk
                     should_log = (record["chunk_index"] % log_every_n_chunks == 0) or (

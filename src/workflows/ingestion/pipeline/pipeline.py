@@ -116,7 +116,7 @@ class IngestionPipeline:
         self._max_workers = max(1, int(os.environ.get("RAG_PARALLEL_WORKERS", "4")))
         self.disable_preprocessing = False
 
-    def start_ingestion_run(self) -> None:
+    def start_ingestion_run(self, run_id: Optional[str] = None) -> None:
         """Reset per-run state before ingesting."""
         self._observed_files = set()
         self._observed_directories = set()
@@ -127,6 +127,7 @@ class IngestionPipeline:
             "directory_path": None,
         }
         self._current_file_info = None
+        self._current_run_id = run_id or "default"
         self.progress.reset()
 
     def finish_ingestion_run(self) -> None:
@@ -431,13 +432,13 @@ class IngestionPipeline:
 
         return ingested, failed, len(job_ids)
 
-    def process_batch(self, file_paths: List[str], options: PipelineOptions | Any) -> Dict[str, Any]:
+    def process_batch(self, file_paths: List[str], options: PipelineOptions | Any, run_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Process a pre-discovered batch of files and return a summary dict.
 
         This is used by the ingestion orchestrator after discovery.
         """
-        self.start_ingestion_run()
+        self.start_ingestion_run(run_id=run_id)
         try:
             if not file_paths:
                 return {"processed_files": 0, "ingested": 0, "failed": 0}
@@ -446,13 +447,24 @@ class IngestionPipeline:
             if max_files > 0:
                 file_paths = file_paths[:max_files]
 
-            directories: Dict[str, List[str]] = {}
+            # Collect unique directories touched by this batch
+            batch_dirs: set = set()
             for path in file_paths:
-                directory = os.path.dirname(path) or os.path.abspath(".")
-                directories.setdefault(directory, []).append(path)
+                batch_dirs.add(os.path.dirname(os.path.abspath(path)) or os.path.abspath("."))
 
-            for directory, files in directories.items():
-                record_directory_listing(self, directory, files)
+            # Record the real on-disk contents of each directory, not just the
+            # filtered batch subset — otherwise files excluded by .ingestignore
+            # would be mistakenly detected as "deleted" and archived.
+            for directory in batch_dirs:
+                try:
+                    actual_files = [
+                        os.path.join(directory, f)
+                        for f in os.listdir(directory)
+                        if os.path.isfile(os.path.join(directory, f))
+                    ]
+                    record_directory_listing(self, directory, actual_files)
+                except OSError:
+                    pass
 
             if getattr(options, "dry_run", False):
                 return {

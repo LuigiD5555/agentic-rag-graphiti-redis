@@ -31,9 +31,10 @@ class PDFLoader:
     - Detection of scanned PDFs (image-based, no extractable text)
     """
 
-    # PDF size thresholds
-    LARGE_PDF_THRESHOLD = 50 * 1024 * 1024   # 50 MB - use incremental loading
-    MAX_PDF_SIZE_BYTES = 500 * 1024 * 1024   # 500 MB - absolute maximum (increased from 200 MB)
+    # PDF size/page thresholds
+    LARGE_PDF_PAGE_THRESHOLD = 500            # >500 pages → incremental loading
+    LARGE_PDF_SIZE_THRESHOLD = 50 * 1024 * 1024  # >50 MB → incremental loading (regardless of pages)
+    MAX_PDF_SIZE_BYTES = 500 * 1024 * 1024   # 500 MB - absolute maximum
 
     # Incremental loading settings
     PAGES_PER_BATCH = 50                     # Process 50 pages at a time for large PDFs
@@ -449,7 +450,7 @@ class PDFLoader:
         """
         Load PDF documents with caching, timeout, size limits, and incremental loading.
 
-        For PDFs larger than LARGE_PDF_THRESHOLD (50 MB), uses incremental loading
+        For PDFs larger than 50 MB or with more than 500 pages, uses incremental loading
         to process pages in batches, reducing memory pressure.
 
         Returns:
@@ -488,12 +489,27 @@ class PDFLoader:
         try:
             logger.debug("Extracting PDF content from %s", Path(self._path).name)
 
-            # Decide loading strategy based on file size
-            if file_size > self.LARGE_PDF_THRESHOLD:
-                # Use incremental loading for large PDFs
+            # Decide loading strategy based on page count and file size.
+            # Page count is the better proxy for parse time — a 4 MB PDF with
+            # 1600 pages takes far longer than a 40 MB PDF with 50 pages.
+            use_incremental = file_size > self.LARGE_PDF_SIZE_THRESHOLD
+            if not use_incremental:
+                try:
+                    from pypdf import PdfReader as _PdfReader
+                    _r = _PdfReader(self._path, strict=False)
+                    page_count = len(_r.pages)
+                    use_incremental = page_count > self.LARGE_PDF_PAGE_THRESHOLD
+                    if use_incremental:
+                        logger.info(
+                            "PDF has %d pages (>%d threshold), using incremental loading: %s",
+                            page_count, self.LARGE_PDF_PAGE_THRESHOLD, Path(self._path).name
+                        )
+                except Exception:
+                    pass  # If we can't count pages, fall through to timeout-based load
+
+            if use_incremental:
                 documents = self._load_incrementally(file_size)
             else:
-                # Use standard loading with timeout for smaller PDFs
                 documents = self._load_with_timeout()
 
             # Check if PDF is scanned (image-based)

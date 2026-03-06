@@ -91,7 +91,6 @@ class ChunkRegistry:
         chunk_id: str,
         status: ChunkStatus,
         vector_id: Optional[str] = None,
-        embedding_hash: Optional[str] = None,
         error: Optional[str] = None,
     ) -> None:
         now_ts = int(time.time())

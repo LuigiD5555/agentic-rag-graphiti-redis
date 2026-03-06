@@ -27,6 +27,7 @@ from src.workflows.ingestion.watermark_cleanup import create_default_cleanup
 # Checkpoint system
 from src.workflows.ingestion.checkpoint.scan_checkpointer import ScanCheckpointer
 from src.workflows.ingestion.checkpoint.ingest_queue import IngestQueue
+from src.workflows.ingestion.checkpoint.chunk_registry import ChunkRegistry
 
 logger = get_logger(__name__)
 
@@ -359,6 +360,7 @@ class IngestionOrchestrator:
         )
 
         ingest_queue = IngestQueue()
+        chunk_registry = ChunkRegistry()
 
         pipeline = IngestionPipeline.from_options(
             embedding_service=embedding_service,
@@ -366,6 +368,7 @@ class IngestionOrchestrator:
             options=pipeline_options,
             cache_manager=self._cache_manager,
             ingest_queue=ingest_queue,
+            chunk_registry=chunk_registry,
         )
         pipeline.ledger = self._ledger
 

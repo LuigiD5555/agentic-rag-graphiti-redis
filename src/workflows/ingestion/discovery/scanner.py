@@ -234,9 +234,14 @@ class DirectoryScanner:
                 log.warning("Cannot access directory %s: %s", dirpath, e)
                 continue
 
-        # Persist directory scores after full scan
+        # Persist directory scores after full scan.
+        # Only persist directories with score>0 (files found directly in them).
+        # Directories that only contain subdirs (score=0) must NOT be cached
+        # because the skip-on-score=0 logic would then wrongly skip their entire subtree.
         if self.exts_hash:
             for dpath, acc in dir_score_accum.items():
+                if acc["score"] == 0:
+                    continue
                 try:
                     d_mtime = os.stat(dpath).st_mtime
                     set_dir_score(dpath, d_mtime, acc["score"], acc["extractable"], self.exts_hash)
@@ -433,9 +438,14 @@ class DirectoryScanner:
 
         finally:
             self._last_dirs_scanned = dirs_scanned
-            # Persist directory scores after full streaming scan
+            # Persist directory scores after full streaming scan.
+            # Only persist directories with score>0 (files found directly in them).
+            # Directories that only contain subdirs (score=0) must NOT be cached
+            # because the skip-on-score=0 logic would then wrongly skip their entire subtree.
             if self.exts_hash:
                 for dpath, acc in dir_score_accum.items():
+                    if acc["score"] == 0:
+                        continue
                     try:
                         d_mtime = os.stat(dpath).st_mtime
                         set_dir_score(dpath, d_mtime, acc["score"], acc["extractable"], self.exts_hash)
