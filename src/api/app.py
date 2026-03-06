@@ -128,6 +128,11 @@ def get_snapshot_scheduler_instance():
     return scheduler
 
 
+def get_neo4j_instance():
+    """Get Neo4j repository instance (optional — None if NEO4J_ENABLED=false)."""
+    return _require_runtime_resources().neo4j_repository
+
+
 # Include routers based on API mode (via factory to hide HTTP specifics)
 api_family = get_api_router_family(rag_config)
 api_family.apply(

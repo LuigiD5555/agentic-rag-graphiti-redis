@@ -29,6 +29,7 @@ class RuntimeResources:
     cleanup_scheduler: Optional[Any]
     temporal_cleanup_scheduler: Optional[Any]
     web_search_client: Optional[SearXNGClient]
+    neo4j_repository: Optional[Any] = None
 
 
 class RuntimeContext:
@@ -182,6 +183,16 @@ class RuntimeFactory:
                 log.error("Failed to initialize web search client: %s", exc)
                 web_search_client = None
 
+        neo4j_repository = None
+        if getattr(cfg, "NEO4J_ENABLED", False):
+            try:
+                from src.backends.storage.graph.neo4j_repository import Neo4jRepository
+
+                neo4j_repository = Neo4jRepository(cfg)
+                log.info("Neo4j repository initialized")
+            except Exception as exc:  # pragma: no cover - optional
+                log.error("Failed to initialize Neo4j repository: %s", exc)
+
         log.info("RAG runtime initialization complete")
         return RuntimeResources(
             config=cfg,
@@ -195,6 +206,7 @@ class RuntimeFactory:
             cleanup_scheduler=cleanup_scheduler,
             temporal_cleanup_scheduler=temporal_scheduler,
             web_search_client=web_search_client,
+            neo4j_repository=neo4j_repository,
         )
 
     def shutdown(self, resources: Optional[RuntimeResources]) -> None:
@@ -220,3 +232,10 @@ class RuntimeFactory:
                 log.info("Weaviate client closed")
             except Exception as exc:  # pragma: no cover - optional
                 log.error("Error closing Weaviate client: %s", exc)
+
+        if resources.neo4j_repository:
+            try:
+                resources.neo4j_repository.close()
+                log.info("Neo4j repository closed")
+            except Exception as exc:  # pragma: no cover - optional
+                log.error("Error closing Neo4j repository: %s", exc)

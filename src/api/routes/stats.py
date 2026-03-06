@@ -1,10 +1,8 @@
 """Router for RAG statistics and monitoring endpoints."""
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-import src.settings as settings
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
@@ -45,22 +43,30 @@ class QueryMetrics(BaseModel):
     last_query: str
 
 
-# Dependency injection placeholders
+# Dependency injection
 async def get_weaviate_client():
     """Get Weaviate client instance."""
-    from src.api.app import _weaviate_client
-    if _weaviate_client is None:
+    from src.api.app import runtime_resources
+    if runtime_resources is None or runtime_resources.weaviate_client is None:
         raise HTTPException(status_code=500, detail="Weaviate client not initialized")
-    return _weaviate_client
+    return runtime_resources.weaviate_client
+
+
+async def get_neo4j_repository() -> Optional[Any]:
+    """Get Neo4j repository instance (None if not enabled)."""
+    from src.api.app import runtime_resources
+    if runtime_resources is None:
+        return None
+    return runtime_resources.neo4j_repository
 
 
 @router.get("/rag", response_model=RAGStats)
 async def get_rag_stats(
     weaviate_client = Depends(get_weaviate_client),
+    neo4j_repo = Depends(get_neo4j_repository),
 ) -> RAGStats:
     """Get overall RAG system statistics."""
     try:
-        import os
         from src.workflows.query.engine import AppConfig
 
         config = AppConfig()
@@ -98,9 +104,16 @@ async def get_rag_stats(
             total_objects = 0
             tenants = []
 
-        # TODO: Get Neo4j graph stats (placeholder for now)
+        # Get Neo4j graph stats if repository is available
         graph_nodes = 0
         graph_relations = 0
+        if neo4j_repo is not None:
+            try:
+                with neo4j_repo.driver.session() as session:
+                    graph_nodes = session.run("MATCH (n) RETURN count(n) AS c").single()["c"]
+                    graph_relations = session.run("MATCH ()-[r]->() RETURN count(r) AS c").single()["c"]
+            except Exception as exc:
+                logger.warning("Could not fetch Neo4j stats for /rag: %s", exc)
 
         return RAGStats(
             documents_indexed=total_objects,  # Approximation
@@ -116,46 +129,28 @@ async def get_rag_stats(
 
 
 @router.get("/graph", response_model=GraphStats)
-async def get_graph_stats() -> GraphStats:
+async def get_graph_stats(
+    neo4j_repo = Depends(get_neo4j_repository),
+) -> GraphStats:
     """Get graph database statistics from Neo4j."""
+    if neo4j_repo is None:
+        return GraphStats(nodes=0, relations=0, node_types={}, relation_types={})
+
     try:
-        import os
-        from neo4j import GraphDatabase
+        with neo4j_repo.driver.session() as session:
+            total_nodes = session.run("MATCH (n) RETURN count(n) as count").single()["count"]
+            total_relations = session.run("MATCH ()-[r]->() RETURN count(r) as count").single()["count"]
 
-        # Get Neo4j connection details
-        uri = settings.NEO4J_URI
-        user = settings.NEO4J_USER
-        password = settings.NEO4J_PASSWORD
-
-        driver = GraphDatabase.driver(uri, auth=(user, password))
-
-        with driver.session() as session:
-            # Count nodes
-            node_result = session.run("MATCH (n) RETURN count(n) as count")
-            total_nodes = node_result.single()["count"]
-
-            # Count relationships
-            rel_result = session.run("MATCH ()-[r]->() RETURN count(r) as count")
-            total_relations = rel_result.single()["count"]
-
-            # Count nodes by type
-            node_types_result = session.run(
-                "MATCH (n) RETURN labels(n) as labels, count(*) as count"
-            )
             node_types = {}
-            for record in node_types_result:
+            for record in session.run("MATCH (n) RETURN labels(n) as labels, count(*) as count"):
                 labels = record["labels"]
                 if labels:
-                    label = labels[0] if labels else "Unknown"
-                    node_types[label] = record["count"]
+                    node_types[labels[0]] = record["count"]
 
-            # Count relationships by type
-            rel_types_result = session.run(
-                "MATCH ()-[r]->() RETURN type(r) as type, count(*) as count"
-            )
-            relation_types = {record["type"]: record["count"] for record in rel_types_result}
-
-        driver.close()
+            relation_types = {
+                record["type"]: record["count"]
+                for record in session.run("MATCH ()-[r]->() RETURN type(r) as type, count(*) as count")
+            }
 
         return GraphStats(
             nodes=total_nodes,
@@ -164,14 +159,8 @@ async def get_graph_stats() -> GraphStats:
             relation_types=relation_types,
         )
     except Exception as e:
-        logger.error(f"Error getting graph stats: {e}", exc_info=True)
-        # Return empty stats if Neo4j is not available
-        return GraphStats(
-            nodes=0,
-            relations=0,
-            node_types={},
-            relation_types={},
-        )
+        logger.error("Error getting graph stats: %s", e, exc_info=True)
+        return GraphStats(nodes=0, relations=0, node_types={}, relation_types={})
 
 
 @router.get("/vector", response_model=VectorStats)

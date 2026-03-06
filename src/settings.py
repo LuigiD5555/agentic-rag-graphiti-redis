@@ -243,6 +243,7 @@ AUTO_SCAN_INITIAL_WAIT = 30  # Seconds to wait before initial scan
 AUTO_SCAN_MAX_FILES = 0  # Max files per scan (0 = unlimited)
 
 # ===== Neo4j Graph Store =====
+NEO4J_ENABLED = os.getenv("NEO4J_ENABLED", "false").strip().lower() == "true"
 NEO4J_URI = "bolt://neo4j:7687"
 NEO4J_USER = "neo4j"
 NEO4J_PASSWORD = ""
