@@ -39,7 +39,7 @@ def interactive_mode(rag: RAGOrchestrator):
 
             # Execute RAG query
             print("\nSearching and generating answer...\n")
-            result = rag.query(question=question, top_k=5, temperature=0.7)
+            result = rag.query(question=question)
 
             # Display answer
             print("=" * 70)
@@ -54,7 +54,9 @@ def interactive_mode(rag: RAGOrchestrator):
 
             # Display metadata
             metadata = result.get("metadata", {})
-            print(f"\nRetrieved: {metadata.get('retrieved_count', 0)} chunks")
+            graph_flag = " | graph=yes" if metadata.get("used_graph_context") else ""
+            web_flag = " | web=yes" if metadata.get("used_web_search") else ""
+            print(f"\nRetrieved: {metadata.get('retrieved_count', 0)} chunks{graph_flag}{web_flag}")
 
         except KeyboardInterrupt:
             print("\n\nInterrupted. Goodbye!")
@@ -76,7 +78,7 @@ def single_query_mode(rag: RAGOrchestrator, question: str, top_k: int = 5):
     print("Searching and generating answer...\n")
 
     try:
-        result = rag.query(question=question, top_k=top_k, temperature=0.7)
+        result = rag.query(question=question, top_k=top_k)
 
         # Display answer
         print("=" * 70)
@@ -91,7 +93,9 @@ def single_query_mode(rag: RAGOrchestrator, question: str, top_k: int = 5):
 
         # Display metadata
         metadata = result.get("metadata", {})
-        print(f"\nRetrieved: {metadata.get('retrieved_count', 0)} chunks\n")
+        graph_flag = " | graph=yes" if metadata.get("used_graph_context") else ""
+        web_flag = " | web=yes" if metadata.get("used_web_search") else ""
+        print(f"\nRetrieved: {metadata.get('retrieved_count', 0)} chunks{graph_flag}{web_flag}\n")
 
     except Exception as e:
         log.error("Query failed: %s", e)

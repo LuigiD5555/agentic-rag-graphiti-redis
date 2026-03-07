@@ -57,37 +57,72 @@ Defined in [repository.py](../vector/weaviate_repository/repository.py) and [sch
 
 ## 2. Graph Store - Neo4j
 
-**Purpose**: Knowledge graph for entity relationships and graph queries
+**Purpose**: Knowledge graph for entity relationships, provenance tracking, and RAG context enrichment
 
-**Location**: [src/storage/graph/neo4j_repository.py](../graph/neo4j_repository.py)
+**Location**: [src/backends/storage/graph/neo4j_repository.py](../graph/neo4j_repository.py)
 
-### Features
-- Stores entities and relationships extracted via NER
-- Cypher query language for complex graph traversals
-- Relationship inference and graph analytics
-- Path finding and pattern matching
+**Optional** — activate with `NEO4J_ENABLED=true`. When disabled, all graph endpoints return zeros gracefully.
+
+### Graph Model
+
+```
+Layer 1 — Filtering:
+  (:Installation)-[:HAS_GROUP]->(:Group)-[:HAS_EMBEDDING]->(:Embedding)
+
+Layer 2 — Knowledge graph:
+  (:Chunk {chunk_id, source, contribution_type})
+  (:Entity {key, name, entity_type})
+  (:Topic  {name})
+  (:Source {title, type, shareable, author})
+  (:User   {user_id})
+
+  (:Chunk)-[:MENTIONS]->(:Entity)
+  (:Entity)-[:RELATED_TO]->(:Entity)   # co-occurrence
+  (:Entity)-[:PART_OF]->(:Topic)
+  (:Chunk)-[:ORIGINATED_FROM]->(:Source)
+  (:Chunk)-[:OWNED_BY]->(:User)
+```
+
+### Contribution Types & Shareability
+
+`contribution_type` on `Chunk` and `shareable` on `Source` are inferred from `document_type` at ingestion time:
+
+| document_type | contribution_type | shareable |
+|---|---|---|
+| `conversation`, `note`, `memo` | `original` | `True` |
+| `chat` | `ai_assisted` | `True` |
+| `pdf`, `epub`, `book`, `docx` | `citation` | `False` |
+| unknown | `unknown` | `False` |
 
 ### Configuration
 ```bash
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=password
+NEO4J_ENABLED=true
 ```
 
-### Use Cases
-- Entity relationship discovery
-- Knowledge graph queries
-- Contextual entity retrieval
-- Graph-based reasoning
+### Key Operations
+- `add_entity()` / `add_relation()`: Low-level graph writes
+- `get_related_context(keywords)`: Retrieve entity neighbourhood for RAG enrichment
+- `get_shareable_chunk_ids(contribution_types=None)`: Marketplace export — returns chunk IDs with `shareable=True`; optionally filter by `contribution_type`
 
 ### Entity Extraction
-NER (Named Entity Recognition) pipeline (legacy/experimental):
-- [src/storage/graph/legacy_ner/extractor.py](../graph/legacy_ner/extractor.py)
-- [src/storage/graph/legacy_ner/bulk_runner.py](../graph/legacy_ner/bulk_runner.py)
+LLM-based pipeline (active):
+- [src/workflows/knowledge/entity_extractor.py](../../../workflows/knowledge/entity_extractor.py) — `extract_entities_from_chunk()`, `run_backfill()`
+
+Backfill existing chunks:
+```bash
+python -m src.workflows.knowledge.entity_extractor --max-chunks 0
+```
+
+### Schema Bootstrap
+[src/backends/storage/graph/neo4j_schema.py](../graph/neo4j_schema.py) — `ensure_schema(driver)` creates all constraints and indexes idempotently at startup (Neo4j ≥ 4.4).
 
 ### Related Files
-- [src/storage/graph/neo4j_repository.py](../graph/neo4j_repository.py)
-- [src/storage/graph/null_repository.py](../graph/null_repository.py) (stub for testing)
+- [src/backends/storage/graph/neo4j_repository.py](../graph/neo4j_repository.py)
+- [src/backends/storage/graph/neo4j_schema.py](../graph/neo4j_schema.py)
+- [src/workflows/knowledge/entity_extractor.py](../../../workflows/knowledge/entity_extractor.py)
 
 ## 3. Cache - SQLite Control Plane
 
@@ -139,15 +174,13 @@ Typical ingestion flow through storage backends:
 ```
 1. Document uploaded
    ↓
-2. Process document
+2. Process document (loader → chunker)
    ↓
-4. Extract entities → Neo4j (graph)
+3. Store chunks → Weaviate (vector embeddings)
    ↓
-5. Generate embeddings → Check SQLite control plane (embedding cache metadata, context checkpoint compaction)
-   ↓ (cache miss)
-6. Compute embeddings → Store metadata/results in SQLite
+4. Extract entities (LLM) → Neo4j (Chunk, Entity, Topic, Source nodes)
    ↓
-7. Store embeddings → Weaviate (vector)
+5. Checkpointing → SQLite control plane (file hash, stage tracking)
 ```
 
 ## Performance Considerations

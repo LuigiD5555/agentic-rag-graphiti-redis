@@ -1,5 +1,5 @@
 """Runtime-configurable answer modes for RAG responses."""
-from __future__ import annotations
+
 
 import json
 import os

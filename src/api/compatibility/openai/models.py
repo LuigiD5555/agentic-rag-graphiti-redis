@@ -5,6 +5,7 @@ import httpx
 from typing import Optional
 from fastapi import APIRouter
 from src.api.models import ModelsResponse, Model
+from src.conf import settings
 
 router = APIRouter(prefix="/v1", tags=["models"])
 logger = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ async def list_models() -> ModelsResponse:
     # Try to fetch models from LM Studio
     try:
         async with httpx.AsyncClient(timeout=2.0) as client:
-            response = await client.get("http://127.0.0.1:1234/v1/models")
+            response = await client.get(f"{settings.OPENAI_API_BASE}/models")
             if response.status_code == 200:
                 lm_data = response.json()
                 for model_obj in lm_data.get("data", []):

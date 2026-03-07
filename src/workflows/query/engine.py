@@ -96,6 +96,7 @@ class AppConfig(BaseSettings):
     VECTOR_STORES: Dict[str, Dict[str, Any]] = Field(default_factory=lambda: settings.VECTOR_STORES)
 
     # ===== Graph Store (Neo4j) =====
+    NEO4J_ENABLED: bool = Field(default_factory=lambda: settings.NEO4J_ENABLED)
     NEO4J_URI: str = Field(default_factory=lambda: settings.NEO4J_URI)
     NEO4J_USER: str = Field(default_factory=lambda: settings.NEO4J_USER)
     NEO4J_PASSWORD: str = Field(default_factory=lambda: settings.NEO4J_PASSWORD)

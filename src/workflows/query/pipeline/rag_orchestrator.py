@@ -10,6 +10,7 @@ from src.workflows.query.temporal.retriever import MultiTenantRetriever
 from src.apps.websearch import SearXNGClient
 from src.workflows.query.intent import IntentClassifier
 from src.workflows.query.sanitizer import get_sanitizer
+from src.workflows.query.keyword_extractor import extract_keywords
 from src.workflows.query.answer_modes import (
     resolve_mode,
     get_mode_config,
@@ -26,18 +27,18 @@ class RAGOrchestrator:
     """Orchestrates the full RAG pipeline: retrieve -> generate."""
 
     DEFAULT_SYSTEM_PROMPT = (
-        "You are a helpful assistant that answers questions based on the "
-        "provided context and conversation history.\n\n"
-        "Guidelines:\n"
-        "- Answer questions using the information from the provided context.\n"
-        "- Remember and reference previous messages when relevant.\n"
-        "- If asked to repeat or translate previous responses, use the history.\n"
-        "- If the context doesn't contain enough information, say so clearly.\n"
-        "- Provide detailed, well-structured answers; prefer depth over brevity.\n"
-        "- Use bullet points or short sections when helpful.\n"
-        "- When multiple relevant sources exist, synthesize them.\n"
-        "- Cite sources when relevant (mention document names/paths).\n"
-        "- If multiple sources provide conflicting information, acknowledge this.\n"
+        "You are a precise assistant that answers questions exclusively from "
+        "the provided document context.\n\n"
+        "Rules (strictly enforced):\n"
+        "- Answer ONLY using information explicitly present in the provided context.\n"
+        "- Do NOT add explanations, background knowledge, or details not found in the context.\n"
+        "- If the context does not contain enough information to answer, say so clearly "
+        "and specify what is missing — do not fill the gap with general knowledge.\n"
+        "- Quote or closely paraphrase the source material; prefer specificity over completeness.\n"
+        "- When multiple sources are relevant, synthesize only what they explicitly state.\n"
+        "- Cite the document name or path when referencing specific content.\n"
+        "- If sources conflict, report the conflict; do not resolve it with external knowledge.\n"
+        "- Remember and reference previous messages when relevant to the question.\n"
     )
 
     CONVERSATIONAL_SYSTEM_PROMPT = (
@@ -61,6 +62,7 @@ class RAGOrchestrator:
         enable_web_fallback: bool = True,
         min_relevance_score: float = 0.5,
         enable_rag_gating: bool = True,
+        neo4j_repository: Optional[Any] = None,
     ):
         """Initialize RAG orchestrator.
 
@@ -77,6 +79,7 @@ class RAGOrchestrator:
             enable_web_fallback: Enable web search when local retrieval fails or has low relevance.
             min_relevance_score: Minimum score threshold for triggering web search fallback.
             enable_rag_gating: Enable intent-based RAG gating (skip RAG for trivial queries).
+            neo4j_repository: Optional Neo4j repository for graph context enrichment.
         """
         self.retriever = retriever
         self.chat_service = chat_service
@@ -92,10 +95,12 @@ class RAGOrchestrator:
         self.min_relevance_score = min_relevance_score
         self.enable_rag_gating = enable_rag_gating
         self.intent_classifier = IntentClassifier() if enable_rag_gating else None
+        self.neo4j_repository = neo4j_repository
 
         log.info(
             "Initialized RAGOrchestrator with system_prompt=%s chars, multilingual=%s, "
-            "chat_memory=%s, multi_tenant=%s, file_tracker=%s, web_search=%s, web_fallback=%s, rag_gating=%s",
+            "chat_memory=%s, multi_tenant=%s, file_tracker=%s, web_search=%s, web_fallback=%s, "
+            "rag_gating=%s, neo4j=%s",
             len(self.system_prompt),
             enable_multilingual,
             chat_memory_manager is not None,
@@ -104,6 +109,7 @@ class RAGOrchestrator:
             web_search_client is not None,
             enable_web_fallback,
             enable_rag_gating,
+            neo4j_repository is not None,
         )
 
     def query(
@@ -501,6 +507,24 @@ class RAGOrchestrator:
         if memory_context:
             context = f"{memory_context}\n\n## Relevant documents:\n{context}"
 
+        # Step 2.6: Enrich context with Neo4j graph relationships (if available)
+        used_graph_context = False
+        if self.neo4j_repository:
+            try:
+                keywords = extract_keywords(question)
+                if keywords:
+                    graph_edges = self.neo4j_repository.get_related_context(keywords)
+                    if graph_edges:
+                        graph_context = self._build_graph_context(graph_edges)
+                        context = f"{context}\n\n## Related concepts (knowledge graph):\n{graph_context}"
+                        used_graph_context = True
+                        log.info(
+                            "Graph context: %d edges from keywords %s",
+                            len(graph_edges), keywords,
+                        )
+            except Exception as e:
+                log.warning("Graph context enrichment failed, continuing without it: %s", e)
+
         # Step 3: Generate answer using LLM
         answer = self._generate_answer(
             question=question,
@@ -541,6 +565,7 @@ class RAGOrchestrator:
                 "used_temporal_rag": len(temporal_results) > 0,
                 "used_web_search": used_web_search,
                 "used_reranking": used_reranking,
+                "used_graph_context": used_graph_context,
                 "retrieval_error": retrieval_error,
                 "thread_id": thread_id,
                 "retrieval_metadata": retrieval_metadata,
@@ -574,6 +599,34 @@ class RAGOrchestrator:
         context = "\n---\n".join(context_parts)
         log.debug("Built context: %d chars from %d documents", len(context), len(documents))
         return context
+
+    def _build_graph_context(self, edges: List[Dict[str, Any]]) -> str:
+        """Format Neo4j relationship edges as a compact context block.
+
+        Each edge becomes one line:
+            EntityA (TYPE) --[RELATION]--> EntityB (TYPE)  [topic: X]
+
+        Args:
+            edges: List of edge dicts from Neo4jRepository.get_related_context().
+
+        Returns:
+            Formatted string ready to append to the LLM context.
+        """
+        lines = []
+        for edge in edges:
+            source = edge.get("source", "?")
+            s_type = edge.get("source_type") or "Entity"
+            relation = edge.get("relation", "RELATED_TO")
+            target = edge.get("target", "?")
+            t_type = edge.get("target_type") or "Entity"
+            topic = edge.get("topic")
+
+            line = f"{source} ({s_type}) --[{relation}]--> {target} ({t_type})"
+            if topic:
+                line += f"  [topic: {topic}]"
+            lines.append(line)
+
+        return "\n".join(lines)
 
     def _generate_answer(
         self,

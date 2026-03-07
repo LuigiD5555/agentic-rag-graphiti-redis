@@ -98,10 +98,25 @@ class RuntimeFactory:
         )
 
         chat_service = provider.chat()
+
+        # Neo4j initialized early so it can be injected into the orchestrator.
+        neo4j_repository = None
+        if getattr(cfg, "NEO4J_ENABLED", False):
+            try:
+                from src.backends.storage.graph.neo4j_repository import Neo4jRepository
+                from src.backends.storage.graph.neo4j_schema import ensure_schema
+
+                neo4j_repository = Neo4jRepository(cfg)
+                ensure_schema(neo4j_repository.driver)
+                log.info("Neo4j repository initialized and schema bootstrapped")
+            except Exception as exc:  # pragma: no cover - optional
+                log.error("Failed to initialize Neo4j repository: %s", exc)
+
         rag_kwargs = dict(self._rag_overrides)
         rag_orchestrator = RAGOrchestrator(
             retriever=retriever,
             chat_service=chat_service,
+            neo4j_repository=neo4j_repository,
             **rag_kwargs,
         )
         log.info("RAG orchestrator initialized")
@@ -182,16 +197,6 @@ class RuntimeFactory:
             except Exception as exc:  # pragma: no cover - optional
                 log.error("Failed to initialize web search client: %s", exc)
                 web_search_client = None
-
-        neo4j_repository = None
-        if getattr(cfg, "NEO4J_ENABLED", False):
-            try:
-                from src.backends.storage.graph.neo4j_repository import Neo4jRepository
-
-                neo4j_repository = Neo4jRepository(cfg)
-                log.info("Neo4j repository initialized")
-            except Exception as exc:  # pragma: no cover - optional
-                log.error("Failed to initialize Neo4j repository: %s", exc)
 
         log.info("RAG runtime initialization complete")
         return RuntimeResources(

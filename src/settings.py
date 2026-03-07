@@ -253,7 +253,7 @@ API_MODE = "openai"  # "openai" or "ollama"
 RAG_AUTOSTART = os.getenv("RAG_AUTOSTART", "false").strip().lower() == "true"
 API_PORT = 8001  # Port for API server
 SOCKET_PORT = 5555  # Port for RAG socket server
-OPENAI_API_BASE = "http://127.0.0.1:1234/v1"
+OPENAI_API_BASE = f"http://{os.getenv('LMSTUDIO_HOST', 'host.containers.internal')}:{os.getenv('HOST_LMSTUDIO_HTTP_PORT', '1234')}/v1"
 OPENAI_API_KEY = "lm-studio"
 
 # ===== Provider (LM Studio) =====
@@ -278,14 +278,14 @@ MIN_RELEVANCE_SCORE = 0.5
 ENABLE_RERANKER = False
 
 # RAG Generation Parameters
-RAG_DEFAULT_TEMPERATURE = 0.7
+RAG_DEFAULT_TEMPERATURE = 0.2
 RAG_DEFAULT_MAX_TOKENS = 2048
 RAG_DEFAULT_TOP_P = 0.9
 RAG_DEFAULT_FREQUENCY_PENALTY = 0.0
 RAG_DEFAULT_PRESENCE_PENALTY = 0.0
 
 # RAG Retrieval Parameters
-RAG_DEFAULT_TOP_K = 40  # Number of chunks to retrieve (~5000 tokens context with 500 char chunks)
+RAG_DEFAULT_TOP_K = 10  # Number of chunks to retrieve (reduced from 40 for small-model grounding)
 
 # RAG Profile System
 RAG_PROFILE = "auto"
@@ -323,7 +323,7 @@ RAG_PDF_CACHE_TTL = 2592000
 MEMORY_TTL = 172800  # 48 hours
 MEMORY_WINDOW_SIZE = 10
 CHECKPOINT_NS = "memory"
-COMPRESSION_MODEL_ENDPOINT = "http://127.0.0.1:1234/v1/chat/completions"
+COMPRESSION_MODEL_ENDPOINT = f"http://{os.getenv('LMSTUDIO_HOST', 'host.containers.internal')}:{os.getenv('HOST_LMSTUDIO_HTTP_PORT', '1234')}/v1/chat/completions"
 COMPRESSION_MODEL_NAME = "liquid/lfm2-1.2b"
 COMPRESSION_MAX_TOKENS = 500
 MAX_STATE_SIZE_KB = 100

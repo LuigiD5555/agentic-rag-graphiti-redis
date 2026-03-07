@@ -1,6 +1,6 @@
 """Module with services that interact with a Neo4j database."""
 import re
-from typing import Optional, cast, LiteralString, Dict, Any
+from typing import Optional, cast, LiteralString, Dict, Any, List
 from neo4j import GraphDatabase, Query
 from neo4j.exceptions import Neo4jError
 from src import logger
@@ -149,3 +149,112 @@ class Neo4jRepository:
         except Neo4jError as e:
             logger.error("Search failed for keyword '%s': %s", keyword, e)
             raise
+
+    def get_related_context(self, keywords: List[str], max_hops: int = 1, limit: int = 40) -> List[Dict[str, Any]]:
+        """Return entity neighbourhood for the given keywords.
+
+        Walks up to *max_hops* away from any Entity whose name matches one of
+        the keywords (case-insensitive substring match).  Returns a list of
+        dicts, each describing one relationship edge:
+            {"source": str, "source_type": str,
+             "relation": str,
+             "target": str, "target_type": str,
+             "topic": str | None}
+
+        This is used by the RAG orchestrator to inject structured graph
+        context alongside the Weaviate text chunks.
+        """
+        if not keywords:
+            return []
+
+        # Build a list of lowercase keywords for CONTAINS matching
+        kw_lower = [k.lower() for k in keywords if k.strip()]
+        if not kw_lower:
+            return []
+
+        # Cypher: match Entity nodes whose name contains any keyword,
+        # then traverse RELATED_TO / PART_OF edges up to max_hops.
+        # We keep it simple (1 hop default) to stay fast.
+        cypher = """
+        UNWIND $keywords AS kw
+        MATCH (e:Entity)
+        WHERE toLower(e.name) CONTAINS kw
+        WITH DISTINCT e
+        MATCH (e)-[r:RELATED_TO|PART_OF]->(n)
+        OPTIONAL MATCH (e)-[:PART_OF]->(t:Topic)
+        RETURN
+            e.name        AS source,
+            e.entity_type AS source_type,
+            type(r)       AS relation,
+            n.name        AS target,
+            labels(n)[0]  AS target_type,
+            t.name        AS topic
+        LIMIT $limit
+        """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(
+                    safe_query(cypher),
+                    keywords=kw_lower,
+                    limit=limit,
+                )
+                rows = [
+                    {
+                        "source": record["source"],
+                        "source_type": record["source_type"],
+                        "relation": record["relation"],
+                        "target": record["target"],
+                        "target_type": record["target_type"],
+                        "topic": record["topic"],
+                    }
+                    for record in result
+                ]
+            logger.info(
+                "get_related_context: keywords=%s returned %d edges",
+                keywords, len(rows),
+            )
+            return rows
+        except Neo4jError as e:
+            logger.error("get_related_context failed: %s", e)
+            return []
+
+    def get_shareable_chunks(
+        self,
+        contribution_types: Optional[List[str]] = None,
+    ) -> List[str]:
+        """Return IDs of chunks whose Source is marked shareable=True.
+
+        Args:
+            contribution_types: If provided, further filter by chunk
+                contribution_type (e.g. ["original", "ai_assisted"]).
+                When None, all shareable chunks are returned regardless of type.
+
+        Used by the marketplace export pipeline to identify chunks that can be
+        shared publicly (i.e. user-generated knowledge, not copyrighted material).
+        """
+        if contribution_types:
+            cypher = """
+            MATCH (c:Chunk)-[:ORIGINATED_FROM]->(s:Source {shareable: true})
+            WHERE c.contribution_type IN $types
+            RETURN c.chunk_id AS chunk_id
+            """
+            params: Dict[str, Any] = {"types": contribution_types}
+        else:
+            cypher = """
+            MATCH (c:Chunk)-[:ORIGINATED_FROM]->(s:Source {shareable: true})
+            RETURN c.chunk_id AS chunk_id
+            """
+            params = {}
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(safe_query(cypher), **params)
+                ids = [record["chunk_id"] for record in result if record["chunk_id"]]
+            logger.info("get_shareable_chunks: returned %d chunk IDs", len(ids))
+            return ids
+        except Neo4jError as e:
+            logger.error("get_shareable_chunks failed: %s", e)
+            return []
+
+    get_shareable_chunk_ids = get_shareable_chunks
