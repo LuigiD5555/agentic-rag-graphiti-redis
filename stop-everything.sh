@@ -128,8 +128,6 @@ if command -v systemctl >/dev/null 2>&1; then
         systemctl --user reset-failed "tool-${tool}.service" 2>/dev/null || true
     done
 
-    RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-    rm -f "$RUNTIME_DIR/rag-tools-enabled"
 else
     print_warning "systemctl not available; skipping systemd stop"
 fi
