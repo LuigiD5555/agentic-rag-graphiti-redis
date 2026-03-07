@@ -184,16 +184,23 @@ class WeaviateRetriever:
                 scores = []
 
                 for obj in response.objects:
-                    # Convert distance to similarity score for cosine distance
-                    # distance: 0 = identical, 2 = opposite
-                    # similarity: 1 = identical, -1 = opposite
+                    # Hybrid search may return score and/or distance depending on backend/version.
+                    # Prefer metadata.score when present; fall back to cosine similarity from distance.
                     distance = obj.metadata.distance if obj.metadata else None
-                    if distance is not None:
+                    raw_score = obj.metadata.score if obj.metadata else None
+
+                    score: float
+                    if raw_score is not None:
+                        try:
+                            score = float(raw_score)
+                        except (TypeError, ValueError):
+                            score = 0.0
+                    elif distance is not None:
                         # Convert cosine distance to similarity: similarity = 1 - distance
-                        score = 1.0 - distance
+                        score = 1.0 - float(distance)
                     else:
                         score = 0.0
-                    
+
                     scores.append(score)
 
                     doc = {
