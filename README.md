@@ -113,33 +113,130 @@ Or with Docker Compose:
 docker-compose up --build -d
 ```
 
-## Logs (Podman / journald)
+## Operations, Monitoring, and Debugging
 
-This stack configures `journald` as the `log driver` (see `podman-compose.yml`), so you can query complete logs with `journalctl`.
+This section is the practical playbook for day-to-day diagnostics. Use it first before digging into deeper docs.
 
-- Follow a container log: `journalctl CONTAINER_NAME=rag-graphiti-agentic_weaviate_1 -f`
-- In rootless setups it may be in the user journal: `journalctl --user CONTAINER_NAME=rag-graphiti-agentic_weaviate_1 -f`
-- Export to a file (example): `journalctl CONTAINER_NAME=rag-graphiti-agentic_weaviate_1 --since today > weaviate.log`
-- Export all stack logs to a git-ignored folder: `./scripts/journal_dump.sh`
-  - Output: `logs/<YYYY-MM-DD>/<YYYYMMDD-HHMMSS>/`
-  - Configurable time window: `SINCE=\"2 hours ago\" UNTIL=\"now\" ./scripts/journal_dump.sh`
+### 1) Fast health checks
 
-Note: the `log driver` is fixed when the container is created; if containers already exist, recreate them: `podman-compose down` then `podman-compose up -d`.
+```bash
+# API liveness
+curl -sS http://127.0.0.1:8000/health | jq
 
-### Auto-export on container stop (systemd)
+# API mode + exposed endpoints
+curl -sS http://127.0.0.1:8000/ | jq
 
-To automatically export to `logs/` when a project container stops (error or manual), install the systemd watcher (user):
+# Core stats
+curl -sS http://127.0.0.1:8000/api/stats/rag | jq
+curl -sS http://127.0.0.1:8000/api/stats/vector | jq
+curl -sS http://127.0.0.1:8000/api/stats/graph | jq
+curl -sS http://127.0.0.1:8000/api/stats/metrics | jq
+```
 
-- `cp systemd/rag-graphiti-logwatcher.service ~/.config/systemd/user/`
-- Edit `~/.config/systemd/user/rag-graphiti-logwatcher.service` and set `REPO_DIR=/absolute/path/to/repo`
-- `systemctl --user daemon-reload`
-- `systemctl --user enable --now rag-graphiti-logwatcher.service`
+### 2) Query tracing with request ID (recommended)
 
-To disable:
+```bash
+# Send a query with explicit request id
+curl -sS -X POST http://127.0.0.1:8000/rag/query \
+  -H "Content-Type: application/json" \
+  -H "X-Request-ID: debug-001" \
+  -d '{"query":"Explain current ingestion status","top_k":5}' | jq
 
-- `systemctl --user disable --now rag-graphiti-logwatcher.service`
+# Find correlated logs (system journal)
+journalctl CONTAINER_NAME=rag-graphiti-agentic_app_1 --since "30 min ago" | rg "debug-001"
 
-Or, if you prefer to keep it installed but not exporting, toggle `ENABLE_LOG_EXPORT=1` / `#Environment=ENABLE_LOG_EXPORT=0` in the unit file.
+# Rootless fallback
+journalctl --user CONTAINER_NAME=rag-graphiti-agentic_app_1 --since "30 min ago" | rg "debug-001"
+```
+
+### 3) Container logs (journald)
+
+```bash
+# Follow logs per service
+journalctl CONTAINER_NAME=rag-graphiti-agentic_app_1 -f
+journalctl CONTAINER_NAME=rag-graphiti-agentic_weaviate_1 -f
+journalctl CONTAINER_NAME=rag-graphiti-agentic_neo4j_1 -f
+```
+
+`podman-compose.yml` uses `journald` log driver. If containers were created with another driver, recreate:
+
+```bash
+podman-compose down
+COMPOSE_BAKE=false podman-compose up -d
+```
+
+### 4) Structured log dump for post-mortem
+
+Use the real dump script in `tools/debug/scripts`:
+
+```bash
+# Dump last 24h for the compose project
+tools/debug/scripts/journal_dump.sh
+
+# Custom window
+SINCE="2 hours ago" UNTIL="now" tools/debug/scripts/journal_dump.sh
+
+# Latest merged file
+less tools/debug/logs/latest/all_containers.log
+```
+
+Optional auto-export on container stop events:
+
+```bash
+COMPOSE_PROJECT_NAME=rag-graphiti-agentic tools/debug/scripts/podman_event_logexport.sh
+```
+
+### 5) Error-focused log filtering
+
+```bash
+# Default container
+python tools/debug/scripts/filter_podman_errors.py
+
+# All running containers
+python tools/debug/scripts/filter_podman_errors.py --all-containers
+
+# Full session logs from start time
+python tools/debug/scripts/filter_podman_errors.py --container rag-graphiti-agentic_app_1 --full-session
+```
+
+### 6) Runtime probes (concurrency and LM Studio behavior)
+
+```bash
+# App-level overlap probe: ingestion + staggered queries
+python scripts/debug/run_app_concurrency_probe.py \
+  --base-url http://127.0.0.1:8000 \
+  --ingest-path /path/to/docs
+
+# Direct LM Studio probe: embed/chat mixed scenarios
+python scripts/debug/run_lmstudio_concurrency_probe.py \
+  --base-url http://127.0.0.1:1234/v1 \
+  --chat-model your-chat-model \
+  --embed-model your-embedding-model
+```
+
+Both scripts write raw JSONL + summary JSON under:
+`docs/investigations/lmstudio-concurrency/raw-results/`
+
+### 7) Monitoring toolkit
+
+```bash
+# Full daemon loop
+python -m tools.monitoring.src.monitor_daemon
+
+# Static + coverage bloat analysis
+python -m tools.monitoring.src.bloat_analyzer
+
+# Real-time coverage monitor
+python -m tools.monitoring.src.realtime_monitor
+```
+
+Containerized monitoring CLI:
+
+```bash
+tools/monitoring/monitoring-cli.sh status
+tools/monitoring/monitoring-cli.sh health
+tools/monitoring/monitoring-cli.sh analyze --since "2 hours ago"
+```
 
 ## Ingestion: preserving duplicates by path
 
