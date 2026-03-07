@@ -31,7 +31,7 @@ This system is built for scenarios that require **document ingestion**, **code i
 
 ## Requirements
 
-- **Python** 3.12
+- **Python** 3.11+
 - **LM Studio** running locally with:
 	- At least one **embedding model** loaded
 	- At least one **language model** loaded
@@ -43,7 +43,7 @@ This system is built for scenarios that require **document ingestion**, **code i
 ## Installation
 
 1. **Clone the repository**
-2. **Create and activate a virtual environment**
+2. **Activate your `rag` conda environment** (recommended for this repo)
 3. **Install dependencies**
 4. **Configure environment variables**  
 	Copy the example `.env` file and adjust values:
@@ -173,7 +173,13 @@ uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
 | `GET` | `/v1/models` | List available models |
 | `POST` | `/v1/chat/completions` | Chat completion (OpenAI-compatible) |
 | `POST` | `/v1/responses` | Modern endpoint with structured metadata |
+| `GET` | `/v1/responses/{response_id}` | Retrieve a cached response |
+| `DELETE` | `/v1/responses/{response_id}` | Delete a cached response |
 | `POST` | `/v1/embeddings` | Generate embeddings/vectors |
+| `POST` | `/v1/files` | Upload files for temporal RAG |
+| `GET` | `/v1/files` | List uploaded temporal files |
+| `DELETE` | `/v1/files/{file_id}` | Delete an uploaded temporal file |
+| `POST` | `/v1/files/{file_id}/promote` | Promote a temporal file into persistent knowledge |
 | `POST` | `/rag/query` | Direct RAG query with metadata |
 | `POST` | `/rag/ingest` | Trigger ingestion via API |
 | `GET` | `/rag/answer-modes` | List answer modes |
@@ -182,13 +188,19 @@ uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
 | `GET` | `/api/stats/rag` | Overall stats: objects, tenants, graph counts |
 | `GET` | `/api/stats/graph` | Neo4j node/relation breakdown by type |
 | `GET` | `/api/stats/vector` | Weaviate collection stats per tenant |
+| `GET` | `/api/stats/metrics` | Query metrics for dashboards |
 | `GET` | `/exclusions/` | Read `.ingestignore` entries |
 | `POST` | `/exclusions/` | Update `.ingestignore` entries at runtime |
 | `GET` | `/volumes/` | List configured external volumes |
+| `POST` | `/volumes/` | Replace the full external volumes config |
+| `POST` | `/volumes/add` | Add a single external volume |
+| `PUT` | `/volumes/{name}` | Update one external volume |
+| `DELETE` | `/volumes/{name}` | Remove one external volume |
 | `GET` | `/volumes/status` | Check mount availability of each volume |
 | `POST` | `/volumes/{name}/mark-available` | Mark a volume as available |
 | `GET` | `/api/system/autostart` | Get systemd autostart status |
 | `POST` | `/api/system/autostart` | Enable/disable systemd autostart |
+| `GET` | `/api/system/autostart/status` | Lightweight autostart status probe |
 | `GET` | `/api/files/` | List tracked ingested files |
 | `GET` | `/health` | Health check |
 
@@ -220,7 +232,7 @@ print(response.choices[0].message.content)
 **More information:**
 
 - Full documentation: [src/api/README.md](src/api/README.md)
-- Tests: `python tests/test_api.py`
+- Tests: `pytest tests/integration/rag/test_api.py`
 
 ---
 
@@ -241,8 +253,9 @@ During ingestion:
 - Text is split into chunks (with Markdown-aware and semantic splitting options)
 - Embeddings are generated via LM Studio
 - Data is inserted into Weaviate
-- Entities and relationships are extracted and inserted into Neo4j (when `NEO4J_ENABLED=true`)
+- Entities, topics, and provenance (`Source` nodes) are extracted via LLM and written to Neo4j (when `NEO4J_ENABLED=true`); `contribution_type` and `shareable` are inferred automatically from the document type
 - Each file is tracked in the ledger for content-level deduplication (SHA-256) and mtime-based skip logic
+- **Score cache:** after processing, each file gets a score (`1` = produced content, `0` = nothing extractable). On subsequent scans, score-0 files are skipped instantly without re-processing. Directories where all files score 0 are skipped entirely without `scandir`. Scores are persisted in xattr (when supported) + SQLite + a mirror JSON under `~/.local/share/rag/scores/` that survives Docker volume wipes. Scores are tied to an `exts_hash` so enabling OCR or adding extensions automatically invalidates them.
 
 To ignore files/directories from ingestion, add patterns and paths to `.ingestignore`
 (supports relative or absolute entries). You can also manage exclusions at runtime via the REST API:
@@ -333,10 +346,38 @@ Connect from another machine:
 
 Neo4j is **optional and off by default**. Enable it by setting `NEO4J_ENABLED=true` in your `.env` or `data/settings.json`. When enabled:
 
-- `RuntimeFactory` initializes `Neo4jRepository` on startup and closes it on shutdown.
+- `RuntimeFactory` initializes `Neo4jRepository` on startup, bootstraps the schema via `ensure_schema()`, and closes the driver on shutdown.
 - The `/api/stats/graph` endpoint returns real node/relation counts grouped by type.
 - The `/api/stats/rag` endpoint includes live `graph_nodes` and `graph_relations` counts.
-- Ingestion extracts entities and relationships from documents and writes them to Neo4j.
+- The RAG pipeline enriches retrieved chunks with related entities and topics from the graph (`get_related_context()`).
+- Ingestion extracts entities and writes them to Neo4j via `src/workflows/knowledge/entity_extractor.py`. To backfill existing chunks: `python -m src.workflows.knowledge.entity_extractor`.
+
+### Graph model
+
+```
+(:Chunk {chunk_id, source, contribution_type})
+(:Entity {key, name, entity_type})
+(:Topic  {name})
+(:Source {title, type, shareable, author})
+
+(:Chunk)-[:MENTIONS]->(:Entity)
+(:Entity)-[:RELATED_TO]->(:Entity)   # co-occurrence within same chunk
+(:Entity)-[:PART_OF]->(:Topic)
+(:Chunk)-[:ORIGINATED_FROM]->(:Source)
+```
+
+### Shareability & contribution types
+
+`contribution_type` on each `Chunk` and `shareable` on each `Source` are inferred automatically from the document type at ingestion time:
+
+| Document type | contribution_type | shareable |
+|---|---|---|
+| `conversation`, `note`, `memo` | `original` | ✓ |
+| `chat` | `ai_assisted` | ✓ |
+| `pdf`, `epub`, `book`, `docx` | `citation` | ✗ |
+| unknown | `unknown` | ✗ |
+
+Use `neo4j_repository.get_shareable_chunk_ids()` to retrieve chunks eligible for marketplace export.
 
 When `NEO4J_ENABLED=false` (default), all graph endpoints return empty stats — no errors.
 
@@ -349,6 +390,11 @@ The API can manage external mount points (USB drives, NFS shares) via `data/sett
 curl -X POST http://localhost:8000/volumes/add \
   -H "Content-Type: application/json" \
   -d '{"name":"usb","primary":"/mnt/usb","fallback":"/data/fallback","mount":"/mnt/usb"}'
+
+# Replace the full volumes config
+curl -X POST http://localhost:8000/volumes/ \
+  -H "Content-Type: application/json" \
+  -d '{"volumes":[{"name":"usb","primary":"/mnt/usb","fallback":"/data/fallback","mount":"/mnt/usb"}]}'
 
 # Check mount status
 curl http://localhost:8000/volumes/status
@@ -391,8 +437,8 @@ an external gateway/provider would integrate.
 
 ### Provider Apps
 
-- Only `ollama` is treated as a built-in provider (core `rag`).
-- Providers like `lmstudio`, `anythingllm`, and `huggingface` are enabled via `INSTALLED_APPS`.
+- `ollama` remains the only built-in provider registered directly by the core app.
+- `lmstudio`, `openai`, `huggingface`, `anythingllm`, and `litellm_gateway` are registered via `INSTALLED_APPS`.
 
 ### Weaviate embedding dimension changes
 
@@ -497,9 +543,10 @@ Key variables beyond the basics:
 | `RAG_ADAPTIVE_RAM_LOW` | `60` | RAM% threshold to increase workers |
 | `RAG_ADAPTIVE_CPU_HIGH` | `2.5` | CPU load avg threshold to reduce workers |
 | `RAG_ADAPTIVE_BATCH_SIZE` | `10` | Files per ingestion sub-batch |
-| `AUTO_SCAN_ENABLED` | `false` | Enable background auto-scan |
+| `AUTO_SCAN_INITIAL` | `true` | Run one full auto-scan shortly after startup |
 | `AUTO_SCAN_INTERVAL` | `300` | Seconds between auto-scans |
-| `RESOURCE_MODE` | `SAVER` | `SAVER` / `BALANCED` / `PERFORMANCE` |
+| `AUTO_SCAN_INITIAL_WAIT` | `30` | Seconds to wait before the first auto-scan |
+| `RESOURCE_MODE` | `performance` | `saver` / `balanced` / `performance` runtime profile |
 | `API_MODE` | `openai` | `openai` or `ollama` compatibility mode |
 | `WEB_SEARCH_ENABLED` | `false` | Enable SearXNG web fallback |
 | `DUPLICATES_DOC_EXCEPTIONS` | `("__init__.py",)` | Paths ingested even when duplicate |

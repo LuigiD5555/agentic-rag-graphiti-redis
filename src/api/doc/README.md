@@ -1,13 +1,14 @@
 # API Documentation
 
-This directory contains documentation specific to the RAG API service.
+API-specific documentation lives here.
 
-## Contents
+## Files
 
-- [QUICKSTART_API.md](QUICKSTART_API.md) - Quick start guide for the API
+- `QUICKSTART_API.md` - shortest path to bring up and test the API
+- `../README.md` - route inventory and API architecture notes
 
-## Related Documentation
+## Related docs
 
-- General project documentation: [../../../docs/](../../../docs/)
-- Ingestion documentation: [../../ingestion/doc/](../../ingestion/doc/)
-- Provider documentation: [../../providers/doc/](../../providers/doc/)
+- `docs/QUERYING_GUIDE.md`
+- `docs/CONFIGURATION.md`
+- `src/backends/llm/doc/PROVIDERS_ARCHITECTURE.md`

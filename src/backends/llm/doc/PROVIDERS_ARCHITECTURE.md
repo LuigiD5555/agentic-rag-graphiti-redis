@@ -110,7 +110,7 @@ src/backends/llm/newprovider/
 
 Provider tests are located in:
 - Unit tests: [tests/unit/test_embeddings.py](../../../tests/unit/test_embeddings.py)
-- Integration tests: [tests/integration/test_api.py](../../../tests/integration/test_api.py)
+- Integration tests: [tests/integration/rag/test_api.py](../../../tests/integration/rag/test_api.py)
 
 ## Related Documentation
 
