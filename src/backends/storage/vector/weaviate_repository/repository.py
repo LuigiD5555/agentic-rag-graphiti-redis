@@ -446,11 +446,13 @@ class WeaviateRepository:
     def archive_file(self, file_id: str, tenant_id: Optional[str] = None) -> None:
         coll = self._coll(tenant_id)
         where = Filter.by_property("file_id").equal(file_id)
-        cursor: Optional[str] = None
         PAGE = 200
+        offset = 0
 
         while True:
-            result = coll.query.fetch_objects(limit=PAGE, after=cursor, filters=where)
+            # Weaviate cursor API (after+limit) cannot be combined with filters.
+            # Use offset-based pagination instead when a where filter is present.
+            result = coll.query.fetch_objects(limit=PAGE, offset=offset, filters=where)
             objects = getattr(result, "objects", []) or []  # type: ignore[attr-defined]
             if not objects:
                 break
@@ -461,11 +463,9 @@ class WeaviateRepository:
                     continue
                 coll.data.update(uuid=uuid_id, properties={"archived": True})
 
-            # Cursor-based pagination: use UUID of last object as next `after` value.
-            last_uuid = getattr(objects[-1], "uuid", None)
-            if last_uuid is None or len(objects) < PAGE:
+            if len(objects) < PAGE:
                 break
-            cursor = str(last_uuid)
+            offset += PAGE
 
     def upsert_failure(self, record: Dict[str, Any]) -> None:
         logger.warning("Failure record: %s", record)
