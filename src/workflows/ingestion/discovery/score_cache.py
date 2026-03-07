@@ -14,7 +14,7 @@ If the hash changes (user enables OCR, adds extensions, etc.) every lookup
 returns None and files are re-evaluated automatically.
 """
 
-from __future__ import annotations
+
 
 import hashlib
 import json

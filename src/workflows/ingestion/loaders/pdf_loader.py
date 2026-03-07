@@ -6,6 +6,13 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from io import BytesIO
 
+try:
+    import fitz as _fitz  # pymupdf
+    _PYMUPDF_AVAILABLE = True
+except ImportError:
+    _fitz = None
+    _PYMUPDF_AVAILABLE = False
+
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError, PdfStreamError
 
@@ -161,6 +168,34 @@ class PDFLoader:
             return True
 
         return False
+
+    def _load_with_pymupdf(self) -> List[Document]:
+        """
+        Load PDF using pymupdf (MuPDF) — 5-20x faster than pypdf for complex PDFs.
+        """
+        doc = _fitz.open(self._path)
+        total_pages = len(doc)
+        documents = []
+        for page_num in range(total_pages):
+            try:
+                page = doc[page_num]
+                text = page.get_text()
+                documents.append(Document(
+                    page_content=text or "",
+                    metadata={
+                        "source": self._path,
+                        "page": page_num,
+                        "total_pages": total_pages,
+                    },
+                ))
+            except Exception as exc:
+                logger.warning("pymupdf failed to extract page %d: %s", page_num + 1, exc)
+        doc.close()
+        logger.info(
+            "Completed pymupdf loading: %d/%d pages extracted from %s",
+            len(documents), total_pages, Path(self._path).name
+        )
+        return documents
 
     def _load_incrementally(self, file_size: float) -> List[Document]:
         """
@@ -489,28 +524,38 @@ class PDFLoader:
         try:
             logger.debug("Extracting PDF content from %s", Path(self._path).name)
 
-            # Decide loading strategy based on page count and file size.
-            # Page count is the better proxy for parse time — a 4 MB PDF with
-            # 1600 pages takes far longer than a 40 MB PDF with 50 pages.
-            use_incremental = file_size > self.LARGE_PDF_SIZE_THRESHOLD
-            if not use_incremental:
+            # Fast path: pymupdf (MuPDF) is dramatically faster than pypdf for
+            # complex PDFs (math formulas, images). Use it when available.
+            if _PYMUPDF_AVAILABLE:
                 try:
-                    from pypdf import PdfReader as _PdfReader
-                    _r = _PdfReader(self._path, strict=False)
-                    page_count = len(_r.pages)
-                    use_incremental = page_count > self.LARGE_PDF_PAGE_THRESHOLD
-                    if use_incremental:
-                        logger.info(
-                            "PDF has %d pages (>%d threshold), using incremental loading: %s",
-                            page_count, self.LARGE_PDF_PAGE_THRESHOLD, Path(self._path).name
-                        )
-                except Exception:
-                    pass  # If we can't count pages, fall through to timeout-based load
-
-            if use_incremental:
-                documents = self._load_incrementally(file_size)
+                    documents = self._load_with_pymupdf()
+                except Exception as exc:
+                    logger.warning(
+                        "pymupdf failed for %s (%s), falling back to pypdf",
+                        Path(self._path).name, exc
+                    )
+                    documents = self._load_with_timeout()
             else:
-                documents = self._load_with_timeout()
+                # Decide loading strategy based on page count and file size.
+                use_incremental = file_size > self.LARGE_PDF_SIZE_THRESHOLD
+                if not use_incremental:
+                    try:
+                        from pypdf import PdfReader as _PdfReader
+                        _r = _PdfReader(self._path, strict=False)
+                        page_count = len(_r.pages)
+                        use_incremental = page_count > self.LARGE_PDF_PAGE_THRESHOLD
+                        if use_incremental:
+                            logger.info(
+                                "PDF has %d pages (>%d threshold), using incremental loading: %s",
+                                page_count, self.LARGE_PDF_PAGE_THRESHOLD, Path(self._path).name
+                            )
+                    except Exception:
+                        pass
+
+                if use_incremental:
+                    documents = self._load_incrementally(file_size)
+                else:
+                    documents = self._load_with_timeout()
 
             # Check if PDF is scanned (image-based)
             if self._is_scanned_pdf(documents):
