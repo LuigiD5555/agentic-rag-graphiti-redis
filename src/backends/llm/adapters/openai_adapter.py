@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Dict, List, Optional
 from src.backends.llm.adapters.base import ProviderAdapterBase
 from src.workflows.query.interfaces.embedding_interface import EmbeddingInterface
 from src.workflows.query.interfaces.chat_interface import ChatInterface
@@ -18,7 +18,24 @@ class OpenAIChat(ChatInterface):
     def __init__(self, config: Any):
         self._config = config
 
-    def complete(self, prompt: str, max_tokens: int = 256) -> str:
+    def chat(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        model: Optional[str] = None,
+        request_id: Optional[str] = None,
+        ttl: Optional[int] = None,
+    ) -> str:
+        raise NotImplementedError("OpenAI chat not implemented.")
+
+    def complete(
+        self,
+        prompt: str,
+        max_tokens: int = 256,
+        request_id: Optional[str] = None,
+        ttl: Optional[int] = None,
+    ) -> str:
         raise NotImplementedError("OpenAI chat not implemented.")
 
 

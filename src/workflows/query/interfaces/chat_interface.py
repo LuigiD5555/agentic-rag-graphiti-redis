@@ -11,10 +11,18 @@ class ChatInterface(Protocol):
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         model: Optional[str] = None,
+        request_id: Optional[str] = None,
+        ttl: Optional[int] = None,
     ) -> str:
         """Send chat completion request with message history."""
         ...
 
-    def complete(self, prompt: str, max_tokens: int = 256) -> str:
+    def complete(
+        self,
+        prompt: str,
+        max_tokens: int = 256,
+        request_id: Optional[str] = None,
+        ttl: Optional[int] = None,
+    ) -> str:
         """Simple completion (single user message)."""
         ...

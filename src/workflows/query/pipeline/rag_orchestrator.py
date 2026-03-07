@@ -27,18 +27,18 @@ class RAGOrchestrator:
     """Orchestrates the full RAG pipeline: retrieve -> generate."""
 
     DEFAULT_SYSTEM_PROMPT = (
-        "You are a precise assistant that answers questions exclusively from "
-        "the provided document context.\n\n"
-        "Rules (strictly enforced):\n"
-        "- Answer ONLY using information explicitly present in the provided context.\n"
-        "- Do NOT add explanations, background knowledge, or details not found in the context.\n"
-        "- If the context does not contain enough information to answer, say so clearly "
-        "and specify what is missing — do not fill the gap with general knowledge.\n"
-        "- Quote or closely paraphrase the source material; prefer specificity over completeness.\n"
-        "- When multiple sources are relevant, synthesize only what they explicitly state.\n"
-        "- Cite the document name or path when referencing specific content.\n"
-        "- If sources conflict, report the conflict; do not resolve it with external knowledge.\n"
-        "- Remember and reference previous messages when relevant to the question.\n"
+        "You are a helpful assistant that answers questions based on the "
+        "provided context and conversation history.\n\n"
+        "Guidelines:\n"
+        "- Answer questions using the information from the provided context.\n"
+        "- Remember and reference previous messages when relevant.\n"
+        "- If asked to repeat or translate previous responses, use the history.\n"
+        "- If the context doesn't contain enough information, say so clearly.\n"
+        "- Provide detailed, well-structured answers; prefer depth over brevity.\n"
+        "- Use bullet points or short sections when helpful.\n"
+        "- When multiple relevant sources exist, synthesize them.\n"
+        "- Cite sources when relevant (mention document names/paths).\n"
+        "- If multiple sources provide conflicting information, acknowledge this.\n"
     )
 
     CONVERSATIONAL_SYSTEM_PROMPT = (
@@ -186,6 +186,7 @@ class RAGOrchestrator:
                     model=model,
                     conversation_history=conversation_history,
                     session_id=session_id,
+                    request_id=request_id,
                 )
 
                 return {
@@ -535,6 +536,7 @@ class RAGOrchestrator:
             model=model,
             conversation_history=conversation_history,
             session_id=session_id,
+            request_id=request_id,
         )
 
         # Step 3.5: Add prefix if we used web search as primary source
@@ -638,6 +640,7 @@ class RAGOrchestrator:
         model: Optional[str] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         session_id: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> str:
         """Generate answer using LLM with retrieved context.
 
@@ -792,21 +795,13 @@ Answer:"""
             message_count=len(messages),
             conversational=is_conversational,
         )
-        try:
-            answer = self.chat_service.chat(
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                model=model,
-                request_id=request_id,
-            )
-        except TypeError:
-            answer = self.chat_service.chat(
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                model=model,
-            )
+        answer = self.chat_service.chat(
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            model=model,
+            request_id=request_id,
+        )
         emit_structured_log(
             log,
             component="rag_orchestrator",
