@@ -5,6 +5,7 @@ import uuid
 from typing import List, Dict, Optional
 from src import logger
 from src.utils.structured_log import emit_structured_log
+from src.backends.llm.lmstudio.request_gate import LMSTUDIO_REQUEST_GATE
 
 
 class LLMService:
@@ -63,6 +64,14 @@ class LLMService:
             or ('"param": "model"' in lowered and "invalid_request_error" in lowered)
         )
 
+    @staticmethod
+    def _post_json(url: str, payload: Dict[str, object], timeout: int) -> requests.Response:
+        """Serialize LM Studio requests to reduce model-load cancellation races."""
+        with LMSTUDIO_REQUEST_GATE:
+            response = requests.post(url, json=payload, timeout=timeout)
+            response.raise_for_status()
+            return response
+
     def complete(
         self,
         prompt: str,
@@ -116,8 +125,7 @@ class LLMService:
                         root,
                         max_tokens,
                     )
-                    response = requests.post(url, json=payload, timeout=30)
-                    response.raise_for_status()
+                    response = self._post_json(url, payload, timeout=30)
 
                     data = response.json()
                     text = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
@@ -245,8 +253,7 @@ class LLMService:
                         len(messages),
                         tokens,
                     )
-                    response = requests.post(url, json=payload, timeout=30)
-                    response.raise_for_status()
+                    response = self._post_json(url, payload, timeout=30)
 
                     data = response.json()
                     text = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()

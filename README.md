@@ -199,6 +199,11 @@ python tools/debug/scripts/filter_podman_errors.py --all-containers
 python tools/debug/scripts/filter_podman_errors.py --container rag-graphiti-agentic_app_1 --full-session
 ```
 
+### 6) LM Studio concurrency guard
+
+- New `LMSTUDIO_REQUEST_GATE` serializes every `/v1/chat/completions` and `/v1/embeddings` call via `src/backends/llm/lmstudio/request_gate.py` so chat and embedding traffic do not race over the same model. When saturation still happens, the log line `LM Studio transient model-load error (400)` now includes the raw body to confirm the failure mode.
+- If you need to verify contention, run `scripts/debug/run_lmstudio_concurrency_probe.py` with both a chat model and an embed model; the gate should stabilize the throughput but may extend individual request latency slightly.
+
 ### 6) Runtime probes (concurrency and LM Studio behavior)
 
 ```bash

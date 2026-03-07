@@ -16,6 +16,7 @@ import requests
 from requests import Response
 from src import logger
 from src.utils.structured_log import emit_structured_log
+from src.backends.llm.lmstudio.request_gate import LMSTUDIO_REQUEST_GATE
 
 
 class EmbeddingService:
@@ -362,9 +363,10 @@ class EmbeddingService:
         """
         POST JSON with basic error handling. Raises for HTTP status errors.
         """
-        resp = self._session.post(url, json=payload, timeout=timeout)
-        resp.raise_for_status()
-        return resp
+        with LMSTUDIO_REQUEST_GATE:
+            resp = self._session.post(url, json=payload, timeout=timeout)
+            resp.raise_for_status()
+            return resp
 
     def _to_json(self, response: Response) -> Dict[str, Any]:
         """
