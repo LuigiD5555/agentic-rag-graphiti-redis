@@ -1,4 +1,6 @@
 """RAG pipeline orchestrator - combines retrieval and generation."""
+import time
+import uuid
 from typing import List, Dict, Any, Optional
 from src.workflows.query.retrieval import WeaviateRetriever
 from src.workflows.query.interfaces.chat_interface import ChatInterface
@@ -15,6 +17,7 @@ from src.workflows.query.answer_modes import (
 )
 from src.workflows.query.reranker import get_reranker
 from src.conf import settings
+from src.utils.structured_log import emit_structured_log
 
 log = get_logger(__name__)
 
@@ -116,6 +119,7 @@ class RAGOrchestrator:
         conversation_history: Optional[List[Dict[str, str]]] = None,
         thread_id: Optional[str] = None,
         session_id: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Execute full RAG pipeline for a question.
 
@@ -138,6 +142,17 @@ class RAGOrchestrator:
         # Apply default values from settings if not provided
         temperature = temperature if temperature is not None else settings.RAG_DEFAULT_TEMPERATURE
         max_tokens = max_tokens if max_tokens is not None else settings.RAG_DEFAULT_MAX_TOKENS
+        request_id = request_id or f"rag-query-{uuid.uuid4().hex[:12]}"
+        query_started = time.perf_counter()
+        emit_structured_log(
+            log,
+            component="rag_orchestrator",
+            request_id=request_id,
+            operation="query_start",
+            model_name=model or "",
+            question_chars=len(question),
+            top_k=top_k if top_k is not None else settings.RAG_DEFAULT_TOP_K,
+        )
 
         log.info("Processing RAG query with model=%s, thread_id=%s, session_id=%s: %s",
                  model or "default", thread_id or "none", session_id or "none", question[:100])
@@ -217,7 +232,7 @@ class RAGOrchestrator:
         else:
             # Standard single-tenant retrieval with new signature
             retrieval_result = self.retriever.retrieve(
-                query=question, top_k=top_k, filters=filters
+                query=question, top_k=top_k, filters=filters, request_id=request_id
             )
             
             # Handle the return type which could be tuple or different structure
@@ -531,6 +546,8 @@ class RAGOrchestrator:
                 "retrieval_metadata": retrieval_metadata,
                 "intent": intent,
                 "rag_gating": self.enable_rag_gating,
+                "request_id": request_id,
+                "duration_ms": round((time.perf_counter() - query_started) * 1000.0, 2),
             },
         }
 
@@ -710,11 +727,41 @@ Answer:"""
                 "content": user_content
             })
 
-        answer = self.chat_service.chat(
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            model=model,
+        request_id = request_id or f"rag-chat-{uuid.uuid4().hex[:12]}"
+        chat_model = model or getattr(self.chat_service, "model", "")
+        chat_started = time.perf_counter()
+        emit_structured_log(
+            log,
+            component="rag_orchestrator",
+            request_id=request_id,
+            operation="chat_generation_start",
+            model_name=chat_model,
+            message_count=len(messages),
+            conversational=is_conversational,
+        )
+        try:
+            answer = self.chat_service.chat(
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                model=model,
+                request_id=request_id,
+            )
+        except TypeError:
+            answer = self.chat_service.chat(
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                model=model,
+            )
+        emit_structured_log(
+            log,
+            component="rag_orchestrator",
+            request_id=request_id,
+            operation="chat_generation_end",
+            model_name=chat_model,
+            duration_ms=(time.perf_counter() - chat_started) * 1000.0,
+            answer_chars=len(answer or ""),
         )
 
         if not answer.strip() and analysis_block:

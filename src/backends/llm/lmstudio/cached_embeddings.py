@@ -109,7 +109,14 @@ class CachedEmbeddingService:
             self._cache_errors += 1
             logger.warning("Cache storage error for key %s: %s", cache_key[:20], exc)
 
-    def generate(self, text: str, source: Optional[str] = None, chunk_index: Optional[int] = None) -> List[float]:
+    def generate(
+        self,
+        text: str,
+        source: Optional[str] = None,
+        chunk_index: Optional[int] = None,
+        request_id: Optional[str] = None,
+        ttl: Optional[int] = None,
+    ) -> List[float]:
         cache_key = self._compute_cache_key(text, source, chunk_index)
 
         cached_embedding = self._get_from_cache(cache_key)
@@ -119,7 +126,13 @@ class CachedEmbeddingService:
             return cached_embedding
 
         self._cache_misses += 1
-        embedding = self.embedding_service.generate(text)
+        embedding = self.embedding_service.generate(
+            text,
+            source=source,
+            chunk_index=chunk_index,
+            request_id=request_id,
+            ttl=ttl,
+        )
         self._store_in_cache(cache_key, embedding)
 
         total_requests = self._cache_hits + self._cache_misses
@@ -133,6 +146,8 @@ class CachedEmbeddingService:
         texts: List[str],
         sources: Optional[List[Optional[str]]] = None,
         chunk_indices: Optional[List[Optional[int]]] = None,
+        request_id: Optional[str] = None,
+        ttl: Optional[int] = None,
     ) -> List[List[float]]:
         if not texts:
             return []
@@ -161,9 +176,24 @@ class CachedEmbeddingService:
             texts_for_generation = [text for _, text in texts_to_generate]
 
             if hasattr(self.embedding_service, "generate_batch"):
-                generated_embeddings = self.embedding_service.generate_batch(texts_for_generation)
+                generated_sources = [sources[idx] for idx, _ in texts_to_generate]
+                generated_chunk_indices = [chunk_indices[idx] for idx, _ in texts_to_generate]
+                generated_embeddings = self.embedding_service.generate_batch(
+                    texts_for_generation,
+                    sources=generated_sources,
+                    chunk_indices=generated_chunk_indices,
+                    request_id=request_id,
+                    ttl=ttl,
+                )
             else:
-                generated_embeddings = [self.embedding_service.generate(text) for text in texts_for_generation]
+                generated_embeddings = [
+                    self.embedding_service.generate(
+                        text,
+                        source=sources[idx],
+                        chunk_index=chunk_indices[idx],
+                    )
+                    for idx, text in texts_to_generate
+                ]
 
             for (original_idx, _), embedding in zip(texts_to_generate, generated_embeddings):
                 cache_key = cache_keys[original_idx]

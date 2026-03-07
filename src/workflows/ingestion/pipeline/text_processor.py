@@ -14,6 +14,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict
 import time
+import uuid
 
 from src import logger
 from src.conf import settings
@@ -50,6 +51,7 @@ from src.utils.text import (
     sanitize_text,
     truncate_to_token_limit_presanitized,
 )
+from src.utils.structured_log import emit_structured_log
 
 
 def _resolve_file_context(pipeline: Any) -> IngestionFileContext:
@@ -407,12 +409,27 @@ def process_text_document(pipeline: Any, loader: object) -> None:
                 texts = [r["text"] for r in batch_records]
                 sources = [r["source"] for r in batch_records]
                 chunk_indices = [r["chunk_index"] for r in batch_records]
+                ingest_request_id = getattr(pipeline, "_current_run_id", None) or f"ingest-{uuid.uuid4().hex[:12]}"
+                embed_model = getattr(pipeline.embedding_service, "_model_name", "")
+                batch_started = time.perf_counter()
+                emit_structured_log(
+                    logger,
+                    component="ingestion_embeddings",
+                    request_id=ingest_request_id,
+                    operation="embedding_batch_start",
+                    model_name=embed_model,
+                    batch_size=len(texts),
+                    source=source,
+                )
 
                 if supports_batch:
                     # Try to pass metadata to batch generation if supported
                     try:
                         embeddings = pipeline.embedding_service.generate_batch(
-                            texts, sources=sources, chunk_indices=chunk_indices
+                            texts,
+                            sources=sources,
+                            chunk_indices=chunk_indices,
+                            request_id=ingest_request_id,
                         )
                     except TypeError:
                         # Fallback if service doesn't support metadata parameters
@@ -423,12 +440,25 @@ def process_text_document(pipeline: Any, loader: object) -> None:
                     for r in batch_records:
                         try:
                             emb = pipeline.embedding_service.generate(
-                                r["text"], source=r["source"], chunk_index=r["chunk_index"]
+                                r["text"],
+                                source=r["source"],
+                                chunk_index=r["chunk_index"],
+                                request_id=ingest_request_id,
                             )
                         except TypeError:
                             # Fallback if service doesn't support metadata parameters
                             emb = pipeline.embedding_service.generate(r["text"])
                         embeddings.append(emb)
+                emit_structured_log(
+                    logger,
+                    component="ingestion_embeddings",
+                    request_id=ingest_request_id,
+                    operation="embedding_batch_end",
+                    model_name=embed_model,
+                    duration_ms=(time.perf_counter() - batch_started) * 1000.0,
+                    batch_size=len(embeddings),
+                    source=source,
+                )
 
                 # Upsert each record with its embedding
                 for record, embedding in zip(batch_records, embeddings):

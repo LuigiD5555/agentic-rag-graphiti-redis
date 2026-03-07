@@ -1,7 +1,9 @@
 """Router for RAG-specific endpoints."""
 from pathlib import Path
+import time
+import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 
 from src.api.models_ollama import (
     RagQueryRequest,
@@ -29,6 +31,8 @@ from src.workflows.query.answer_modes import (
     upsert_answer_mode,
     delete_answer_mode,
 )
+from src.utils.structured_log import emit_structured_log
+from src import logger
 
 router = APIRouter(prefix="/rag", tags=["rag"])
 
@@ -48,11 +52,20 @@ async def rag_query(
     request: RagQueryRequest,
     rag: RAGOrchestrator = Depends(get_rag_orchestrator),
     thread_id: str = Depends(get_thread_id),
+    x_request_id: str | None = Header(default=None, alias="X-Request-ID"),
 ) -> RagQueryResponse:
+    request_id = x_request_id or f"api-query-{uuid.uuid4().hex[:12]}"
     # Use default values with early assignment
     temperature = request.temperature or settings.RAG_DEFAULT_TEMPERATURE
     max_tokens = request.max_tokens or settings.RAG_DEFAULT_MAX_TOKENS
-    
+    emit_structured_log(
+        logger,
+        component="api_rag_query",
+        request_id=request_id,
+        operation="query_endpoint_start",
+        model_name="",
+        query_chars=len(request.query),
+    )
     result = rag.query(
         question=request.query,
         top_k=request.top_k,
@@ -61,12 +74,23 @@ async def rag_query(
         max_tokens=max_tokens,
         system_prompt=request.system,
         session_id=thread_id,
+        request_id=request_id,
+    )
+    emit_structured_log(
+        logger,
+        component="api_rag_query",
+        request_id=request_id,
+        operation="query_endpoint_end",
+        model_name=result.get("metadata", {}).get("model", "") or "",
+        retrieved_count=result.get("metadata", {}).get("retrieved_count", 0),
     )
     sources = result.get("sources", []) if request.include_sources else []
+    metadata = result.get("metadata", {})
+    metadata["request_id"] = request_id
     return RagQueryResponse(
         answer=result["answer"],
         sources=sources,
-        metadata=result.get("metadata", {}),
+        metadata=metadata,
     )
 
 
@@ -134,7 +158,18 @@ async def delete_answer_mode_by_name(mode_name: str) -> AnswerModesResponse:
 async def rag_ingest(
     request: RagIngestRequest,
     ingestion: IngestionOrchestrator = Depends(get_ingestion_orchestrator),
+    x_request_id: str | None = Header(default=None, alias="X-Request-ID"),
 ) -> RagIngestResponse:
+    request_id = x_request_id or f"api-ingest-{uuid.uuid4().hex[:12]}"
+    endpoint_start = time.perf_counter()
+    emit_structured_log(
+        logger,
+        component="api_rag_ingest",
+        request_id=request_id,
+        operation="ingest_endpoint_start",
+        model_name="",
+        path_count=len(request.paths),
+    )
     # Use default values with early assignment
     enabled_paths = tuple(request.enabled_paths or ())
     allowed_extensions = set(request.allowed_extensions or ())
@@ -161,7 +196,25 @@ async def rag_ingest(
         max_ram_usage_percent=request.max_ram_percent,
         run_id=request.run_id,
     )
+    emit_structured_log(
+        logger,
+        component="api_rag_ingest",
+        request_id=request_id,
+        operation="ingest_endpoint_heavy_start",
+        model_name="",
+        run_id=options.run_id,
+    )
     report = ingestion.run_with_report(options)
+    emit_structured_log(
+        logger,
+        component="api_rag_ingest",
+        request_id=request_id,
+        operation="ingest_endpoint_end",
+        model_name="",
+        duration_ms=(time.perf_counter() - endpoint_start) * 1000.0,
+        status=report.get("status"),
+        run_id=report.get("run_id"),
+    )
     pipeline_report = report.get("pipeline", {})
     return RagIngestResponse(
         status=report["status"],

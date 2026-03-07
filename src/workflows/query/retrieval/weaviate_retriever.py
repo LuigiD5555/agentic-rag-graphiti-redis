@@ -1,10 +1,12 @@
 """Weaviate-based document retriever for RAG queries."""
 import time
+import uuid
 from typing import List, Dict, Any, Optional, Tuple
 import weaviate
 from weaviate.classes.query import MetadataQuery
 from src.workflows.query.audit import get_logger
 from src.conf import settings
+from src.utils.structured_log import emit_structured_log
 
 log = get_logger(__name__)
 
@@ -80,6 +82,7 @@ class WeaviateRetriever:
         query: str,
         top_k: Optional[int] = None,
         filters: Optional[Dict[str, Any]] = None,
+        request_id: Optional[str] = None,
     ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[Dict[str, Any]]]:
         """Retrieve relevant document chunks for a query with observability and retry logic.
 
@@ -95,6 +98,7 @@ class WeaviateRetriever:
         """
         result_limit = top_k or self.top_k
         total_start = time.time()
+        request_id = request_id or f"query-{uuid.uuid4().hex[:12]}"
 
         metadata = {
             "query": query[:100],
@@ -121,48 +125,59 @@ class WeaviateRetriever:
 
                 active_filters = self._build_filters(filters)
 
-                # Step 1: Generate embedding if needed
+                # Step 1: Generate embedding if available
+                query_vector = None
                 if self.embedding_service:
                     embed_start = time.time()
                     log.debug("Generating query embedding for: %s", query[:50])
+                    emit_structured_log(
+                        log,
+                        component="query_retriever",
+                        request_id=request_id,
+                        operation="query_embedding_start",
+                        model_name=getattr(self.embedding_service, "_model_name", ""),
+                        query_chars=len(query),
+                    )
 
-                    query_vector = self.embedding_service.generate(query)
+                    try:
+                        query_vector = self.embedding_service.generate(query, request_id=request_id)
+                    except TypeError:
+                        query_vector = self.embedding_service.generate(query)
 
                     embed_time = (time.time() - embed_start) * 1000
                     metadata["embedding_time_ms"] = round(embed_time, 2)
                     log.info("Embedding generated in %.2fms (dim=%d)",
                             embed_time, len(query_vector))
-
-                    # Step 2: Vector search
-                    search_start = time.time()
-                    log.debug("Executing near_vector search: top_k=%d", result_limit)
-
-                    response = self.collection.query.near_vector(
-                        near_vector=query_vector,
-                        limit=result_limit,
-                        filters=active_filters,
-                        return_metadata=MetadataQuery(score=True, distance=True),
+                    emit_structured_log(
+                        log,
+                        component="query_retriever",
+                        request_id=request_id,
+                        operation="query_embedding_end",
+                        model_name=getattr(self.embedding_service, "_model_name", ""),
+                        duration_ms=embed_time,
+                        embedding_dim=len(query_vector),
                     )
 
-                    search_time = (time.time() - search_start) * 1000
-                    metadata["search_time_ms"] = round(search_time, 2)
-                    log.info("Vector search completed in %.2fms", search_time)
-                else:
-                    # Fallback to hybrid search
-                    log.warning("No embedding service, using hybrid search (may fail)")
-                    search_start = time.time()
+                # Step 2: Hybrid search — BM25 + vector (always).
+                # Passing vector= anchors the semantic component to our own
+                # embedding model instead of Weaviate's built-in vectorizer,
+                # while the BM25 component penalises docs missing exact terms.
+                search_start = time.time()
+                log.debug("Executing hybrid search: top_k=%d, alpha=%.2f", result_limit, self.alpha)
 
-                    response = self.collection.query.hybrid(
-                        query=query,
-                        limit=result_limit,
-                        alpha=self.alpha,
-                        filters=active_filters,
-                        return_metadata=MetadataQuery(score=True, distance=True),
-                    )
+                response = self.collection.query.hybrid(
+                    query=query,
+                    vector=query_vector,
+                    limit=result_limit,
+                    alpha=self.alpha,
+                    filters=active_filters,
+                    return_metadata=MetadataQuery(score=True, distance=True),
+                )
 
-                    search_time = (time.time() - search_start) * 1000
-                    metadata["search_time_ms"] = round(search_time, 2)
-                    log.info("Hybrid search completed in %.2fms", search_time)
+                search_time = (time.time() - search_start) * 1000
+                metadata["search_time_ms"] = round(search_time, 2)
+                log.info("Hybrid search completed in %.2fms (vector=%s)",
+                         search_time, query_vector is not None)
 
                 # Step 3: Process results
                 results = []

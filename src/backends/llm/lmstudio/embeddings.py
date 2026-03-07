@@ -9,10 +9,13 @@ Key behaviors:
 """
 
 import math
+import time
+import uuid
 from typing import Any, Dict, List, Sequence, Optional
 import requests
 from requests import Response
 from src import logger
+from src.utils.structured_log import emit_structured_log
 
 
 class EmbeddingService:
@@ -95,7 +98,14 @@ class EmbeddingService:
 
     # ------------- Public API -------------
 
-    def generate(self, text: str) -> List[float]:
+    def generate(
+        self,
+        text: str,
+        source: Optional[str] = None,
+        chunk_index: Optional[int] = None,
+        request_id: Optional[str] = None,
+        ttl: Optional[int] = None,
+    ) -> List[float]:
         """
         Generate an embedding vector for the given text and return a validated list[float].
 
@@ -112,21 +122,71 @@ class EmbeddingService:
             return self._dummy_vector()
 
         payload = {"model": self._model_name, "input": text}
+        if ttl is not None:
+            payload["ttl"] = ttl
+        request_id = request_id or f"embed-{uuid.uuid4().hex[:12]}"
         for root in self._candidate_roots:
             url = f"{root}/v1/embeddings"
             try:
+                started = time.perf_counter()
+                emit_structured_log(
+                    logger,
+                    component="lmstudio_embedding_client",
+                    request_id=request_id,
+                    operation="embedding_request_start",
+                    model_name=self._model_name or "",
+                    endpoint=url,
+                    source=source,
+                    chunk_index=chunk_index,
+                    input_chars=len(text),
+                    payload_keys=sorted(payload.keys()),
+                    payload_summary={
+                        "model": payload.get("model"),
+                        "input_type": type(payload.get("input")).__name__,
+                    },
+                    ttl=payload.get("ttl"),
+                )
                 resp = self._post_json(url, payload, timeout=60)  # Max 1 minute
                 data = self._to_json(resp)
                 raw_vector = self._extract_vector(data)
                 vector = self._normalize_and_validate_vector(raw_vector)
                 self._api_root = root
                 self._embed_url = url
+                emit_structured_log(
+                    logger,
+                    component="lmstudio_embedding_client",
+                    request_id=request_id,
+                    operation="embedding_request_end",
+                    model_name=self._model_name or "",
+                    duration_ms=(time.perf_counter() - started) * 1000.0,
+                    endpoint=url,
+                    status_code=resp.status_code,
+                    embedding_dim=len(vector),
+                )
                 return vector
             except requests.exceptions.RequestException as exc:
                 logger.error("Embedding HTTP error (%s); attempting next endpoint: %s", root, exc)
+                emit_structured_log(
+                    logger,
+                    component="lmstudio_embedding_client",
+                    request_id=request_id,
+                    operation="embedding_request_error",
+                    model_name=self._model_name or "",
+                    endpoint=url,
+                    error=str(exc),
+                )
                 continue
             except (ValueError, TypeError) as exc:
                 logger.error("Invalid embedding response; returning dummy vector: %s", exc)
+                emit_structured_log(
+                    logger,
+                    component="lmstudio_embedding_client",
+                    request_id=request_id,
+                    operation="embedding_response_invalid",
+                    model_name=self._model_name or "",
+                    endpoint=url,
+                    error=str(exc),
+                )
                 if self._require_live:
                     raise
                 return self._dummy_vector()
@@ -139,7 +199,14 @@ class EmbeddingService:
             )
         return self._dummy_vector()
 
-    def generate_batch(self, texts: List[str]) -> List[List[float]]:
+    def generate_batch(
+        self,
+        texts: List[str],
+        sources: Optional[List[Optional[str]]] = None,
+        chunk_indices: Optional[List[Optional[int]]] = None,
+        request_id: Optional[str] = None,
+        ttl: Optional[int] = None,
+    ) -> List[List[float]]:
         """
         Generate embeddings for multiple texts in a single API call.
 
@@ -167,10 +234,33 @@ class EmbeddingService:
             return [self._dummy_vector() for _ in texts]
 
         payload = {"model": self._model_name, "input": texts}
+        if ttl is not None:
+            payload["ttl"] = ttl
+        request_id = request_id or f"embed-batch-{uuid.uuid4().hex[:12]}"
+        sources = sources or []
+        chunk_indices = chunk_indices or []
 
         for root in self._candidate_roots:
             url = f"{root}/v1/embeddings"
             try:
+                started = time.perf_counter()
+                emit_structured_log(
+                    logger,
+                    component="lmstudio_embedding_client",
+                    request_id=request_id,
+                    operation="embedding_batch_request_start",
+                    model_name=self._model_name or "",
+                    endpoint=url,
+                    batch_size=len(texts),
+                    payload_keys=sorted(payload.keys()),
+                    payload_summary={
+                        "model": payload.get("model"),
+                        "input_count": len(texts),
+                    },
+                    ttl=payload.get("ttl"),
+                    first_source=sources[0] if sources else None,
+                    first_chunk_index=chunk_indices[0] if chunk_indices else None,
+                )
                 resp = self._post_json(url, payload, timeout=60)  # Max 1 minute for batch
                 data = self._to_json(resp)
 
@@ -196,19 +286,75 @@ class EmbeddingService:
 
                 self._api_root = root
                 self._embed_url = url
+                emit_structured_log(
+                    logger,
+                    component="lmstudio_embedding_client",
+                    request_id=request_id,
+                    operation="embedding_batch_request_end",
+                    model_name=self._model_name or "",
+                    duration_ms=(time.perf_counter() - started) * 1000.0,
+                    endpoint=url,
+                    status_code=resp.status_code,
+                    batch_size=len(results),
+                    embedding_dim=len(results[0]) if results else 0,
+                )
                 return results
 
             except requests.exceptions.RequestException as exc:
                 logger.warning("Batch embedding HTTP error (%s); attempting next endpoint: %s", root, exc)
+                emit_structured_log(
+                    logger,
+                    component="lmstudio_embedding_client",
+                    request_id=request_id,
+                    operation="embedding_batch_request_error",
+                    model_name=self._model_name or "",
+                    endpoint=url,
+                    error=str(exc),
+                )
                 continue
             except (ValueError, TypeError) as exc:
                 logger.warning("Batch embedding failed (%s); falling back to sequential generation", exc)
+                emit_structured_log(
+                    logger,
+                    component="lmstudio_embedding_client",
+                    request_id=request_id,
+                    operation="embedding_batch_fallback_sequential",
+                    model_name=self._model_name or "",
+                    endpoint=url,
+                    error=str(exc),
+                )
                 # Fallback to sequential generation for robustness
-                return [self.generate(text) for text in texts]
+                return [
+                    self.generate(
+                        text,
+                        source=(sources[idx] if idx < len(sources) else None),
+                        chunk_index=(chunk_indices[idx] if idx < len(chunk_indices) else None),
+                        request_id=request_id,
+                        ttl=ttl,
+                    )
+                    for idx, text in enumerate(texts)
+                ]
 
         # All endpoints failed, fall back to sequential
         logger.warning("All batch embedding endpoints failed; falling back to sequential generation")
-        return [self.generate(text) for text in texts]
+        emit_structured_log(
+            logger,
+            component="lmstudio_embedding_client",
+            request_id=request_id,
+            operation="embedding_batch_all_endpoints_failed",
+            model_name=self._model_name or "",
+            batch_size=len(texts),
+        )
+        return [
+            self.generate(
+                text,
+                source=(sources[idx] if idx < len(sources) else None),
+                chunk_index=(chunk_indices[idx] if idx < len(chunk_indices) else None),
+                request_id=request_id,
+                ttl=ttl,
+            )
+            for idx, text in enumerate(texts)
+        ]
 
     # ------------- Internals -------------
 
