@@ -2,13 +2,8 @@
 """Test the dynamic path manager functionality."""
 
 import os
-import sys
 import tempfile
 from pathlib import Path
-
-# Add project to path
-sys.path.insert(0, str(Path(__file__).parent))
-
 
 def test_path_manager_basic():
     """Test basic path manager functionality."""
@@ -75,7 +70,6 @@ def test_path_manager_basic():
         os.rmdir(test_path)
 
         print("\n✓ Basic path manager tests passed")
-        return True
 
     finally:
         # Clean up temp file
@@ -99,18 +93,12 @@ def test_integration_with_settings():
     # Check if settings were updated
     try:
         import src.settings as settings
-        if hasattr(settings, 'DOCS_PATHS'):
-            print(f"settings.DOCS_PATHS: {settings.DOCS_PATHS}")
-            if settings.DOCS_PATHS == updated_paths:
-                print("✓ Settings successfully updated")
-            else:
-                print("✗ Settings not updated correctly")
-        else:
-            print("✗ settings module doesn't have DOCS_PATHS attribute")
+        assert hasattr(settings, 'DOCS_PATHS'), "settings module doesn't have DOCS_PATHS attribute"
+        print(f"settings.DOCS_PATHS: {settings.DOCS_PATHS}")
+        assert settings.DOCS_PATHS == updated_paths, "Settings not updated correctly"
+        print("✓ Settings successfully updated")
     except ImportError as e:
-        print(f"✗ Could not import settings: {e}")
-
-    return True
+        raise AssertionError(f"Could not import settings: {e}") from e
 
 
 def test_path_validation():
@@ -137,15 +125,14 @@ def test_path_validation():
         success = pm.add_path(inaccessible_path, "Inaccessible test path", enable=True)
         print(f"Add inaccessible path success: {success}")
 
-        # The path should still be added (we don't validate existence on add)
         paths = pm.list_paths()
         print(f"Paths after adding inaccessible: {len(paths)}")
+        assert any(p.path == inaccessible_path for p in paths), "Inaccessible path was not added"
 
         # But it won't be accessible when the system tries to scan it
         # This is OK - the discovery service will handle it gracefully
 
         print("✓ Path validation tests passed")
-        return True
 
     finally:
         os.unlink(temp_file)
@@ -178,7 +165,7 @@ def test_container_paths():
     in_container = os.path.exists('/.dockerenv') or os.path.exists('/run/.containerenv')
     print(f"\nRunning in container: {in_container}")
 
-    return True
+    # Informational test: no hard assertion on host mount presence.
 
 
 def main():
@@ -190,7 +177,8 @@ def main():
     tests_total = 4
 
     try:
-        if test_path_manager_basic():
+        result = test_path_manager_basic()
+        if result is None or result:
             tests_passed += 1
     except Exception as e:
         print(f"✗ Path manager basic test failed: {e}")
@@ -198,19 +186,22 @@ def main():
         traceback.print_exc()
 
     try:
-        if test_integration_with_settings():
+        result = test_integration_with_settings()
+        if result is None or result:
             tests_passed += 1
     except Exception as e:
         print(f"✗ Integration test failed: {e}")
 
     try:
-        if test_path_validation():
+        result = test_path_validation()
+        if result is None or result:
             tests_passed += 1
     except Exception as e:
         print(f"✗ Path validation test failed: {e}")
 
     try:
-        if test_container_paths():
+        result = test_container_paths()
+        if result is None or result:
             tests_passed += 1
     except Exception as e:
         print(f"✗ Container paths test failed: {e}")

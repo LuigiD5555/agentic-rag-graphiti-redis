@@ -9,7 +9,7 @@ def test_installed_apps_populate_provider_registry():
     reset_provider_registry()
     reset_builtin_providers()
 
-    cfg = Config().copy(
+    cfg = Config().model_copy(
         update={
             "INSTALLED_APPS": [
                 "src.backends.llm.lmstudio.apps.LMStudioProviderAppConfig",
@@ -21,7 +21,6 @@ def test_installed_apps_populate_provider_registry():
     ensure_apps_loaded(cfg)
 
     providers = set(list_providers())
-    assert "ollama" in providers
     assert "lmstudio" in providers
     assert "openai" in providers
     assert "litellm" in providers

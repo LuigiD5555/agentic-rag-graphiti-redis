@@ -3,13 +3,14 @@ import re
 import pytest
 
 yaml = pytest.importorskip("yaml")
+pytestmark = pytest.mark.preflight_host
 
 
 def _load_compose():
     """
     Load the podman-compose.yml as a Python dict.
     """
-    compose_path = Path("podman-compose.yml")
+    compose_path = Path(__file__).resolve().parents[3] / "podman-compose.yml"
     assert compose_path.exists(), "podman-compose.yml must exist at repository root."
     return yaml.safe_load(compose_path.read_text())
 

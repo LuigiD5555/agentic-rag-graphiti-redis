@@ -104,7 +104,7 @@ def test_progress_bar_visual_demo(capsys):
 
 def test_embedding_progress_uses_file_progress_percent():
     progress = EmbeddingProgress(bar_length=10)
-    progress.add_total(10)
+    progress.add_total(10, source="file.pdf")
     line = progress.advance(file_index=5, file_total=10, source="file.pdf", base_url="http://localhost/v1/objects")
     assert "(1/10)" in line
     assert "- 50.00% -" in line

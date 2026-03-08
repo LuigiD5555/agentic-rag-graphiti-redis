@@ -24,16 +24,17 @@ def test_config_merges_default_env_and_file(tmp_path, monkeypatch):
         encoding="utf-8",
     )
 
-    monkeypatch.setenv("DOCS_EXCLUDE_DIRS", "build,.cache")
-    monkeypatch.setenv("DOCS_EXCLUDE_PATTERNS", '["*.bak", "**/tmp/**"]')
-    monkeypatch.setenv("DOCS_EXCLUDE_FILE", str(ignore_file))
+    config = Config(
+        DOCS_EXCLUDE_DIRS=("build", ".cache"),
+        DOCS_EXCLUDE_GLOBS=("*.bak", "**/tmp/**"),
+        DOCS_EXCLUDE_FILE=str(ignore_file),
+    )
 
-    config = Config()
+    excluded_dirs, excluded_globs = config.get_exclude_config()
+    excluded_dirs = set(excluded_dirs)
+    excluded_globs = set(excluded_globs)
 
-    excluded_dirs = set(config.DOCS_EXCLUDE_DIRS)
-    excluded_globs = set(config.DOCS_EXCLUDE_GLOBS)
-
-    # Defaults remain present
+    # Built-ins remain present via DEFAULT_EXCLUDED_FILES.
     assert ".git" in excluded_dirs
 
     # Env and file values get merged
@@ -57,7 +58,8 @@ def test_config_loads_default_ingestignore(tmp_path, monkeypatch):
     )
 
     config = Config()
-    excluded_globs = set(config.DOCS_EXCLUDE_GLOBS)
+    _, excluded_globs = config.get_exclude_config()
+    excluded_globs = set(excluded_globs)
 
     assert "secrets.txt" in excluded_globs
     assert "data/private/**" in excluded_globs

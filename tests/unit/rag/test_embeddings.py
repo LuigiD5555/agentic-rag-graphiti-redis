@@ -29,8 +29,9 @@ class ModelManagerStub:
 
 
 class ResponseStub:
-    def __init__(self, payload):
+    def __init__(self, payload, status_code: int = 200):
         self._payload = payload
+        self.status_code = status_code
 
     def json(self):
         return self._payload

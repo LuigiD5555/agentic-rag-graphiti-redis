@@ -51,6 +51,9 @@ def test_pdf_loader_reads_text(tmp_path: Path):
     pdf_path.write_bytes(_build_pdf_bytes("Hello PDF"))
 
     loader = PDFLoader(str(pdf_path))
+    # Tiny synthetic PDF content may be flagged as scanned by the heuristic;
+    # force text path for this unit test.
+    loader._is_scanned_pdf = lambda _docs: False
     documents = loader.load()
 
     assert documents

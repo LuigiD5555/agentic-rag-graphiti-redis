@@ -1,10 +1,10 @@
-#!/bin/bash
+#!/bin/sh
 # Script to run tests for RAG Agentic Graphiti
 
 set -e
 
 # Ensure relative paths operate from the repository root
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
@@ -16,21 +16,21 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 print_header() {
-    echo -e "${BLUE}========================================${NC}"
-    echo -e "${BLUE}  $1${NC}"
-    echo -e "${BLUE}========================================${NC}"
+    printf "%b\n" "${BLUE}========================================${NC}"
+    printf "%b\n" "${BLUE}  $1${NC}"
+    printf "%b\n" "${BLUE}========================================${NC}"
 }
 
 print_success() {
-    echo -e "${GREEN}✓ $1${NC}"
+    printf "%b\n" "${GREEN}✓ $1${NC}"
 }
 
 print_error() {
-    echo -e "${RED}✗ $1${NC}"
+    printf "%b\n" "${RED}✗ $1${NC}"
 }
 
 print_warning() {
-    echo -e "${YELLOW}⚠ $1${NC}"
+    printf "%b\n" "${YELLOW}⚠ $1${NC}"
 }
 
 # Verify we are in the expected repository root
@@ -41,9 +41,16 @@ fi
 
 run_unit_tests() {
     print_header "RUNNING UNIT TESTS"
-    echo "These tests are fast and do not require external services."
+    echo "Fast/default profile. Integration suite is not collected here."
     echo ""
-    python -m pytest tests/unit/ --tb=short -v --strict-markers -ra
+    python -m pytest \
+        tests/unit/ \
+        tests/infrastructure/ \
+        tests/test_checkpoint_fix.py \
+        tests/test_checkpoint_system.py \
+        tests/test_pattern_matching.py \
+        --tb=short -v --strict-markers -ra \
+        -m "not preflight_host"
 }
 
 run_integration_tests() {
@@ -58,6 +65,29 @@ run_integration_tests() {
     echo "These tests may require external services (Weaviate, etc.)"
     echo ""
     python -m pytest tests/integration/ --tb=short -v --strict-markers -ra
+}
+
+run_host_preflight_tests() {
+    print_header "RUNNING HOST PREFLIGHT TESTS"
+    echo "Host-only checks (podman/systemd/.env/compose). Run on host, not inside app container."
+    echo ""
+    python -m pytest tests/infrastructure/test_preflight.py --tb=short -v --strict-markers -ra -m preflight_host
+}
+
+run_runtime_preflight_tests() {
+    print_header "RUNNING RUNTIME PREFLIGHT TESTS"
+    echo "Container/runtime checks."
+    echo ""
+    python -m pytest tests/infrastructure/test_preflight.py --tb=short -v --strict-markers -ra -m preflight_runtime
+}
+
+run_stack_smoke() {
+    print_header "RUNNING STACK SMOKE TEST"
+    echo "Requires compose stack and RUN_STACK_SMOKE=1."
+    echo ""
+    RUN_INTEGRATION=1 RUN_STACK_SMOKE=1 python -m pytest \
+        tests/integration/rag/test_stack_smoke.py \
+        --tb=short -v --strict-markers -ra
 }
 
 run_all_tests() {
@@ -86,6 +116,9 @@ show_help() {
     echo "  unit        Run unit tests only (fast)"
     echo "  integration Run integration tests (requires RUN_INTEGRATION=1)"
     echo "  all         Run all tests (default)"
+    echo "  host        Run host-only preflight checks"
+    echo "  runtime     Run runtime/container preflight checks"
+    echo "  smoke       Run stack smoke integration test"
     echo "  coverage    Run tests with coverage report"
     echo "  path        Run tests at a specific path"
     echo "  help        Show this help"
@@ -95,10 +128,14 @@ show_help() {
     echo "  $0 all                     # All tests"
     echo "  $0 coverage                # Tests with coverage"
     echo "  RUN_INTEGRATION=1 $0 integration  # Integration tests"
+    echo "  $0 host                           # Host-only preflight checks"
+    echo "  $0 runtime                        # Runtime/container preflight checks"
+    echo "  $0 smoke                          # Stack smoke test"
     echo "  $0 tests/unit/rag/         # Tests in a specific directory"
     echo ""
     echo "Environment variables:"
     echo "  RUN_INTEGRATION=1  Enables integration tests"
+    echo "  RUN_STACK_SMOKE=1  Enables stack smoke test"
 }
 
 # Process command-line arguments
@@ -108,6 +145,15 @@ case "${1:-all}" in
         ;;
     integration)
         run_integration_tests
+        ;;
+    host)
+        run_host_preflight_tests
+        ;;
+    runtime)
+        run_runtime_preflight_tests
+        ;;
+    smoke)
+        run_stack_smoke
         ;;
     all)
         run_all_tests

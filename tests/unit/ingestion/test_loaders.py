@@ -24,18 +24,10 @@ def test_powerpoint_loader_wraps_invalid_format(monkeypatch, tmp_path):
     ppt_path = tmp_path / "broken.pptx"
     ppt_path.write_text("bad data", encoding="utf-8")
 
-    from src.workflows.ingestion.loaders import ppt_loader
-
-    class DummyLoader:
-        def __init__(self, path: str):
-            assert path == str(ppt_path)
-
-        def load(self):
-            from pptx.exc import PackageNotFoundError
-
-            raise PackageNotFoundError("Package not found")
-
-    monkeypatch.setattr(ppt_loader, "_Loader", DummyLoader)
+    monkeypatch.setattr(
+        "src.workflows.ingestion.loaders.office_client.OfficeToolClient.load_as_document",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("Package not found")),
+    )
 
     loader = PowerPointLoader(str(ppt_path))
     with pytest.raises(LoaderInvalidFormatError):
@@ -46,18 +38,10 @@ def test_excel_loader_wraps_unstructured_errors(monkeypatch, tmp_path):
     excel_path = tmp_path / "not-really.xlsx"
     excel_path.write_text("123", encoding="utf-8")
 
-    from src.workflows.ingestion.loaders import xlsx_loader
-
-    class DummyLoader:
-        def __init__(self, path: str):
-            assert path == str(excel_path)
-
-        def load(self):
-            from unstructured.errors import UnprocessableEntityError
-
-            raise UnprocessableEntityError("Not a valid XLSX file.")
-
-    monkeypatch.setattr(xlsx_loader, "_Loader", DummyLoader)
+    monkeypatch.setattr(
+        "src.workflows.ingestion.loaders.office_client.OfficeToolClient.load_as_document",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("Not a valid XLSX file.")),
+    )
 
     loader = ExcelLoader(str(excel_path))
     with pytest.raises(LoaderInvalidFormatError) as exc:

@@ -39,11 +39,8 @@ def test_add_custom_path():
     print(f"Enabled paths after update: {enabled_paths}")
     
     # Verify the path is in the list
-    if test_work_dir in enabled_paths:
-        print(f"✓ Custom path '{test_work_dir}' successfully added to ingestion paths")
-    else:
-        print(f"✗ Custom path not found in enabled paths")
-        return False
+    assert test_work_dir in enabled_paths, "Custom path not found in enabled paths"
+    print(f"✓ Custom path '{test_work_dir}' successfully added to ingestion paths")
     
     # Test the ingestion helper function
     from src.workflows.ingestion.helpers import build_ingestion_options_from_args
@@ -86,11 +83,8 @@ def test_add_custom_path():
     print(f"\nIngestion options root paths: {options.root_paths}")
     
     # Check if our custom path is included
-    if test_work_dir in options.root_paths:
-        print(f"✓ Custom path '{test_work_dir}' is in ingestion root paths")
-    else:
-        print(f"✗ Custom path not in ingestion root paths")
-        return False
+    assert test_work_dir in options.root_paths, "Custom path not in ingestion root paths"
+    print(f"✓ Custom path '{test_work_dir}' is in ingestion root paths")
     
     # Clean up
     for fname in test_files:
@@ -102,7 +96,6 @@ def test_add_custom_path():
     remove_document_path(test_work_dir)
     
     print("\n✓ Custom path addition test passed")
-    return True
 
 def test_remove_existing_path():
     """Test removing an existing path."""
@@ -139,17 +132,13 @@ def test_remove_existing_path():
     print(f"Paths after removal: {paths_after}")
     
     # Verify removal
-    if test_path_to_remove not in paths_after:
-        print(f"✓ Path '{test_path_to_remove}' successfully removed")
-    else:
-        print(f"✗ Path still present after removal")
-        return False
+    assert test_path_to_remove not in paths_after, "Path still present after removal"
+    print(f"✓ Path '{test_path_to_remove}' successfully removed")
     
     # Clean up
     os.rmdir(test_path_to_remove)
     
     print("\n✓ Path removal test passed")
-    return True
 
 def test_no_hardcoded_paths():
     """Verify there are no hardcoded paths in critical functions."""
@@ -172,28 +161,18 @@ def test_no_hardcoded_paths():
         if path in content:
             found_hardcoded.append(path)
     
-    if found_hardcoded:
-        print(f"✗ Found hardcoded paths: {found_hardcoded}")
-        return False
-    else:
-        print("✓ No hardcoded Libros paths found in helpers.py")
+    assert not found_hardcoded, f"Found hardcoded paths: {found_hardcoded}"
+    print("✓ No hardcoded Libros paths found in helpers.py")
     
     # Check that the function uses EXTERNAL_VOLUMES configuration
-    if 'load_external_volumes_config' in content:
-        print("✓ Using load_external_volumes_config for dynamic volume detection")
-    else:
-        print("✗ Not using dynamic volume configuration")
-        return False
+    assert 'load_external_volumes_config' in content, "Not using dynamic volume configuration"
+    print("✓ Using load_external_volumes_config for dynamic volume detection")
     
     # Check that build_ingestion_options_from_args uses path manager
-    if 'get_enabled_document_paths' in content:
-        print("✓ Using get_enabled_document_paths from path manager")
-    else:
-        print("✗ Not using path manager for document paths")
-        return False
+    assert 'get_enabled_document_paths' in content, "Not using path manager for document paths"
+    print("✓ Using get_enabled_document_paths from path manager")
     
     print("\n✓ No hardcoded paths test passed")
-    return True
 
 def test_external_volumes_config():
     """Test EXTERNAL_VOLUMES configuration."""
@@ -223,11 +202,9 @@ def test_external_volumes_config():
                 print(f"    Note: This is configured via EXTERNAL_VOLUMES, not hardcoded")
         
         print("\n✓ EXTERNAL_VOLUMES configuration test passed")
-        return True
         
     except Exception as e:
-        print(f"✗ Failed to load EXTERNAL_VOLUMES: {e}")
-        return False
+        raise AssertionError(f"Failed to load EXTERNAL_VOLUMES: {e}") from e
 
 def main():
     """Run all dynamic path tests."""
@@ -238,7 +215,8 @@ def main():
     tests_total = 4
     
     try:
-        if test_add_custom_path():
+        result = test_add_custom_path()
+        if result is None or result:
             tests_passed += 1
     except Exception as e:
         print(f"✗ Custom path addition test failed: {e}")
@@ -246,19 +224,22 @@ def main():
         traceback.print_exc()
     
     try:
-        if test_remove_existing_path():
+        result = test_remove_existing_path()
+        if result is None or result:
             tests_passed += 1
     except Exception as e:
         print(f"✗ Path removal test failed: {e}")
     
     try:
-        if test_no_hardcoded_paths():
+        result = test_no_hardcoded_paths()
+        if result is None or result:
             tests_passed += 1
     except Exception as e:
         print(f"✗ Hardcoded paths test failed: {e}")
     
     try:
-        if test_external_volumes_config():
+        result = test_external_volumes_config()
+        if result is None or result:
             tests_passed += 1
     except Exception as e:
         print(f"✗ EXTERNAL_VOLUMES test failed: {e}")

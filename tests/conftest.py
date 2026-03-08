@@ -6,6 +6,7 @@ for all tests in the test suite.
 """
 
 import os
+from pathlib import Path
 from collections import deque
 from typing import Any, Dict, List, Optional
 
@@ -28,10 +29,41 @@ def isolate_user_settings_file(tmp_path, monkeypatch):
     yield
 
 
-def pytest_runtest_setup(item):
-    """Skip integration tests unless RUN_INTEGRATION=1 is set."""
-    if "integration" in item.keywords and os.getenv("RUN_INTEGRATION") != "1":
-        pytest.skip("Set RUN_INTEGRATION=1 to run integration tests.")
+def _is_integration_item(item: pytest.Item) -> bool:
+    """Detect integration tests by marker or file location."""
+    if "integration" in item.keywords:
+        return True
+    return Path(str(item.fspath)).parts.count("integration") > 0
+
+
+def pytest_collection_modifyitems(config, items):
+    """
+    Deselect integration tests unless RUN_INTEGRATION=1 is set.
+
+    Using deselection instead of runtime skipping keeps default test runs
+    cleaner and avoids large skip counts.
+    """
+    selected = []
+    deselected = []
+    for item in items:
+        is_integration = _is_integration_item(item)
+        is_host_preflight = "preflight_host" in item.keywords
+        is_optional_ner = "tests/unit/storage/test_er_extraction.py" in item.nodeid
+
+        if is_integration and os.getenv("RUN_INTEGRATION") != "1":
+            deselected.append(item)
+            continue
+
+        if is_host_preflight and os.getenv("RUN_PREFLIGHT_HOST") != "1":
+            deselected.append(item)
+        elif is_optional_ner and os.getenv("RUN_OPTIONAL_NER") != "1":
+            deselected.append(item)
+        else:
+            selected.append(item)
+
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
+        items[:] = selected
 
 
 def pytest_addoption(parser):
@@ -82,6 +114,14 @@ def pytest_configure(config):
     config.addinivalue_line(
         'markers',
         'preflight: Pre-flight system checks'
+    )
+    config.addinivalue_line(
+        'markers',
+        'preflight_host: Host-only preflight checks (podman/systemd/compose/.env)'
+    )
+    config.addinivalue_line(
+        'markers',
+        'preflight_runtime: Runtime/container preflight checks'
     )
     config.addinivalue_line(
         'markers',
