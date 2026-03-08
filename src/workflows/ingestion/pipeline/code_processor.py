@@ -23,6 +23,27 @@ from src.utils.text import sanitize_text, truncate_to_token_limit
 from src.utils.path_discovery import should_preserve_duplicates
 
 
+def _extract_entities(pipeline: Any, chunk_id: str, text: str, metadata: Dict[str, Any]) -> None:
+    """Call entity extractor if Neo4j is wired into the pipeline. Never raises."""
+    neo4j_repo = getattr(pipeline, "neo4j_repo", None)
+    chat_service = getattr(pipeline, "chat_service", None)
+    if neo4j_repo is None or chat_service is None:
+        return
+    try:
+        from src.workflows.knowledge.entity_extractor import extract_entities_from_chunk
+        extract_entities_from_chunk(
+            chunk_id=chunk_id,
+            text=text,
+            source=str(metadata.get("file_path") or chunk_id),
+            neo4j_repo=neo4j_repo,
+            chat_service=chat_service,
+            document_type="code",
+            metadata=metadata,
+        )
+    except Exception as exc:
+        logger.debug("Entity extraction skipped for chunk %s: %s", chunk_id, exc)
+
+
 def _resolve_file_context(pipeline: Any) -> IngestionFileContext:
     """Build an IngestionFileContext from the pipeline's internal context."""
     context: Dict[str, Any] = getattr(pipeline, "_file_context", {}) or {}
@@ -128,6 +149,9 @@ def process_code_document(pipeline: Any, code_loader: object) -> None:
         )
 
         pipeline.add_hash(summary_hash)
+
+        # Knowledge-graph extraction (Neo4j) — fire-and-forget, never blocks ingestion.
+        _extract_entities(pipeline, summary_hash, summary_text, metadata)
 
         base_url = getattr(getattr(pipeline, "vector_store", None), "base_url", None) or ""
         target_url = f"{base_url.rstrip('/')}/v1/objects" if base_url else "/v1/objects"

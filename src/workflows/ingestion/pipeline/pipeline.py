@@ -62,6 +62,10 @@ class IngestionPipeline:
         # Contextual Retrieval enrichment — set by orchestrator when CONTEXT_ENRICHMENT_ENABLED=true
         self.context_generator = context_generator
 
+        # Knowledge graph extraction — set by orchestrator when NEO4J_ENABLED=true
+        self.neo4j_repo = None   # Neo4jRepository instance
+        self.chat_service = None  # LLM chat service for entity extraction
+
         self.owner_id = options.owner_id
         self.visibility = options.visibility
         self.allowed_user_ids = list(options.allowed_user_ids)

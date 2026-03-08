@@ -122,6 +122,16 @@ class IngestionOrchestrator:
         # Ensure settings are synced before running
         sync_settings_json()
 
+        # ------------------------------------------------------------------
+        # Integrity check: detect vector store / ledger desync.
+        #
+        # If the ledger has DONE entries but Weaviate is empty, it means the
+        # vector store was wiped (volume deleted, manual collection drop, etc.)
+        # without resetting the ledger. Without this check every file would be
+        # skipped as "already ingested" and the KB would stay empty forever.
+        # ------------------------------------------------------------------
+        self._reconcile_ledger_with_vector_store()
+
         # --reclassify: invalidate all score-cache entries before scanning
         if getattr(options, "reclassify", False):
             try:
@@ -323,6 +333,102 @@ class IngestionOrchestrator:
             "pipeline": pipeline_result,
         }
 
+    def _reconcile_ledger_with_vector_store(self) -> None:
+        """Detect and auto-heal a ledger / vector-store desync.
+
+        The problem this fixes
+        ----------------------
+        The ledger (SQLite) tracks which files have been fully ingested.
+        When the user wipes Weaviate (deletes the volume, drops the collection,
+        or runs a manual reset) the ledger is NOT touched. On the next ingestion
+        run every file is skipped as "already ingested" because the ledger says
+        UPSERT=DONE — but Weaviate is empty, so the KB stays empty forever.
+
+        Detection
+        ---------
+        1. Ask the ledger how many files it believes are fully ingested.
+        2. Ask Weaviate how many objects it actually holds.
+        3. If the ledger says > 0 done but Weaviate has 0 objects → desync.
+
+        Healing
+        -------
+        Call ledger.invalidate_all() to reset every UPSERT stage to PENDING
+        and clear last_seen_fingerprint. Also delete the ingestion_catalog.json
+        so the catalog-level check does not block files either.
+        The next ingestion run will process every file from scratch.
+        """
+        try:
+            ledger_done = self._ledger.count_done_upserts()
+            if ledger_done == 0:
+                return
+
+            vector_store = get_vector_store(self._config)
+            weaviate_count = self._count_weaviate_objects(vector_store)
+
+            if weaviate_count > 0:
+                return
+
+            logger.warning(
+                "INTEGRITY: Ledger has %d DONE entries but Weaviate is empty. "
+                "Auto-invalidating ledger so all files will be re-ingested.",
+                ledger_done,
+            )
+            reset = self._ledger.invalidate_all()
+            self._reset_ingestion_catalog()
+            logger.warning(
+                "INTEGRITY: Reset complete — %d ledger entries cleared, "
+                "ingestion catalog wiped. Full re-ingestion will run.",
+                reset,
+            )
+        except Exception as exc:
+            logger.warning("INTEGRITY: Reconciliation check failed (non-fatal): %s", exc)
+
+    def _count_weaviate_objects(self, vector_store) -> int:
+        """Return the total number of objects in Weaviate across all tenants.
+        Returns 0 on any error so we never falsely skip files.
+        """
+        try:
+            cfg = self._config
+            client = getattr(vector_store, "client", None)
+            schema = getattr(vector_store, "schema", None)
+            if client is None and schema is not None:
+                client = getattr(schema, "client", None)
+            if client is None:
+                return 0
+
+            class_name = getattr(cfg, "WEAVIATE_CLASS", "RAGDocument")
+            multi_tenancy = getattr(cfg, "WEAVIATE_MULTI_TENANCY", True)
+            collection = client.collections.get(class_name)
+            total = 0
+
+            if multi_tenancy:
+                tenants = collection.tenants.get()
+                for t in tenants:
+                    try:
+                        resp = collection.with_tenant(t.name).aggregate.over_all(total_count=True)
+                        total += resp.total_count or 0
+                    except Exception:
+                        pass
+            else:
+                resp = collection.aggregate.over_all(total_count=True)
+                total = resp.total_count or 0
+
+            return total
+        except Exception as exc:
+            logger.debug("_count_weaviate_objects failed: %s", exc)
+            return 0
+
+    def _reset_ingestion_catalog(self) -> None:
+        """Delete ingestion_catalog.json so the catalog-level skip check is cleared."""
+        import os
+        from src.workflows.ingestion.pipeline.pipeline import CATALOG_PATH
+        try:
+            if os.path.exists(CATALOG_PATH):
+                os.remove(CATALOG_PATH)
+                logger.info("INTEGRITY: Deleted ingestion_catalog.json")
+        except Exception as exc:
+            logger.warning("INTEGRITY: Could not delete ingestion_catalog.json: %s", exc)
+
     def _build_pipeline(self) -> IngestionPipeline:
         """
         Construct the ingestion pipeline with all required services.
@@ -361,28 +467,6 @@ class IngestionOrchestrator:
         ingest_queue = IngestQueue()
         chunk_registry = ChunkRegistry()
 
-        # Contextual Retrieval enrichment (opt-in, off by default)
-        context_generator = None
-        if getattr(self._config, "CONTEXT_ENRICHMENT_ENABLED", False):
-            try:
-                from src.workflows.ingestion.context_generator import ContextGenerator
-                _chat_service = provider.chat()
-                context_generator = ContextGenerator(
-                    chat_service=_chat_service,
-                    model=getattr(self._config, "CONTEXT_ENRICHMENT_MODEL", "") or None,
-                    max_tokens=getattr(self._config, "CONTEXT_ENRICHMENT_MAX_TOKENS", 200),
-                    doc_chars_limit=getattr(self._config, "CONTEXT_ENRICHMENT_DOC_CHARS", 3000),
-                )
-                logger.info(
-                    "Contextual Retrieval enrichment ENABLED (model=%s, max_tokens=%d)",
-                    getattr(self._config, "CONTEXT_ENRICHMENT_MODEL", "") or "default",
-                    getattr(self._config, "CONTEXT_ENRICHMENT_MAX_TOKENS", 200),
-                )
-            except Exception as _ce:
-                logger.warning(
-                    "Could not initialize ContextGenerator, enrichment disabled: %s", _ce
-                )
-
         pipeline = IngestionPipeline.from_options(
             embedding_service=embedding_service,
             vector_store=vector_store,
@@ -390,9 +474,24 @@ class IngestionOrchestrator:
             cache_manager=self._cache_manager,
             ingest_queue=ingest_queue,
             chunk_registry=chunk_registry,
-            context_generator=context_generator,
         )
         pipeline.ledger = self._ledger
+
+        # Wire Neo4j knowledge-graph extraction when enabled.
+        if getattr(self._config, "NEO4J_ENABLED", False):
+            try:
+                from src.backends.storage.graph.neo4j_repository import Neo4jRepository
+                from src.backends.storage.graph.neo4j_schema import ensure_schema
+
+                neo4j_repo = Neo4jRepository(self._config)
+                ensure_schema(neo4j_repo.driver)
+                pipeline.neo4j_repo = neo4j_repo
+                pipeline.chat_service = provider.chat()
+                logger.info("Neo4j entity extraction wired into ingestion pipeline.")
+            except Exception as exc:
+                logger.warning(
+                    "Failed to initialize Neo4j for ingestion entity extraction (non-fatal): %s", exc
+                )
 
         logger.info("Ingestion pipeline built successfully.")
         return pipeline

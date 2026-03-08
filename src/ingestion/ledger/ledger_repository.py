@@ -27,7 +27,6 @@ class Stage(Enum):
     DISCOVER = "DISCOVER"
     EXTRACT = "EXTRACT"
     CHUNK = "CHUNK"
-    CONTEXT = "CONTEXT"  # Contextual Retrieval enrichment (LLM-generated prefix per chunk)
     EMBED = "EMBED"
     UPSERT = "UPSERT"
     FINALIZE = "FINALIZE"
@@ -670,3 +669,52 @@ class LedgerRepository:
                 "INSERT OR IGNORE INTO content_fingerprints (fingerprint, canonical_document_id) VALUES (?, ?)",
                 (content_hash, document_id)
             )
+    # -------------------------------------------------------------------------
+    # Integrity / reconciliation
+    # -------------------------------------------------------------------------
+
+    def invalidate_all(self) -> int:
+        """Mark every document's UPSERT stage as PENDING so the next ingestion
+        run re-processes all files.
+
+        This is called automatically by the orchestrator when it detects that
+        the vector store is empty but the ledger has DONE entries — which means
+        Weaviate was wiped without resetting the ledger (e.g. the user deleted
+        the Weaviate volume or ran a manual collection drop).
+
+        Returns:
+            Number of version_stage_state rows that were reset to PENDING.
+        """
+        with self.control_plane.get_connection() as conn:
+            # Delete every UPSERT row so should_skip_file() no longer
+            # returns cache_hit for any file.  Deleting is correct here
+            # because 'PENDING' is not a valid status in the state machine;
+            # a missing row is treated the same as "never processed".
+            cursor = conn.execute(
+                "DELETE FROM version_stage_state WHERE stage = ? AND status = 'DONE'",
+                (Stage.UPSERT.value,)
+            )
+            reset_count = cursor.rowcount
+
+            # Also clear last_seen_fingerprint on all documents so ensure_version()
+            # treats every file as new on the next run.
+            conn.execute(
+                "UPDATE documents SET last_seen_fingerprint = NULL, active_version_id = NULL"
+            )
+
+        log.warning(
+            "Ledger invalidated: %d UPSERT stages reset to PENDING "
+            "(vector store was empty — full re-ingestion will run).",
+            reset_count,
+        )
+        return reset_count
+
+    def count_done_upserts(self) -> int:
+        """Return the number of files the ledger believes are fully ingested."""
+        with self.control_plane.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT COUNT(*) FROM version_stage_state WHERE stage = ? AND status = 'DONE'",
+                (Stage.UPSERT.value,)
+            )
+            row = cursor.fetchone()
+            return row[0] if row else 0

@@ -54,6 +54,28 @@ from src.utils.text import (
 from src.utils.structured_log import emit_structured_log
 
 
+def _extract_entities(pipeline: Any, chunk_id: str, text: str, metadata: Dict[str, Any]) -> None:
+    """Call entity extractor if Neo4j is wired into the pipeline. Never raises."""
+    neo4j_repo = getattr(pipeline, "neo4j_repo", None)
+    chat_service = getattr(pipeline, "chat_service", None)
+    if neo4j_repo is None or chat_service is None:
+        return
+    try:
+        from src.workflows.knowledge.entity_extractor import extract_entities_from_chunk
+        extract_entities_from_chunk(
+            chunk_id=chunk_id,
+            text=text,
+            source=str(metadata.get("file_path") or metadata.get("source") or chunk_id),
+            neo4j_repo=neo4j_repo,
+            chat_service=chat_service,
+            document_type=str(metadata.get("file_extension") or ""),
+            author=str(metadata.get("author") or ""),
+            metadata=metadata,
+        )
+    except Exception as exc:
+        logger.debug("Entity extraction skipped for chunk %s: %s", chunk_id, exc)
+
+
 def _resolve_file_context(pipeline: Any) -> IngestionFileContext:
     """Build an IngestionFileContext from the pipeline's internal context."""
     context: Dict[str, Any] = getattr(pipeline, "_file_context", {}) or {}
@@ -543,6 +565,9 @@ def process_text_document(pipeline: Any, loader: object, context_generator: Any 
                         )
                         pipeline.add_hash(record["hash"])
                         processed_count += 1
+
+                        # Knowledge-graph extraction (Neo4j) — fire-and-forget, never blocks ingestion.
+                        _extract_entities(pipeline, record["hash"], record["text"], metadata)
 
                         # Mark chunk as UPSERTED in registry
                         if chunk_registry is not None and record.get("chunk_id"):
