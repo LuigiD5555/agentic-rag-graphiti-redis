@@ -29,13 +29,13 @@ def register_provider(name: str, factory: ProviderFactoryFn) -> None:
 def provider(name: str) -> Callable[[ProviderFactoryFn], ProviderFactoryFn]:
     """
     Decorator to register a provider adapter factory.
-    
+
     Args:
         name: Provider name (e.g., 'lmstudio', 'openai', 'ollama')
-        
+
     Returns:
         Decorator function
-        
+
     Example:
         @provider('lmstudio')
         def build_lmstudio_adapter(config):
@@ -74,11 +74,11 @@ _builtins_lock = threading.Lock()
 def ensure_builtin_providers_loaded() -> None:
     """
     Ensure built-in providers are loaded.
-    
+
     This function is idempotent and thread-safe.
     """
     global _builtins_loaded
-    
+
     with _builtins_lock:
         if not _builtins_loaded:
             # Import builtins module to trigger registration
