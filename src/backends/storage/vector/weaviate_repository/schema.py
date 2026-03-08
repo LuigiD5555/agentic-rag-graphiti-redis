@@ -98,11 +98,12 @@ class SchemaManager:
 
         schema.create(
             self.class_name,
-            vectorizer_config=None,  # Use None instead of Configure.Vectorizer.none() to avoid named vectors conflict
-            vector_index_config=Configure.VectorIndex.hnsw(
-                distance_metric=distance_metric,
-                ef_construction=hnsw_ef_construction,
-                max_connections=hnsw_max_connections,
+            vector_config=Configure.Vectors.self_provided(
+                vector_index_config=Configure.VectorIndex.hnsw(
+                    distance_metric=distance_metric,
+                    ef_construction=hnsw_ef_construction,
+                    max_connections=hnsw_max_connections,
+                ),
             ),
             properties=self._class_properties_provider(),
             multi_tenancy_config=Configure.multi_tenancy(enabled=self.multitenant_enabled),

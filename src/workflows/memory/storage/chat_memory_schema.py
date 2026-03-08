@@ -60,8 +60,8 @@ def create_chat_memory_collection(
             name=CHAT_MEMORY_COLLECTION,
             description="Compressed conversation snapshots for cross-chat recall (Pareto 80/20)",
 
-            # Vectorizer configuration (none = we provide embeddings)
-            vectorizer_config=Configure.Vectorizer.none(),
+            # We provide embeddings ourselves (self-provided vectors)
+            vector_config=Configure.Vectors.self_provided(),
 
             # Properties schema
             properties=[
