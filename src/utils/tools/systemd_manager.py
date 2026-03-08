@@ -613,11 +613,12 @@ class SystemdManager:
                     print(f"{Colors.CYAN}Building tool-{tool}...{Colors.NC}")
 
                 # Build from project root with specific Containerfile
+                # capture=False streams output to terminal to avoid pipe buffer deadlock
                 code, stdout, stderr = self._run_command(
                     ['podman', 'build', '-t', f'rag-tool-{tool}:latest',
                      '-f', str(containerfile), str(self.project_root)],
                     check=False,
-                    capture=True
+                    capture=False
                 )
             else:
                 # Standard tools: directory in tools/
@@ -630,11 +631,11 @@ class SystemdManager:
                 if verbose:
                     print(f"{Colors.CYAN}Building tool-{tool}...{Colors.NC}")
 
-                # Build image
+                # Build image — capture=False streams output to terminal to avoid pipe buffer deadlock
                 code, stdout, stderr = self._run_command(
                     ['podman', 'build', '-t', f'rag-tool-{tool}:latest', str(tool_dir)],
                     check=False,
-                    capture=True
+                    capture=False
                 )
 
             if code == 0:
