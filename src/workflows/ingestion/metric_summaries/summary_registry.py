@@ -108,5 +108,5 @@ def ensure_builtin_metric_summaries_loaded() -> None:
     with _builtins_lock:
         if not _builtins_loaded:
             # Import builtins module to trigger registration
-            from src.workflows.ingestion.metrics import summary_builtins  # noqa: F401
+            from src.workflows.ingestion.metric_summaries import summary_builtins  # noqa: F401
             _builtins_loaded = True

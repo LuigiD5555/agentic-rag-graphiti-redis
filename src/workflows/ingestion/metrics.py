@@ -259,7 +259,10 @@ class MetricsCollector:
         }
         
         # Ensure built-in metric summaries are loaded
-        from .metrics.summary_registry import ensure_builtin_metric_summaries_loaded, get_metric_summary
+        from .metric_summaries.summary_registry import (
+            ensure_builtin_metric_summaries_loaded,
+            get_metric_summary,
+        )
         ensure_builtin_metric_summaries_loaded()
         
         for name, metrics in all_metrics.items():
