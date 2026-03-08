@@ -1,0 +1,19 @@
+{
+  "name": "context_compressor",
+  "version": "1.0.0",
+  "capabilities": [
+    "deduplication",
+    "summarization"
+  ],
+  "inputs": [
+    "retrieval"
+  ],
+  "outputs": [
+    "retrieval"
+  ],
+  "dependencies": [
+    "retrieval"
+  ],
+  "level": "core_plugin",
+  "enabled": true
+}

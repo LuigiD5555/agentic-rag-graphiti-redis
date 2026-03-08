@@ -1,0 +1,17 @@
+{
+  "name": "math_understanding",
+  "version": "1.0.0",
+  "capabilities": [
+    "math_detection",
+    "math_parsing"
+  ],
+  "inputs": [
+    "user_query"
+  ],
+  "outputs": [
+    "math_context"
+  ],
+  "dependencies": [],
+  "level": "specialist",
+  "enabled": true
+}

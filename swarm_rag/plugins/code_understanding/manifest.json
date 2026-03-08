@@ -1,0 +1,17 @@
+{
+  "name": "code_understanding",
+  "version": "1.0.0",
+  "capabilities": [
+    "code_detection",
+    "symbol_extraction"
+  ],
+  "inputs": [
+    "user_query"
+  ],
+  "outputs": [
+    "code_context"
+  ],
+  "dependencies": [],
+  "level": "specialist",
+  "enabled": true
+}

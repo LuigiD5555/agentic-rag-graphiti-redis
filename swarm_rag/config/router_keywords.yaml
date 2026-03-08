@@ -1,0 +1,153 @@
+# Router keyword map — loaded at startup by Router.
+#
+# Format:
+#   <plugin_name>:
+#     keywords: [list of lowercase trigger words / substrings]
+#
+# The router always activates the "always_on" baseline set.
+# Specialist plugins are activated when ANY keyword matches the query.
+
+always_on:
+  - retrieval
+  - context_compressor
+  - evidence_merger
+
+keyword_map:
+  math_understanding:
+    keywords:
+      - calcula
+      - porcentaje
+      - "%"
+      - suma
+      - divide
+      - multiplica
+      - resta
+      - integral
+      - derivada
+      - ecuacion
+      - formula
+      - resultado
+      - cuanto es
+      - cuánto es
+      - calculate
+      - percent
+      - equation
+
+  math_tool:
+    keywords:
+      - calcula
+      - porcentaje
+      - "%"
+      - suma
+      - divide
+      - multiplica
+      - formula
+
+  code_understanding:
+    keywords:
+      - python
+      - javascript
+      - typescript
+      - java
+      - golang
+      - funcion
+      - función
+      - metodo
+      - método
+      - bug
+      - codigo
+      - código
+      - clase
+      - modulo
+      - módulo
+      - import
+      - def
+      - class
+      - function
+      - error
+      - excepcion
+      - excepción
+      - traceback
+      - implementa
+
+  code_agent:
+    keywords:
+      - archivo
+      - fichero
+      - diff
+      - tests
+      - test
+      - ejecuta
+      - correr
+      - run
+      - repo
+      - commit
+
+  graph_retrieval:
+    keywords:
+      - relacion
+      - relación
+      - conecta
+      - depende
+      - vinculo
+      - vínculo
+      - entidad
+      - grafo
+      - graph
+      - nodo
+      - node
+      - relacionado
+      - asociado
+      - linked
+
+  version_monitor:
+    keywords:
+      - version
+      - versión
+      - anterior
+      - actual
+      - cambio
+      - vigente
+      - obsoleto
+      - deprecated
+      - nuevo
+      - antiguo
+      - "2023"
+      - "2024"
+      - "2025"
+      - "2026"
+      - actualizado
+
+  mcp_tool_agent:
+    keywords:
+      - digit
+      - git
+      - commit
+      - archivo
+      - fichero
+      - repo
+      - mcp
+      - tool
+      - herramienta
+
+  memory_retrieval:
+    keywords:
+      - antes
+      - recuerdas
+      - recuerda
+      - solucionamos
+      - anteriormente
+      - ya hablamos
+      - previo
+      - remember
+      - previously
+
+  privacy_scrubber:
+    keywords:
+      - confidencial
+      - privado
+      - secreto
+      - pii
+      - datos personales
+      - anonimiza
+      - gdpr

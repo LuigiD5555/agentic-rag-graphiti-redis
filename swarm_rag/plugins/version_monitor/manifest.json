@@ -1,0 +1,20 @@
+{
+  "name": "version_monitor",
+  "version": "1.0.0",
+  "capabilities": [
+    "version_conflict_detection"
+  ],
+  "inputs": [
+    "retrieval.neo4j_hits",
+    "retrieval.weaviate_hits"
+  ],
+  "outputs": [
+    "version_conflicts",
+    "active_versions"
+  ],
+  "dependencies": [
+    "retrieval"
+  ],
+  "level": "specialist",
+  "enabled": true
+}

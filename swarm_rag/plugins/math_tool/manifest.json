@@ -1,0 +1,19 @@
+{
+  "name": "math_tool",
+  "version": "1.0.0",
+  "capabilities": [
+    "math_execution",
+    "sympy_eval"
+  ],
+  "inputs": [
+    "math_context"
+  ],
+  "outputs": [
+    "math_context.result"
+  ],
+  "dependencies": [
+    "math_understanding"
+  ],
+  "level": "specialist",
+  "enabled": true
+}
