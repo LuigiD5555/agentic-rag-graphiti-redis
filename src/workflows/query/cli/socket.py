@@ -12,7 +12,7 @@ from src.workflows.query.embeddings_factory import get_embedding_service
 
 def main():
     provider = ProviderFactory(settings)
-    embed = get_embedding_service(settings, provider)
+    embed = get_embedding_service(settings, provider, context="query")
     chat = provider.chat()
     vector = get_vector_store(settings)
     graph = get_graph_store(settings)

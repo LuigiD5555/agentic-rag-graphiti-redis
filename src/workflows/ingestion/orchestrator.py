@@ -334,7 +334,7 @@ class IngestionOrchestrator:
 
         # Initialize provider and embedding service
         provider = ProviderFactory(self._config)
-        embedding_service = get_embedding_service(self._config, provider)
+        embedding_service = get_embedding_service(self._config, provider, context="ingest")
 
         # Initialize vector store
         vector_store = get_vector_store(self._config)

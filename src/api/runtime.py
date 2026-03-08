@@ -88,7 +88,7 @@ class RuntimeFactory:
             log.warning("ChatMemory collection creation failed - memory features may not work")
 
         provider = ProviderFactory(cfg)
-        embedding_service = get_embedding_service(cfg, provider)
+        embedding_service = get_embedding_service(cfg, provider, context="query")
         retriever = WeaviateRetriever(
             client=weaviate_client,
             collection_name=cfg.WEAVIATE_CLASS,

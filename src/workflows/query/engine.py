@@ -118,6 +118,7 @@ class AppConfig(BaseSettings):
     LMSTUDIO_PORT: int = Field(default_factory=lambda: settings.LMSTUDIO_PORT)
     LMSTUDIO_EXTRA_HOSTS: List[str] = Field(default_factory=lambda: settings.LMSTUDIO_EXTRA_HOSTS)
     LMSTUDIO_CHAT_MODEL: str = Field(default_factory=lambda: settings.LMSTUDIO_CHAT_MODEL)
+    LMSTUDIO_EMBED_MODEL: str = Field(default_factory=lambda: settings.LMSTUDIO_EMBED_MODEL)
     LMSTUDIO_REQUIRE_SERVER: bool = Field(default_factory=lambda: settings.LMSTUDIO_REQUIRE_SERVER)
     LMSTUDIO_KEEPALIVE_CHAT: int = Field(default_factory=lambda: settings.LMSTUDIO_KEEPALIVE_CHAT)
     LMSTUDIO_KEEPALIVE_EMBED: int = Field(default_factory=lambda: settings.LMSTUDIO_KEEPALIVE_EMBED)
@@ -126,6 +127,8 @@ class AppConfig(BaseSettings):
 
     # ===== Embeddings =====
     EMBEDDING_MODEL: str = Field(default_factory=lambda: settings.EMBEDDING_MODEL)
+    EMBEDDING_MODEL_QUERY: str = Field(default_factory=lambda: settings.EMBEDDING_MODEL_QUERY)
+    EMBEDDING_MODEL_INGEST: str = Field(default_factory=lambda: settings.EMBEDDING_MODEL_INGEST)
     EMBEDDING_DIM: int = Field(default_factory=lambda: settings.EMBEDDING_DIM)
     EMBEDDING_MAX_TOKENS: int = Field(default_factory=lambda: settings.EMBEDDING_MAX_TOKENS)
 

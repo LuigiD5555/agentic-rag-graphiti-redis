@@ -18,7 +18,7 @@ def main():
     args = ap.parse_args()
 
     provider = ProviderFactory(settings)
-    embed = get_embedding_service(settings, provider)
+    embed = get_embedding_service(settings, provider, context="ingest")
     vector = get_vector_store(settings)
 
     pipeline_options = PipelineOptions(

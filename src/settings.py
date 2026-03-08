@@ -270,7 +270,9 @@ LMSTUDIO_KEEPALIVE_RERANK = 30
 LMSTUDIO_API_ROOTS = []
 
 # ===== Embeddings =====
-EMBEDDING_MODEL = ""  # Explicit model name (required)
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", LMSTUDIO_EMBED_MODEL).strip()
+EMBEDDING_MODEL_QUERY = os.getenv("EMBEDDING_MODEL_QUERY", "").strip()
+EMBEDDING_MODEL_INGEST = os.getenv("EMBEDDING_MODEL_INGEST", "").strip()
 
 # ===== RAG Configuration =====
 ENABLE_RAG_GATING = True

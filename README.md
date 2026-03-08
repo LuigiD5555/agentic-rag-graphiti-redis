@@ -58,6 +58,8 @@ Key `.env` entries you may need to adjust:
 - `WEAVIATE_CLASS` – Target collection name (defaults to `RAGDocument`).
 - `WEAVIATE_CONNECT_RETRIES` / `WEAVIATE_CONNECT_BACKOFF` – How long the app should keep trying while Weaviate boots.
 - `LMSTUDIO_HOST` / `LMSTUDIO_PORT` – LM Studio HTTP server host/port.
+- `EMBEDDING_MODEL_INGEST` / `EMBEDDING_MODEL_QUERY` – Optional embedding model overrides by pipeline context.
+- `EMBEDDING_MODEL` – Shared embedding model fallback when context-specific overrides are not set.
 - `NEO4J_URI`, etc. – Service endpoints when running remotely.
 
 ---
@@ -201,7 +203,10 @@ python tools/debug/scripts/filter_podman_errors.py --container rag-graphiti-agen
 
 ### 6) LM Studio concurrency guard
 
-- New `LMSTUDIO_REQUEST_GATE` serializes every `/v1/chat/completions` and `/v1/embeddings` call via `src/backends/llm/lmstudio/request_gate.py` so chat and embedding traffic do not race over the same model. When saturation still happens, the log line `LM Studio transient model-load error (400)` now includes the raw body to confirm the failure mode.
+- `LMSTUDIO_REQUEST_GATE` now enforces bounded concurrency for `/v1/chat/completions` and `/v1/embeddings` via `src/backends/llm/lmstudio/request_gate.py`. Default is `2` concurrent requests (`LMSTUDIO_MAX_CONCURRENT_REQUESTS=2`), so LM Studio can process parallel work without fully disabling contention protection.
+- `LLMService` fallback is now conservative by default: it only retries the selected chat model unless you configure fallback targets with `LMSTUDIO_CHAT_FALLBACK_MODELS=modelA,modelB`. Automatic fallback over all discovered models is opt-in with `LMSTUDIO_CHAT_AUTO_FALLBACK=true`. Bounded depth is controlled by `LMSTUDIO_CHAT_MODEL_FALLBACKS` (default `3`).
+- Retry/backoff schedule for model-load errors is configurable with `LMSTUDIO_CHAT_MODEL_LOAD_RETRY_DELAYS` (comma-separated seconds, default `0,0.6,1.2`).
+- Embedding model selection supports context-specific overrides: `EMBEDDING_MODEL_INGEST` and `EMBEDDING_MODEL_QUERY` (fallback chain: context override → `EMBEDDING_MODEL` → `LMSTUDIO_EMBED_MODEL`).
 - If you need to verify contention, run `scripts/debug/run_lmstudio_concurrency_probe.py` with both a chat model and an embed model; the gate should stabilize the throughput but may extend individual request latency slightly.
 
 ### 6) Runtime probes (concurrency and LM Studio behavior)

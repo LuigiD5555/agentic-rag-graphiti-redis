@@ -1,4 +1,5 @@
 """Module with services that communicate RAG requests to LM Studio API."""
+import os
 import requests
 import time
 import uuid
@@ -30,14 +31,72 @@ class LLMService:
         self.url = f"{self.api_root}/v1/chat/completions"
         self._require_live = bool(getattr(config, "LMSTUDIO_REQUIRE_SERVER", False))
 
-        explicit_model = getattr(config, "LMSTUDIO_CHAT_MODEL", None)
+        explicit_model = (getattr(config, "LMSTUDIO_CHAT_MODEL", "") or "").strip()
         if explicit_model:
             self.model = explicit_model
         else:
             self.model = model_manager.get_first_language_model() or "gpt-3.5-turbo"
+
+        # Keep fallback behavior explicit and bounded to avoid long model-hopping loops.
+        self._fallback_limit = max(1, int(getattr(config, "LMSTUDIO_CHAT_MODEL_FALLBACKS", 3)))
+        self._language_models = [m for m in (getattr(model_manager, "language_models", []) or []) if m]
+        self._auto_fallback_enabled = self._env_flag("LMSTUDIO_CHAT_AUTO_FALLBACK", default=False)
+        self._configured_fallback_models = self._env_model_list("LMSTUDIO_CHAT_FALLBACK_MODELS")
+        self._retry_delays = self._parse_retry_delays(
+            os.getenv("LMSTUDIO_CHAT_MODEL_LOAD_RETRY_DELAYS", "0,0.6,1.2")
+        )
         self.temperature = temperature
 
         logger.info("Selected LLM model: %s", self.model)
+
+    @staticmethod
+    def _env_flag(name: str, default: bool = False) -> bool:
+        raw = os.getenv(name)
+        if raw is None:
+            return default
+        return raw.strip().lower() in ("1", "true", "yes", "on")
+
+    @staticmethod
+    def _env_model_list(name: str) -> List[str]:
+        raw = (os.getenv(name, "") or "").strip()
+        if not raw:
+            return []
+        models = []
+        for item in raw.split(","):
+            model_name = item.strip()
+            if model_name and model_name not in models:
+                models.append(model_name)
+        return models
+
+    @staticmethod
+    def _parse_retry_delays(raw: str) -> List[float]:
+        delays = []
+        for token in (raw or "").split(","):
+            token = token.strip()
+            if not token:
+                continue
+            try:
+                delays.append(max(0.0, float(token)))
+            except ValueError:
+                continue
+        return delays or [0.0, 0.6, 1.2]
+
+    def _model_candidates(self, preferred_model: str) -> List[str]:
+        """Build an ordered, deduplicated set of model fallbacks."""
+        candidates = [preferred_model, *self._configured_fallback_models]
+        if self._auto_fallback_enabled:
+            candidates.extend(self._language_models)
+        ordered = []
+        seen = set()
+        for candidate in candidates:
+            model_name = (candidate or "").strip()
+            if not model_name or model_name in seen:
+                continue
+            seen.add(model_name)
+            ordered.append(model_name)
+            if len(ordered) >= self._fallback_limit:
+                break
+        return ordered
 
     @staticmethod
     def _error_status_and_body(exc: requests.exceptions.RequestException) -> tuple[Optional[int], str]:
@@ -95,89 +154,97 @@ class LLMService:
             payload["ttl"] = ttl
         request_id = request_id or f"chat-{uuid.uuid4().hex[:12]}"
 
-        for root in self._candidate_roots:
-            url = f"{root}/v1/chat/completions"
-            retry_delays = [0.0, 0.6, 1.2]
-            for retry_idx, delay_s in enumerate(retry_delays):
-                if delay_s > 0:
-                    time.sleep(delay_s)
-                try:
-                    started = time.perf_counter()
-                    emit_structured_log(
-                        logger,
-                        component="lmstudio_client",
-                        request_id=request_id,
-                        operation="chat_request_start",
-                        model_name=self.model,
-                        endpoint=url,
-                        payload_keys=sorted(payload.keys()),
-                        payload_summary={
-                            "model": payload.get("model"),
-                            "max_tokens": payload.get("max_tokens"),
-                            "temperature": payload.get("temperature"),
-                            "messages_count": len(payload.get("messages", [])),
-                        },
-                        ttl=payload.get("ttl"),
-                    )
-                    logger.info(
-                        "Sending chat completion to LM Studio (model=%s, host=%s, max_tokens=%d)...",
-                        self.model,
-                        root,
-                        max_tokens,
-                    )
-                    response = self._post_json(url, payload, timeout=30)
-
-                    data = response.json()
-                    text = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-
-                    if not text:
-                        logger.warning("LM Studio returned an empty chat completion response.")
-                    else:
-                        logger.info("Received chat completion response (%d chars).", len(text))
-                    emit_structured_log(
-                        logger,
-                        component="lmstudio_client",
-                        request_id=request_id,
-                        operation="chat_request_end",
-                        model_name=self.model,
-                        duration_ms=(time.perf_counter() - started) * 1000.0,
-                        endpoint=url,
-                        status_code=response.status_code,
-                        response_chars=len(text),
-                    )
-
-                    self.api_root = root
-                    self.url = url
-                    return text
-
-                except requests.exceptions.RequestException as e:
-                    status_code, error_body = self._error_status_and_body(e)
-                    if (
-                        self._is_retryable_model_load_error(status_code, error_body)
-                        and retry_idx < len(retry_delays) - 1
-                    ):
-                        logger.warning(
-                            "LM Studio transient model-load error (%s), retrying in %.1fs",
-                            status_code,
-                            retry_delays[retry_idx + 1],
+        for candidate_model in self._model_candidates(self.model):
+            payload["model"] = candidate_model
+            for root in self._candidate_roots:
+                url = f"{root}/v1/chat/completions"
+                retry_delays = self._retry_delays
+                for retry_idx, delay_s in enumerate(retry_delays):
+                    if delay_s > 0:
+                        time.sleep(delay_s)
+                    try:
+                        started = time.perf_counter()
+                        emit_structured_log(
+                            logger,
+                            component="lmstudio_client",
+                            request_id=request_id,
+                            operation="chat_request_start",
+                            model_name=candidate_model,
+                            endpoint=url,
+                            payload_keys=sorted(payload.keys()),
+                            payload_summary={
+                                "model": payload.get("model"),
+                                "max_tokens": payload.get("max_tokens"),
+                                "temperature": payload.get("temperature"),
+                                "messages_count": len(payload.get("messages", [])),
+                            },
+                            ttl=payload.get("ttl"),
                         )
-                        continue
-                    logger.error(
-                        "Failed to connect to LM Studio for chat completion (%s): %s | body=%s",
-                        root,
-                        e,
-                        error_body or "<empty>",
-                    )
-                    emit_structured_log(
-                        logger,
-                        component="lmstudio_client",
-                        request_id=request_id,
-                        operation="chat_request_error",
-                        model_name=self.model,
-                        endpoint=url,
-                        error=f"{e}; status_code={status_code}; body={error_body}",
-                    )
-                    break
+                        logger.info(
+                            "Sending chat completion to LM Studio (model=%s, host=%s, max_tokens=%d)...",
+                            candidate_model,
+                            root,
+                            max_tokens,
+                        )
+                        response = self._post_json(url, payload, timeout=30)
+
+                        data = response.json()
+                        text = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+
+                        if not text:
+                            logger.warning("LM Studio returned an empty chat completion response.")
+                        else:
+                            logger.info("Received chat completion response (%d chars).", len(text))
+                        emit_structured_log(
+                            logger,
+                            component="lmstudio_client",
+                            request_id=request_id,
+                            operation="chat_request_end",
+                            model_name=candidate_model,
+                            duration_ms=(time.perf_counter() - started) * 1000.0,
+                            endpoint=url,
+                            status_code=response.status_code,
+                            response_chars=len(text),
+                        )
+
+                        self.model = candidate_model
+                        self.api_root = root
+                        self.url = url
+                        return text
+
+                    except requests.exceptions.RequestException as e:
+                        status_code, error_body = self._error_status_and_body(e)
+                        if (
+                            self._is_retryable_model_load_error(status_code, error_body)
+                            and retry_idx < len(retry_delays) - 1
+                        ):
+                            logger.warning(
+                                "LM Studio transient model-load error (%s), retrying in %.1fs",
+                                status_code,
+                                retry_delays[retry_idx + 1],
+                            )
+                            continue
+                        logger.error(
+                            "Failed to connect to LM Studio for chat completion (%s): %s | body=%s",
+                            root,
+                            e,
+                            error_body or "<empty>",
+                        )
+                        emit_structured_log(
+                            logger,
+                            component="lmstudio_client",
+                            request_id=request_id,
+                            operation="chat_request_error",
+                            model_name=candidate_model,
+                            endpoint=url,
+                            error=f"{e}; status_code={status_code}; body={error_body}",
+                        )
+                        break
+            if candidate_model != self.model:
+                logger.warning(
+                    "LM Studio model '%s' failed; trying fallback model.",
+                    candidate_model,
+                )
 
         logger.error("All LM Studio completion endpoints failed: %s", self._candidate_roots)
         if self._require_live:
@@ -222,90 +289,100 @@ class LLMService:
             payload["ttl"] = ttl
         request_id = request_id or f"chat-{uuid.uuid4().hex[:12]}"
 
-        for root in self._candidate_roots:
-            url = f"{root}/v1/chat/completions"
-            retry_delays = [0.0, 0.6, 1.2]
-            for retry_idx, delay_s in enumerate(retry_delays):
-                if delay_s > 0:
-                    time.sleep(delay_s)
-                try:
-                    started = time.perf_counter()
-                    emit_structured_log(
-                        logger,
-                        component="lmstudio_client",
-                        request_id=request_id,
-                        operation="chat_request_start",
-                        model_name=selected_model,
-                        endpoint=url,
-                        payload_keys=sorted(payload.keys()),
-                        payload_summary={
-                            "model": payload.get("model"),
-                            "max_tokens": payload.get("max_tokens"),
-                            "temperature": payload.get("temperature"),
-                            "messages_count": len(payload.get("messages", [])),
-                        },
-                        ttl=payload.get("ttl"),
-                    )
-                    logger.info(
-                        "Sending chat request to LM Studio (model=%s, host=%s, %d messages, max_tokens=%d)...",
-                        selected_model,
-                        root,
-                        len(messages),
-                        tokens,
-                    )
-                    response = self._post_json(url, payload, timeout=30)
-
-                    data = response.json()
-                    text = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-
-                    if not text:
-                        logger.warning("LM Studio returned an empty chat response.")
-                    else:
-                        logger.info("Received chat response (%d chars).", len(text))
-                    emit_structured_log(
-                        logger,
-                        component="lmstudio_client",
-                        request_id=request_id,
-                        operation="chat_request_end",
-                        model_name=selected_model,
-                        duration_ms=(time.perf_counter() - started) * 1000.0,
-                        endpoint=url,
-                        status_code=response.status_code,
-                        response_chars=len(text),
-                    )
-
-                    self.api_root = root
-                    self.url = url
-                    return text
-
-                except requests.exceptions.RequestException as e:
-                    status_code, error_body = self._error_status_and_body(e)
-                    if (
-                        self._is_retryable_model_load_error(status_code, error_body)
-                        and retry_idx < len(retry_delays) - 1
-                    ):
-                        logger.warning(
-                            "LM Studio transient model-load error (%s), retrying in %.1fs",
-                            status_code,
-                            retry_delays[retry_idx + 1],
+        model_candidates = [selected_model] if model else self._model_candidates(selected_model)
+        for candidate_model in model_candidates:
+            payload["model"] = candidate_model
+            for root in self._candidate_roots:
+                url = f"{root}/v1/chat/completions"
+                retry_delays = self._retry_delays
+                for retry_idx, delay_s in enumerate(retry_delays):
+                    if delay_s > 0:
+                        time.sleep(delay_s)
+                    try:
+                        started = time.perf_counter()
+                        emit_structured_log(
+                            logger,
+                            component="lmstudio_client",
+                            request_id=request_id,
+                            operation="chat_request_start",
+                            model_name=candidate_model,
+                            endpoint=url,
+                            payload_keys=sorted(payload.keys()),
+                            payload_summary={
+                                "model": payload.get("model"),
+                                "max_tokens": payload.get("max_tokens"),
+                                "temperature": payload.get("temperature"),
+                                "messages_count": len(payload.get("messages", [])),
+                            },
+                            ttl=payload.get("ttl"),
                         )
-                        continue
-                    logger.error(
-                        "Failed to connect to LM Studio for chat (%s): %s | body=%s",
-                        root,
-                        e,
-                        error_body or "<empty>",
-                    )
-                    emit_structured_log(
-                        logger,
-                        component="lmstudio_client",
-                        request_id=request_id,
-                        operation="chat_request_error",
-                        model_name=selected_model,
-                        endpoint=url,
-                        error=f"{e}; status_code={status_code}; body={error_body}",
-                    )
-                    break
+                        logger.info(
+                            "Sending chat request to LM Studio (model=%s, host=%s, %d messages, max_tokens=%d)...",
+                            candidate_model,
+                            root,
+                            len(messages),
+                            tokens,
+                        )
+                        response = self._post_json(url, payload, timeout=30)
+
+                        data = response.json()
+                        text = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+
+                        if not text:
+                            logger.warning("LM Studio returned an empty chat response.")
+                        else:
+                            logger.info("Received chat response (%d chars).", len(text))
+                        emit_structured_log(
+                            logger,
+                            component="lmstudio_client",
+                            request_id=request_id,
+                            operation="chat_request_end",
+                            model_name=candidate_model,
+                            duration_ms=(time.perf_counter() - started) * 1000.0,
+                            endpoint=url,
+                            status_code=response.status_code,
+                            response_chars=len(text),
+                        )
+
+                        if model is None:
+                            self.model = candidate_model
+                        self.api_root = root
+                        self.url = url
+                        return text
+
+                    except requests.exceptions.RequestException as e:
+                        status_code, error_body = self._error_status_and_body(e)
+                        if (
+                            self._is_retryable_model_load_error(status_code, error_body)
+                            and retry_idx < len(retry_delays) - 1
+                        ):
+                            logger.warning(
+                                "LM Studio transient model-load error (%s), retrying in %.1fs",
+                                status_code,
+                                retry_delays[retry_idx + 1],
+                            )
+                            continue
+                        logger.error(
+                            "Failed to connect to LM Studio for chat (%s): %s | body=%s",
+                            root,
+                            e,
+                            error_body or "<empty>",
+                        )
+                        emit_structured_log(
+                            logger,
+                            component="lmstudio_client",
+                            request_id=request_id,
+                            operation="chat_request_error",
+                            model_name=candidate_model,
+                            endpoint=url,
+                            error=f"{e}; status_code={status_code}; body={error_body}",
+                        )
+                        break
+            if candidate_model != selected_model:
+                logger.warning(
+                    "LM Studio model '%s' failed; trying fallback model.",
+                    candidate_model,
+                )
 
         logger.error("All LM Studio chat endpoints failed: %s", self._candidate_roots)
         if self._require_live:
