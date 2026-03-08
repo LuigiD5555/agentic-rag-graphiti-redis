@@ -314,7 +314,7 @@ def process_candidate_file(
                 loader = loader_cls(full_path, cache_client=cache_client)
             else:
                 loader = loader_cls(full_path)
-            process_text_document(pipeline, loader)
+            process_text_document(pipeline, loader, context_generator=getattr(pipeline, "context_generator", None))
             return
 
     for extensions, loader_cls in CODE_LOADER_SPECS:
@@ -322,7 +322,7 @@ def process_candidate_file(
             process_code_document(pipeline, loader_cls(full_path))
             return
 
-    process_text_document(pipeline, PlainTextLoader(full_path))
+    process_text_document(pipeline, PlainTextLoader(full_path), context_generator=getattr(pipeline, "context_generator", None))
 
 
 __all__ = ["process_candidate_file"]

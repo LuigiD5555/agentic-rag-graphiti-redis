@@ -361,6 +361,28 @@ class IngestionOrchestrator:
         ingest_queue = IngestQueue()
         chunk_registry = ChunkRegistry()
 
+        # Contextual Retrieval enrichment (opt-in, off by default)
+        context_generator = None
+        if getattr(self._config, "CONTEXT_ENRICHMENT_ENABLED", False):
+            try:
+                from src.workflows.ingestion.context_generator import ContextGenerator
+                _chat_service = provider.chat()
+                context_generator = ContextGenerator(
+                    chat_service=_chat_service,
+                    model=getattr(self._config, "CONTEXT_ENRICHMENT_MODEL", "") or None,
+                    max_tokens=getattr(self._config, "CONTEXT_ENRICHMENT_MAX_TOKENS", 200),
+                    doc_chars_limit=getattr(self._config, "CONTEXT_ENRICHMENT_DOC_CHARS", 3000),
+                )
+                logger.info(
+                    "Contextual Retrieval enrichment ENABLED (model=%s, max_tokens=%d)",
+                    getattr(self._config, "CONTEXT_ENRICHMENT_MODEL", "") or "default",
+                    getattr(self._config, "CONTEXT_ENRICHMENT_MAX_TOKENS", 200),
+                )
+            except Exception as _ce:
+                logger.warning(
+                    "Could not initialize ContextGenerator, enrichment disabled: %s", _ce
+                )
+
         pipeline = IngestionPipeline.from_options(
             embedding_service=embedding_service,
             vector_store=vector_store,
@@ -368,6 +390,7 @@ class IngestionOrchestrator:
             cache_manager=self._cache_manager,
             ingest_queue=ingest_queue,
             chunk_registry=chunk_registry,
+            context_generator=context_generator,
         )
         pipeline.ledger = self._ledger
 

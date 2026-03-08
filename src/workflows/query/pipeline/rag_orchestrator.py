@@ -478,7 +478,7 @@ class RAGOrchestrator:
 
         # Step 2.9: Apply reranking if enabled
         used_reranking = False
-        if session_id and retrieved_docs:
+        if retrieved_docs:
             try:
                 reranker = get_reranker()
                 # Determine if this is pure chat (no RAG context needed)

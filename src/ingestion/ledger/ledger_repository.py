@@ -27,6 +27,7 @@ class Stage(Enum):
     DISCOVER = "DISCOVER"
     EXTRACT = "EXTRACT"
     CHUNK = "CHUNK"
+    CONTEXT = "CONTEXT"  # Contextual Retrieval enrichment (LLM-generated prefix per chunk)
     EMBED = "EMBED"
     UPSERT = "UPSERT"
     FINALIZE = "FINALIZE"

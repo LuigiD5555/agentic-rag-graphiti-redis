@@ -42,6 +42,7 @@ class IngestionPipeline:
         cache_manager: Optional[IngestionCacheManager] = None,
         ingest_queue=None,
         chunk_registry=None,
+        context_generator=None,
     ):
         self.embedding_service = embedding_service
         self.vector_store = vector_store
@@ -57,6 +58,9 @@ class IngestionPipeline:
         # New optimization components
         self.idempotency_manager = None
         self.ledger = None  # LedgerRepository — set by orchestrator
+
+        # Contextual Retrieval enrichment — set by orchestrator when CONTEXT_ENRICHMENT_ENABLED=true
+        self.context_generator = context_generator
 
         self.owner_id = options.owner_id
         self.visibility = options.visibility
@@ -137,6 +141,7 @@ class IngestionPipeline:
         cache_manager: Optional[IngestionCacheManager] = None,
         ingest_queue=None,
         chunk_registry=None,
+        context_generator=None,
     ) -> "IngestionPipeline":
         return cls(
             embedding_service=embedding_service,
@@ -145,6 +150,7 @@ class IngestionPipeline:
             cache_manager=cache_manager,
             ingest_queue=ingest_queue,
             chunk_registry=chunk_registry,
+            context_generator=context_generator,
         )
 
     def hash_exists(self, content_hash: str) -> bool:

@@ -171,12 +171,15 @@ def _split_documents_with_progress(
     return chunks
 
 
-def process_text_document(pipeline: Any, loader: object) -> None:
+def process_text_document(pipeline: Any, loader: object, context_generator: Any = None) -> None:
     """Ingest a text-like document using the configured splitter and embedding service.
 
     Args:
         pipeline: The active IngestionPipeline instance.
         loader: Loader instance with a `.load()` method returning LangChain Documents.
+        context_generator: Optional ContextGenerator instance. When provided and
+            CONTEXT_ENRICHMENT_ENABLED=true, each chunk is enriched with an
+            LLM-generated context prefix before embedding (Contextual Retrieval).
 
     Returns:
         None
@@ -252,6 +255,52 @@ def process_text_document(pipeline: Any, loader: object) -> None:
                 ledger.mark_stage_done(active_version, Stage.CHUNK, int(time.time()))
         except Exception as _exc:
             logger.debug("Ledger CHUNK mark failed for %s: %s", source, _exc)
+
+    # Contextual Retrieval enrichment: prepend LLM-generated context to each chunk.
+    # Runs only when CONTEXT_ENRICHMENT_ENABLED=true and a context_generator is wired in.
+    _context_generator = context_generator or getattr(pipeline, "context_generator", None)
+    if _context_generator is not None and getattr(settings, "CONTEXT_ENRICHMENT_ENABLED", False):
+        try:
+            doc_chars = getattr(settings, "CONTEXT_ENRICHMENT_DOC_CHARS", 3000)
+            # Build a one-shot doc summary from the first chars of the raw document text
+            doc_summary = " ".join(
+                (d.page_content or "") for d in documents
+            )[:doc_chars]
+            enriched_count = 0
+            for chunk in chunks:
+                original_text = chunk.page_content or ""
+                try:
+                    enriched = _context_generator.enrich_chunk(doc_summary, original_text)
+                    if enriched != original_text:
+                        chunk.page_content = enriched
+                        enriched_count += 1
+                except Exception as _chunk_exc:
+                    logger.debug(
+                        "Context enrichment failed for chunk in %s: %s", source, _chunk_exc
+                    )
+            _log_with_file_prefix(
+                file_context,
+                "Context enrichment: %d/%d chunks enriched for %s",
+                enriched_count,
+                len(chunks),
+                source,
+            )
+            # Ledger: mark CONTEXT stage done
+            if ledger is not None:
+                try:
+                    from src.ingestion.ledger.ledger_repository import Stage
+                    doc_id = ledger.get_or_create_document(source)
+                    active_version = ledger.get_active_version(doc_id)
+                    if active_version:
+                        ledger.mark_stage_done(active_version, Stage.CONTEXT, int(time.time()))
+                except Exception as _exc:
+                    logger.debug("Ledger CONTEXT mark failed for %s: %s", source, _exc)
+        except Exception as _enrich_exc:
+            logger.warning(
+                "Context enrichment stage failed for %s, continuing without it: %s",
+                source,
+                _enrich_exc,
+            )
 
     with IngestionStageReporter(
         logger=logger,

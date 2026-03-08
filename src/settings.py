@@ -92,6 +92,14 @@ RERANK_TOP_N: int = int(os.getenv("RERANK_TOP_N", "8"))
 RERANK_MODE: str = os.getenv("RERANK_MODE", "mmr")
 RETRIEVE_TOP_K_CANDIDATES: int = int(os.getenv("RETRIEVE_TOP_K_CANDIDATES", "30"))
 
+# Contextual Retrieval enrichment (RAG 2.0 — adds LLM-generated context prefix to each chunk).
+# Keep disabled by default; enable per collection after testing.
+# WARNING: adds 1 LM Studio chat call per chunk during ingestion — keep RAG_PARALLEL_WORKERS=1.
+CONTEXT_ENRICHMENT_ENABLED: bool = os.getenv("CONTEXT_ENRICHMENT_ENABLED", "false").strip().lower() == "true"
+CONTEXT_ENRICHMENT_MODEL: str = os.getenv("CONTEXT_ENRICHMENT_MODEL", "")  # empty = use default chat model
+CONTEXT_ENRICHMENT_MAX_TOKENS: int = int(os.getenv("CONTEXT_ENRICHMENT_MAX_TOKENS", "200"))
+CONTEXT_ENRICHMENT_DOC_CHARS: int = int(os.getenv("CONTEXT_ENRICHMENT_DOC_CHARS", "3000"))
+
 # Provider adapters registry (aliases -> provider config dict).
 PROVIDERS = {
     "default": {
@@ -164,8 +172,8 @@ DOCS_PATHS = [
     "/mnt/Documents/Documents",  # Main documents directory
     "/mnt/resources/Libros/Aprendizaje",  # Books directory
 ]
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 50
+CHUNK_SIZE = 900
+CHUNK_OVERLAP = 180
 INGEST_STREAMING = True
 DOCS_ENABLED_PATHS = ()
 DUPLICATES_DOC_EXCEPTIONS = ("__init__.py",)  # Paths that should NOT be deduplicated
