@@ -404,7 +404,11 @@ class PressureMapper(BaseMapper):
             metadata={
                 'pressure_indicators': pressure_indicators,
                 'timestamp': time.time(),
-                'context': {k: v for k, v in context.items() if k != 'pressure_indicators'}
+                'context': {
+                    context_key: context_value
+                    for context_key, context_value in context.items()
+                    if context_key != 'pressure_indicators'
+                }
             }
         )
 

@@ -60,7 +60,10 @@ class RedactionReport:
         """Convert report to dictionary."""
         return {
             "total_redactions": self.total_redactions,
-            "by_category": {k.value: v for k, v in self.by_category.items()},
+            "by_category": {
+                category.value: count
+                for category, count in self.by_category.items()
+            },
             "secrets_stripped": self.secrets_stripped,
             "pii_masked": self.pii_masked,
         }

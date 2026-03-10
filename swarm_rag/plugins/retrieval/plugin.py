@@ -52,8 +52,11 @@ class RetrievalPlugin(BasePlugin):
                     "text": hit.get("text", ""),
                     "score": hit.get("score", 0.0),
                     "source": hit.get("source", ""),
-                    "metadata": {k: v for k, v in hit.items()
-                                 if k not in ("uuid", "text", "score", "source")},
+                    "metadata": {
+                        field_name: field_value
+                        for field_name, field_value in hit.items()
+                        if field_name not in ("uuid", "text", "score", "source")
+                    },
                 }
                 for hit in results
             ]

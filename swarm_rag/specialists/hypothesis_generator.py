@@ -87,12 +87,12 @@ class HypothesisGenerator(BaseSpecialist):
             )
             try:
                 raw = await self._run_in_executor(
-                    lambda p: self._model(p)[0]["generated_text"], prompt
+                    lambda prompt_text: self._model(prompt_text)[0]["generated_text"], prompt
                 )
                 hypotheses = [
-                    h.strip().lstrip("0123456789.-) ")
-                    for h in raw.strip().split("\n")
-                    if h.strip() and len(h.strip()) > 10
+                    hypothesis_line.strip().lstrip("0123456789.-) ")
+                    for hypothesis_line in raw.strip().split("\n")
+                    if hypothesis_line.strip() and len(hypothesis_line.strip()) > 10
                 ]
                 state.specialists.hypotheses = hypotheses[:_MAX_HYPOTHESES] or self._simple_hypothesis(state)
             except Exception as exc:

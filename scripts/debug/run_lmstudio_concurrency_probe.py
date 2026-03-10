@@ -124,26 +124,26 @@ def run_batch(tasks: list[tuple[str, Any]]) -> list[ProbeRecord]:
 
 
 def overlap_summary(records: list[ProbeRecord]) -> dict[str, Any]:
-    embeds = [r for r in records if r.operation == "embedding"]
-    chats = [r for r in records if r.operation == "chat"]
+    embedding_records = [record for record in records if record.operation == "embedding"]
+    chat_records = [record for record in records if record.operation == "chat"]
     overlap_pairs = 0
-    for e in embeds:
-        for c in chats:
-            if max(e.start_ts, c.start_ts) < min(e.end_ts, c.end_ts):
+    for embedding_record in embedding_records:
+        for chat_record in chat_records:
+            if max(embedding_record.start_ts, chat_record.start_ts) < min(embedding_record.end_ts, chat_record.end_ts):
                 overlap_pairs += 1
     return {
-        "embedding_count": len(embeds),
-        "chat_count": len(chats),
+        "embedding_count": len(embedding_records),
+        "chat_count": len(chat_records),
         "overlap_pairs": overlap_pairs,
-        "embedding_ok": sum(1 for r in embeds if r.ok),
-        "chat_ok": sum(1 for r in chats if r.ok),
+        "embedding_ok": sum(1 for record in embedding_records if record.ok),
+        "chat_ok": sum(1 for record in chat_records if record.ok),
     }
 
 
 def write_records(path: Path, records: list[ProbeRecord]) -> None:
-    with path.open("w", encoding="utf-8") as f:
+    with path.open("w", encoding="utf-8") as records_file:
         for rec in records:
-            f.write(json.dumps(asdict(rec), ensure_ascii=True) + "\n")
+            records_file.write(json.dumps(asdict(rec), ensure_ascii=True) + "\n")
 
 
 def main() -> int:

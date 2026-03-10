@@ -60,16 +60,21 @@ class EvidenceRanker(BaseSpecialist):
 
         try:
             scores = await self._run_in_executor(
-                lambda p: list(self._model.predict(p)), pairs
+                lambda query_passage_pairs: list(self._model.predict(query_passage_pairs)), pairs
             )
             ranked = sorted(
-                [{**c, "score": s} for s, c in zip(scores, candidates)],  # ranker score wins
-                key=lambda x: x["score"],
+                [
+                    {**candidate, "score": score}
+                    for score, candidate in zip(scores, candidates)
+                ],  # ranker score wins
+                key=lambda ranked_candidate: ranked_candidate["score"],
                 reverse=True,
             )
             # Filter below threshold and cap at max
             state.specialists.ranked_evidence = [
-                r for r in ranked if r["score"] >= _MIN_SCORE
+                ranked_candidate
+                for ranked_candidate in ranked
+                if ranked_candidate["score"] >= _MIN_SCORE
             ][:_MAX_EVIDENCE]
 
             logger.info(
@@ -86,6 +91,8 @@ class EvidenceRanker(BaseSpecialist):
     def _fallback(self, state: BlackboardState, candidates: list[dict]) -> BlackboardState:
         # Sort by existing score field if present, else keep original order
         state.specialists.ranked_evidence = sorted(
-            candidates, key=lambda x: x.get("score", 0.0), reverse=True
+            candidates,
+            key=lambda candidate: candidate.get("score", 0.0),
+            reverse=True,
         )[:_MAX_EVIDENCE]
         return state

@@ -81,8 +81,16 @@ class IngestionOrchestrator:
         if hasattr(config, "model_dump"):
             return config.model_dump()  # type: ignore[no-any-return]
         if hasattr(config, "__dict__"):
-            return {k: v for k, v in config.__dict__.items() if not str(k).startswith("_")}
-        return {k: getattr(config, k) for k in dir(config) if not str(k).startswith("_")}
+            return {
+                attribute_name: attribute_value
+                for attribute_name, attribute_value in config.__dict__.items()
+                if not str(attribute_name).startswith("_")
+            }
+        return {
+            attribute_name: getattr(config, attribute_name)
+            for attribute_name in dir(config)
+            if not str(attribute_name).startswith("_")
+        }
 
     @staticmethod
     def _to_discovery_options(options: IngestionOptions) -> DiscoveryOptions:

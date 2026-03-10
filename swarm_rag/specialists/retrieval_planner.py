@@ -77,7 +77,7 @@ class RetrievalPlanner(BaseSpecialist):
 
         try:
             raw = await self._run_in_executor(
-                lambda p: self._model(p)[0]["generated_text"], prompt
+                lambda prompt_text: self._model(prompt_text)[0]["generated_text"], prompt
             )
             plan = self._parse_plan(raw, state)
         except Exception as exc:

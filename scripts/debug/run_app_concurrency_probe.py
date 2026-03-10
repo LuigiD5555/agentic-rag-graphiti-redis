@@ -136,30 +136,30 @@ def main() -> int:
             records.append(fut.result())
         records.append(ingest_future.result())
 
-    ingest_recs = [r for r in records if r.operation == "ingest"]
-    query_recs = [r for r in records if r.operation == "query"]
+    ingest_records = [record for record in records if record.operation == "ingest"]
+    query_records = [record for record in records if record.operation == "query"]
     overlap_count = 0
-    for ing in ingest_recs:
-        for q in query_recs:
-            if max(ing.start_ts, q.start_ts) < min(ing.end_ts, q.end_ts):
+    for ingest_record in ingest_records:
+        for query_record in query_records:
+            if max(ingest_record.start_ts, query_record.start_ts) < min(ingest_record.end_ts, query_record.end_ts):
                 overlap_count += 1
 
     summary = {
         "timestamp_iso": now_iso(),
-        "ingest_records": len(ingest_recs),
-        "query_records": len(query_recs),
-        "query_ok": sum(1 for r in query_recs if r.ok),
-        "ingest_ok": sum(1 for r in ingest_recs if r.ok),
+        "ingest_records": len(ingest_records),
+        "query_records": len(query_records),
+        "query_ok": sum(1 for record in query_records if record.ok),
+        "ingest_ok": sum(1 for record in ingest_records if record.ok),
         "overlap_pairs": overlap_count,
-        "query_durations_ms": [round(r.duration_ms, 3) for r in query_recs],
+        "query_durations_ms": [round(record.duration_ms, 3) for record in query_records],
     }
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     rec_path = output_dir / f"app_probe_{stamp}.jsonl"
     sum_path = output_dir / f"app_probe_summary_{stamp}.json"
-    with rec_path.open("w", encoding="utf-8") as f:
+    with rec_path.open("w", encoding="utf-8") as records_file:
         for rec in records:
-            f.write(json.dumps(asdict(rec), ensure_ascii=True) + "\n")
+            records_file.write(json.dumps(asdict(rec), ensure_ascii=True) + "\n")
     sum_path.write_text(json.dumps(summary, indent=2, ensure_ascii=True), encoding="utf-8")
 
     print(f"Wrote records: {rec_path}")

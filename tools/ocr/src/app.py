@@ -275,7 +275,7 @@ async def _pdf_to_images(
             # List generated images
             ext = ".png" if img_format == "png" else ".jpg"
             image_paths = sorted([
-                str(p) for p in output_dir.glob(f"{pdf_path.stem}-*{ext}")
+                str(image_path) for image_path in output_dir.glob(f"{pdf_path.stem}-*{ext}")
             ])
 
             return {

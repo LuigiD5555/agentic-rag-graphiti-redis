@@ -70,7 +70,7 @@ class QueryRewriter(BaseSpecialist):
 
         try:
             result = await self._run_in_executor(
-                lambda p: self._model(p)[0]["generated_text"], prompt
+                lambda prompt_text: self._model(prompt_text)[0]["generated_text"], prompt
             )
             rewritten = result.strip()
             # Only use rewrite if it meaningfully differs from original

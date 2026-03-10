@@ -78,17 +78,17 @@ def build_knowledge_layer(
 
         # Merge results back — accumulate hits across all parallel retrievals
         seen_chunks: set[str] = set()
-        for r in results:
-            if isinstance(r, Exception):
-                logger.error("Knowledge layer plugin error: %s", r)
+        for retrieval_result in results:
+            if isinstance(retrieval_result, Exception):
+                logger.error("Knowledge layer plugin error: %s", retrieval_result)
                 continue
-            for hit in r.retrieval.weaviate_hits:
-                cid = hit.get("chunk_id", "")
-                if cid not in seen_chunks:
-                    seen_chunks.add(cid)
+            for hit in retrieval_result.retrieval.weaviate_hits:
+                chunk_id = hit.get("chunk_id", "")
+                if chunk_id not in seen_chunks:
+                    seen_chunks.add(chunk_id)
                     state.retrieval.weaviate_hits.append(hit)
-            if r.retrieval.neo4j_hits:
-                state.retrieval.neo4j_hits = r.retrieval.neo4j_hits
+            if retrieval_result.retrieval.neo4j_hits:
+                state.retrieval.neo4j_hits = retrieval_result.retrieval.neo4j_hits
 
         # Memory retrieval (past sessions)
         if memory_fn and "memory_retrieval" in active:

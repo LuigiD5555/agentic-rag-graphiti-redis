@@ -77,12 +77,12 @@ class SubquestionGenerator(BaseSpecialist):
             )
             try:
                 raw = await self._run_in_executor(
-                    lambda p: self._model(p)[0]["generated_text"], prompt
+                    lambda prompt_text: self._model(prompt_text)[0]["generated_text"], prompt
                 )
                 subquestions = [
-                    q.strip().lstrip("0123456789.-) ")
-                    for q in raw.strip().split("\n")
-                    if q.strip() and len(q.strip()) > 5
+                    line.strip().lstrip("0123456789.-) ")
+                    for line in raw.strip().split("\n")
+                    if line.strip() and len(line.strip()) > 5
                 ]
                 state.specialists.subquestions = subquestions[:_MAX_SUBQUESTIONS]
                 if not state.specialists.subquestions:
@@ -103,7 +103,7 @@ class SubquestionGenerator(BaseSpecialist):
     def _heuristic_split(query: str) -> list[str]:
         """Split on conjunctions/contrast markers as a fallback."""
         parts = _SPLIT_PATTERNS.split(query)
-        result = [p.strip() for p in parts if len(p.strip()) > 10]
-        if len(result) <= 1:
+        subquestion_candidates = [part.strip() for part in parts if len(part.strip()) > 10]
+        if len(subquestion_candidates) <= 1:
             return [query]  # can't split — return original as single sub-question
-        return result[:_MAX_SUBQUESTIONS]
+        return subquestion_candidates[:_MAX_SUBQUESTIONS]

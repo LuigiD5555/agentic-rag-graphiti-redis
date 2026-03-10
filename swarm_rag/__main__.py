@@ -94,8 +94,8 @@ def _print_result(state, verbose: bool) -> None:
         print(f"Branches:    {state.active_branches}")
         print()
         print("Latency (ms):")
-        for k, v in state.latency_ms.items():
-            print(f"  {k:<20} {v}")
+        for stage_name, latency_ms in state.latency_ms.items():
+            print(f"  {stage_name:<20} {latency_ms}")
         print("─" * 70)
 
         if state.reasoning.structured_answer:

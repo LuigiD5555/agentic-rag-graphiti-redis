@@ -71,11 +71,11 @@ class FactExtractor(BaseSpecialist):
             )
             try:
                 raw = await self._run_in_executor(
-                    lambda p: self._model(p)[0]["generated_text"], prompt
+                    lambda prompt_text: self._model(prompt_text)[0]["generated_text"], prompt
                 )
                 facts = [
-                    f.strip() for f in raw.strip().split("\n")
-                    if len(f.strip()) >= _MIN_FACT_LENGTH
+                    fact_line.strip() for fact_line in raw.strip().split("\n")
+                    if len(fact_line.strip()) >= _MIN_FACT_LENGTH
                 ]
                 for fact in facts:
                     all_facts.append({
