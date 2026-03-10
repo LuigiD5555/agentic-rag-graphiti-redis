@@ -25,6 +25,8 @@ except ImportError:
 
 from swarm_rag.schemas.blackboard_schema import BlackboardState
 from swarm_rag.reasoning.confidence_estimator import estimate_confidence
+from swarm_rag.reasoning.logic_checker import check_consistency
+from swarm_rag.reasoning.conflict_resolver import resolve_conflicts
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +96,16 @@ def _build_structured_answer(state: BlackboardState) -> tuple[str, list[str]]:
             lines.append(f"- {c.get('description', str(c))}")
         sections.append("\n".join(lines))
 
-    # 5. Hypotheses (F3+)
+    # 5. Resolved conflicts (F4)
+    if state.specialists.conflicts_found:
+        lines = ["CONFLICTOS ANALIZADOS:"]
+        for c in state.specialists.conflicts_found[:3]:
+            res = c.get("resolution", "?")
+            note = c.get("note", c.get("description", ""))
+            lines.append(f"- [{res}] {note[:150]}")
+        sections.append("\n".join(lines))
+
+    # 6. Hypotheses (F3+)
     if state.specialists.hypotheses:
         lines = ["HIPÓTESIS (ordenadas por confianza):"]
         for i, h in enumerate(state.specialists.hypotheses[:3], 1):
@@ -116,13 +127,34 @@ def _build_structured_answer(state: BlackboardState) -> tuple[str, list[str]]:
 
 async def run_integration(state: BlackboardState) -> BlackboardState:
     """
-    Run the full Reasoning/Integration Layer.
+    Run the full Reasoning/Integration Layer (F3 + F4).
 
-    Writes to state.reasoning: structured_answer, confidence_score,
-    escalate_to_llm, key_points, reasoning_summary.
+    Steps:
+      1. Logic check (F4): NLI consistency between hypotheses and facts
+      2. Conflict resolution (F4): deterministic rules on version conflicts
+      3. Build structured_answer
+      4. Estimate confidence
+      5. Decide escalation
     """
     t0 = time.monotonic()
     escalation_threshold, max_conflicts = _load_thresholds()
+
+    # F4 Step 1: Logic check — hypotheses vs facts
+    all_evidence = state.specialists.ranked_evidence or state.retrieval.weaviate_hits
+    nli_conflicts: list[dict] = []
+    if state.specialists.hypotheses and all_evidence:
+        nli_conflicts = check_consistency(state.specialists.hypotheses, all_evidence)
+        if nli_conflicts:
+            logger.info("LogicChecker found %d NLI conflicts", len(nli_conflicts))
+
+    # F4 Step 2: Conflict resolution — version conflicts + NLI conflicts
+    all_hits = state.retrieval.weaviate_hits + state.retrieval.neo4j_hits
+    resolved_conflicts, has_unresolved = resolve_conflicts(
+        state.retrieval.version_conflicts,
+        nli_conflicts,
+        all_hits,
+    )
+    state.specialists.conflicts_found = resolved_conflicts
 
     # Build structured answer
     structured, key_points = _build_structured_answer(state)
@@ -135,13 +167,18 @@ async def run_integration(state: BlackboardState) -> BlackboardState:
     confidence = estimate_confidence(query, evidence, state.retrieval.version_conflicts)
     state.reasoning.confidence_score = confidence
 
-    # Escalation decision
+    # Escalation decision (F4: unresolved conflicts also trigger escalation)
     n_conflicts = len(state.retrieval.version_conflicts)
-    should_escalate = (confidence < escalation_threshold) or (n_conflicts > max_conflicts)
+    should_escalate = (
+        (confidence < escalation_threshold)
+        or (n_conflicts > max_conflicts)
+        or has_unresolved
+    )
     state.reasoning.escalate_to_llm = should_escalate
 
     state.reasoning.reasoning_summary = (
         f"confidence={confidence:.2f} | conflicts={n_conflicts} | "
+        f"nli_conflicts={len(nli_conflicts)} | unresolved={has_unresolved} | "
         f"evidence={len(evidence)} | escalate={should_escalate}"
     )
 
