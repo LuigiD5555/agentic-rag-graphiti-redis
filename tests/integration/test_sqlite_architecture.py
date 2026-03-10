@@ -2,11 +2,24 @@
 import pytest
 from src.backends.storage.sqlite import SQLiteControlPlane
 from src.workflows.ingestion.discovery.pattern_matching import PatternMatcher
+from pytest_readable import readable
+
 
 @pytest.fixture
 def sqlite_control():
     return SQLiteControlPlane(":memory:")
 
+@readable(
+    intent="Test concurrent access to SQLite with WAL mode.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the concurrent access behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 @pytest.mark.integration
 def test_concurrent_access(sqlite_control):
     """Test concurrent access to SQLite with WAL mode."""
@@ -31,6 +44,17 @@ def test_concurrent_access(sqlite_control):
     conn.close()
 
 
+@readable(
+    intent="Test directory exclusion patterns.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the directory exclusion behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 @pytest.mark.integration
 def test_directory_exclusion():
     """Test directory exclusion patterns."""
@@ -48,6 +72,17 @@ def test_directory_exclusion():
             absolute_path=path
         ) == expected
 
+@readable(
+    intent="Test basic cache operations through SQLite control plane.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the sqlite cache operations behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 @pytest.mark.integration 
 def test_sqlite_cache_operations(sqlite_control):
     """Test basic cache operations through SQLite control plane."""

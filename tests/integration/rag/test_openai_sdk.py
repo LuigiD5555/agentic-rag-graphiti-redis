@@ -1,6 +1,8 @@
 """Example using the Ollama-like RAG API."""
 import pytest
 import requests
+from pytest_readable import readable
+
 
 pytestmark = pytest.mark.integration
 
@@ -57,5 +59,16 @@ if __name__ == "__main__":
         print()
 
 
+@readable(
+    intent="Verify openai sdk example.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the openai sdk example behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_openai_sdk_example():
     main()

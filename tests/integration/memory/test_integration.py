@@ -8,10 +8,23 @@ Verifies that:
 5. CleanupScheduler cleans expired snapshots
 """
 import pytest
+from pytest_readable import readable
+
 
 pytestmark = pytest.mark.integration
 
 
+@readable(
+    intent="Test ChatMemory integration - placeholder test.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the chat memory integration behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 @pytest.mark.skip(reason="Memory integration tests require ChatMemory functionality which may not be configured")
 def test_chat_memory_integration():
     """Test ChatMemory integration - placeholder test."""
@@ -20,6 +33,17 @@ def test_chat_memory_integration():
     pass
 
 
+@readable(
+    intent="Test if ChatMemory collection exists - placeholder test.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the chat memory collection exists behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 @pytest.mark.skip(reason="Memory integration tests require ChatMemory functionality which may not be configured")
 def test_chat_memory_collection_exists():
     """Test if ChatMemory collection exists - placeholder test."""
@@ -28,6 +52,17 @@ def test_chat_memory_collection_exists():
     pass
 
 
+@readable(
+    intent="Test SnapshotScheduler - placeholder test.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the snapshot scheduler behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 @pytest.mark.skip(reason="Memory integration tests require ChatMemory functionality which may not be configured")
 def test_snapshot_scheduler():
     """Test SnapshotScheduler - placeholder test."""
@@ -36,6 +71,17 @@ def test_snapshot_scheduler():
     pass
 
 
+@readable(
+    intent="Test CleanupScheduler - placeholder test.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the cleanup scheduler behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 @pytest.mark.skip(reason="Memory integration tests require ChatMemory functionality which may not be configured")
 def test_cleanup_scheduler():
     """Test CleanupScheduler - placeholder test."""

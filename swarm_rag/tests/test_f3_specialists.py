@@ -16,6 +16,8 @@ from swarm_rag.specialists.math_specialist import MathSpecialist, _try_eval
 from swarm_rag.specialists.code_specialist import CodeSpecialist
 from swarm_rag.specialists.hypothesis_generator import HypothesisGenerator
 from swarm_rag.core.router import route
+from pytest_readable import readable
+
 
 
 def _run(coro):
@@ -51,16 +53,49 @@ def _evidence(n=3):
 # ---------------------------------------------------------------------------
 
 class TestSubquestionGenerator:
+    @readable(
+        intent="Verify skips low complexity in subquestion generator.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the skips low complexity behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_skips_low_complexity(self):
         s = _state(complexity="low")
         result = _run(SubquestionGenerator().run(s))
         assert result.specialists.subquestions == []
 
+    @readable(
+        intent="Verify skips medium complexity in subquestion generator.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the skips medium complexity behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_skips_medium_complexity(self):
         s = _state(complexity="medium")
         result = _run(SubquestionGenerator().run(s))
         assert result.specialists.subquestions == []
 
+    @readable(
+        intent="Verify heuristic split on conjunction in subquestion generator.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the heuristic split on conjunction behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_heuristic_split_on_conjunction(self):
         gen = SubquestionGenerator()
         gen.__class__._model = None
@@ -69,6 +104,17 @@ class TestSubquestionGenerator:
         result = _run(gen.run(s))
         assert len(result.specialists.subquestions) >= 1
 
+    @readable(
+        intent="Verify model output parsed in subquestion generator.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the model output parsed behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_model_output_parsed(self):
         fake = MagicMock(return_value=[{"generated_text": "1. ¿Cuál es el contrato?\n2. ¿Qué dice sobre penalizaciones?"}])
         gen = SubquestionGenerator()
@@ -78,6 +124,17 @@ class TestSubquestionGenerator:
         result = _run(gen.run(s))
         assert len(result.specialists.subquestions) >= 1
 
+    @readable(
+        intent="Verify model exception falls back to heuristic in subquestion generator.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the model exception falls back to heuristic behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_model_exception_falls_back_to_heuristic(self):
         fake = MagicMock(side_effect=RuntimeError("model error"))
         gen = SubquestionGenerator()
@@ -87,6 +144,17 @@ class TestSubquestionGenerator:
         result = _run(gen.run(s))
         assert isinstance(result.specialists.subquestions, list)
 
+    @readable(
+        intent="Verify max subquestions capped in subquestion generator.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the max subquestions capped behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_max_subquestions_capped(self):
         fake = MagicMock(return_value=[{"generated_text": "\n".join([f"{i}. question {i}" for i in range(10)])}])
         gen = SubquestionGenerator()
@@ -102,6 +170,17 @@ class TestSubquestionGenerator:
 # ---------------------------------------------------------------------------
 
 class TestRetrievalPlanner:
+    @readable(
+        intent="Verify fallback plan from keywords in retrieval planner.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the fallback plan from keywords behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_fallback_plan_from_keywords(self):
         planner = RetrievalPlanner()
         planner.__class__._model = None
@@ -115,6 +194,17 @@ class TestRetrievalPlanner:
         assert "weaviate_queries" in plan
         assert len(plan["weaviate_queries"]) >= 1
 
+    @readable(
+        intent="Verify plan includes subquestions in retrieval planner.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the plan includes subquestions behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_plan_includes_subquestions(self):
         planner = RetrievalPlanner()
         planner.__class__._model = None
@@ -125,6 +215,17 @@ class TestRetrievalPlanner:
         plan = result.specialists.retrieved_plan
         assert any("sub1" in q or "sub2" in q for q in plan.get("weaviate_queries", []))
 
+    @readable(
+        intent="Verify model json output parsed in retrieval planner.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the model json output parsed behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_model_json_output_parsed(self):
         json_output = '{"weaviate_queries": ["penalización contrato"], "neo4j_focus": ["Contrato2024"], "memory_query": null}'
         fake = MagicMock(return_value=[{"generated_text": json_output}])
@@ -136,6 +237,17 @@ class TestRetrievalPlanner:
         plan = result.specialists.retrieved_plan
         assert "penalización contrato" in plan.get("weaviate_queries", [])
 
+    @readable(
+        intent="Verify latency recorded in retrieval planner.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the latency recorded behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_latency_recorded(self):
         planner = RetrievalPlanner()
         planner.__class__._model = None
@@ -150,11 +262,33 @@ class TestRetrievalPlanner:
 # ---------------------------------------------------------------------------
 
 class TestMathSpecialist:
+    @readable(
+        intent="Verify skips when no math in math specialist.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the skips when no math behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_skips_when_no_math(self):
         s = _state(needs_math=False)
         result = _run(MathSpecialist().run(s))
         assert result.specialists.math_result is None
 
+    @readable(
+        intent="Verify percentage regex fallback in math specialist.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the percentage regex fallback behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_percentage_regex_fallback(self):
         spec = MathSpecialist()
         spec.__class__._model = None
@@ -163,6 +297,17 @@ class TestMathSpecialist:
         result = _run(spec.run(s))
         assert result.specialists.math_result == pytest.approx(30.0, rel=1e-3)
 
+    @readable(
+        intent="Verify percentage with comma in math specialist.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the percentage with comma behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_percentage_with_comma(self):
         spec = MathSpecialist()
         spec.__class__._model = None
@@ -171,6 +316,17 @@ class TestMathSpecialist:
         result = _run(spec.run(s))
         assert result.specialists.math_result == pytest.approx(75.0, rel=1e-3)
 
+    @readable(
+        intent="Verify numbers extracted when no formula in math specialist.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the numbers extracted when no formula behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_numbers_extracted_when_no_formula(self):
         spec = MathSpecialist()
         spec.__class__._model = None
@@ -179,11 +335,33 @@ class TestMathSpecialist:
         result = _run(spec.run(s))
         assert result.specialists.math_result is not None
 
+    @readable(
+        intent="Verify try eval simple in math specialist.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the try eval simple behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_try_eval_simple(self):
         assert _try_eval("2 + 3") == pytest.approx(5.0)
         assert _try_eval("10 / 4") == pytest.approx(2.5)
         assert _try_eval("invalid!!") is None
 
+    @readable(
+        intent="Verify latency recorded in math specialist.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the latency recorded behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_latency_recorded(self):
         spec = MathSpecialist()
         spec.__class__._model = None
@@ -198,11 +376,33 @@ class TestMathSpecialist:
 # ---------------------------------------------------------------------------
 
 class TestCodeSpecialist:
+    @readable(
+        intent="Verify skips when no code in code specialist.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the skips when no code behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_skips_when_no_code(self):
         s = _state(needs_code=False)
         result = _run(CodeSpecialist().run(s))
         assert result.specialists.code_analysis is None
 
+    @readable(
+        intent="Verify regex detects python in code specialist.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the regex detects python behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_regex_detects_python(self):
         spec = CodeSpecialist()
         spec.__class__._model = None
@@ -211,6 +411,17 @@ class TestCodeSpecialist:
         result = _run(spec.run(s))
         assert result.specialists.code_analysis["language"] == "Python"
 
+    @readable(
+        intent="Verify regex detects debug task in code specialist.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the regex detects debug task behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_regex_detects_debug_task(self):
         spec = CodeSpecialist()
         spec.__class__._model = None
@@ -219,6 +430,17 @@ class TestCodeSpecialist:
         result = _run(spec.run(s))
         assert result.specialists.code_analysis["task_type"] == "debug"
 
+    @readable(
+        intent="Verify symbols extracted in code specialist.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the symbols extracted behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_symbols_extracted(self):
         spec = CodeSpecialist()
         spec.__class__._model = None
@@ -227,6 +449,17 @@ class TestCodeSpecialist:
         result = _run(spec.run(s))
         assert "PaymentService" in result.specialists.code_analysis["symbols"]
 
+    @readable(
+        intent="Verify tool hint present in code specialist.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the tool hint present behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_tool_hint_present(self):
         spec = CodeSpecialist()
         spec.__class__._model = None
@@ -235,6 +468,17 @@ class TestCodeSpecialist:
         result = _run(spec.run(s))
         assert "tool_hint" in result.specialists.code_analysis
 
+    @readable(
+        intent="Verify sql detected in code specialist.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the sql detected behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_sql_detected(self):
         spec = CodeSpecialist()
         spec.__class__._model = None
@@ -243,6 +487,17 @@ class TestCodeSpecialist:
         result = _run(spec.run(s))
         assert result.specialists.code_analysis["language"] == "SQL"
 
+    @readable(
+        intent="Verify latency recorded in code specialist.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the latency recorded behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_latency_recorded(self):
         spec = CodeSpecialist()
         spec.__class__._model = None
@@ -257,11 +512,33 @@ class TestCodeSpecialist:
 # ---------------------------------------------------------------------------
 
 class TestHypothesisGenerator:
+    @readable(
+        intent="Verify skips when no evidence in hypothesis generator.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the skips when no evidence behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_skips_when_no_evidence(self):
         s = _state()
         result = _run(HypothesisGenerator().run(s))
         assert result.specialists.hypotheses == []
 
+    @readable(
+        intent="Verify simple hypothesis from top evidence in hypothesis generator.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the simple hypothesis from top evidence behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_simple_hypothesis_from_top_evidence(self):
         gen = HypothesisGenerator()
         gen.__class__._model = None
@@ -272,6 +549,17 @@ class TestHypothesisGenerator:
         assert len(result.specialists.hypotheses) >= 1
         assert result.specialists.hypotheses[0]  # not empty
 
+    @readable(
+        intent="Verify model output parsed in hypothesis generator.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the model output parsed behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_model_output_parsed(self):
         fake = MagicMock(return_value=[{"generated_text": "La penalización es del 10%.\nEl cambio aplica desde 2024."}])
         gen = HypothesisGenerator()
@@ -282,6 +570,17 @@ class TestHypothesisGenerator:
         result = _run(gen.run(s))
         assert len(result.specialists.hypotheses) >= 1
 
+    @readable(
+        intent="Verify max hypotheses capped in hypothesis generator.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the max hypotheses capped behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_max_hypotheses_capped(self):
         fake = MagicMock(return_value=[{"generated_text": "\n".join([f"hypothesis {i}" for i in range(10)])}])
         gen = HypothesisGenerator()
@@ -292,6 +591,17 @@ class TestHypothesisGenerator:
         result = _run(gen.run(s))
         assert len(result.specialists.hypotheses) <= 3
 
+    @readable(
+        intent="Verify uses rewritten query when available in hypothesis generator.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the uses rewritten query when available behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_uses_rewritten_query_when_available(self):
         fake = MagicMock(return_value=[{"generated_text": "La penalización vigente es del 8%."}])
         gen = HypothesisGenerator()
@@ -304,6 +614,17 @@ class TestHypothesisGenerator:
         call_args = fake.call_args[0][0]
         assert "tasa de penalización vigente" in call_args
 
+    @readable(
+        intent="Verify latency recorded in hypothesis generator.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the latency recorded behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_latency_recorded(self):
         gen = HypothesisGenerator()
         gen.__class__._model = None
@@ -324,29 +645,84 @@ class TestRouterF3Branches:
         s.perception = PerceptionOutput(complexity=complexity, needs_math=needs_math, needs_code=needs_code)
         return s
 
+    @readable(
+        intent="Verify high complexity adds subquestion and planner in router f3 branches.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the high complexity adds subquestion and planner behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_high_complexity_adds_subquestion_and_planner(self):
         s = self._state_with_perception("high")
         active = route(s)
         assert "subquestion_generator" in active
         assert "retrieval_planner" in active
 
+    @readable(
+        intent="Verify medium complexity does not add planner in router f3 branches.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the medium complexity does not add planner behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_medium_complexity_does_not_add_planner(self):
         s = self._state_with_perception("medium")
         active = route(s)
         assert "subquestion_generator" not in active
         assert "retrieval_planner" not in active
 
+    @readable(
+        intent="Verify medium adds fact extractor and hypothesis in router f3 branches.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the medium adds fact extractor and hypothesis behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_medium_adds_fact_extractor_and_hypothesis(self):
         s = self._state_with_perception("medium")
         active = route(s)
         assert "fact_extractor" in active
         assert "hypothesis_generator" in active
 
+    @readable(
+        intent="Verify math adds math specialist in router f3 branches.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the math adds math specialist behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_math_adds_math_specialist(self):
         s = self._state_with_perception("low", needs_math=True)
         active = route(s)
         assert "math_specialist" in active
 
+    @readable(
+        intent="Verify code adds code specialist in router f3 branches.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the code adds code specialist behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_code_adds_code_specialist(self):
         s = self._state_with_perception("low", needs_code=True)
         active = route(s)

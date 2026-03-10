@@ -2,6 +2,8 @@ import pytest
 
 from src.workflows.ingestion.helpers import build_ingestion_options_from_args
 from src.workflows.query.conf import Config
+from pytest_readable import readable
+
 
 
 @pytest.fixture(autouse=True)
@@ -12,6 +14,17 @@ def clear_cached_env(monkeypatch):
     yield
 
 
+@readable(
+    intent="Verify config merges default env and file.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the config merges default env and file behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_config_merges_default_env_and_file(tmp_path, monkeypatch):
     ignore_file = tmp_path / ".ingestignore"
     ignore_file.write_text(
@@ -45,6 +58,17 @@ def test_config_merges_default_env_and_file(tmp_path, monkeypatch):
     assert "**/tmp/**" in excluded_globs
 
 
+@readable(
+    intent="Verify config loads default ingestignore.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the config loads default ingestignore behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_config_loads_default_ingestignore(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".ingestignore").write_text(
@@ -65,6 +89,17 @@ def test_config_loads_default_ingestignore(tmp_path, monkeypatch):
     assert "data/private/**" in excluded_globs
 
 
+@readable(
+    intent="Verify helper loads ingestignore entries.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the helper loads ingestignore entries behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_helper_loads_ingestignore_entries(tmp_path):
     ignore_file = tmp_path / ".ingestignore"
     ignore_file.write_text(

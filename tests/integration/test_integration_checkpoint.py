@@ -1,3 +1,4 @@
+from pytest_readable import readable
 #!/usr/bin/env python3
 """Integration test for checkpoint system with real discovery service."""
 
@@ -15,6 +16,17 @@ from src.workflows.ingestion.options import DiscoveryOptions
 from src.backends.storage.cache.ingestion.manager import IngestionCacheManager
 
 
+@readable(
+    intent="Test that discovery service correctly uses cache and checkpoints.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the integration with real service behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_integration_with_real_service():
     """Test that discovery service correctly uses cache and checkpoints."""
     print("=== Integration Test: Discovery Service with Cache ===")
@@ -140,6 +152,17 @@ def test_integration_with_real_service():
         print("="*60)
 
 
+@readable(
+    intent="Test resumable scanning with checkpoints.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the checkpoint resumable scan behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_checkpoint_resumable_scan():
     """Test resumable scanning with checkpoints."""
     print("\n=== Testing Resumable Scanning ===")

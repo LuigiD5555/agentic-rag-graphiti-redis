@@ -6,6 +6,8 @@ import pytest
 
 from src.workflows.ingestion.loaders.errors import LoaderFileNotFoundError, LoaderInvalidFormatError
 from src.workflows.ingestion.loaders.pdf_loader import PDFLoader
+from pytest_readable import readable
+
 
 
 def _build_pdf_bytes(text: str) -> bytes:
@@ -46,6 +48,17 @@ def _build_pdf_bytes(text: str) -> bytes:
     return b"".join(parts)
 
 
+@readable(
+    intent="Verify pdf loader reads text.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the pdf loader reads text behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_pdf_loader_reads_text(tmp_path: Path):
     pdf_path = tmp_path / "sample.pdf"
     pdf_path.write_bytes(_build_pdf_bytes("Hello PDF"))
@@ -60,6 +73,17 @@ def test_pdf_loader_reads_text(tmp_path: Path):
     assert any("Hello PDF" in doc.page_content for doc in documents)
 
 
+@readable(
+    intent="Verify pdf loader missing file.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the pdf loader missing file behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_pdf_loader_missing_file():
     loader = PDFLoader("/tmp/nonexistent_file.pdf")
 
@@ -67,6 +91,17 @@ def test_pdf_loader_missing_file():
         loader.load()
 
 
+@readable(
+    intent="Verify pdf loader invalid file.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the pdf loader invalid file behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_pdf_loader_invalid_file(tmp_path: Path):
     invalid_path = tmp_path / "not_pdf.txt"
     invalid_path.write_text("This is not a PDF file", encoding="utf-8")

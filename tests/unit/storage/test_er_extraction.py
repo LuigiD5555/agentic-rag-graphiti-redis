@@ -1,4 +1,6 @@
 import pytest
+from pytest_readable import readable
+
 
 
 class DummyLLM:
@@ -28,6 +30,17 @@ class DummyNERRepo:
         self.relations.append((src, rel, dst))
 
 
+@readable(
+    intent="Verify ner extractor inserts entities and relations.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the ner extractor inserts entities and relations behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 @pytest.mark.skip(reason="NER functionality not currently configured")
 def test_ner_extractor_inserts_entities_and_relations():
     # Skip test since NER is not configured

@@ -1,3 +1,4 @@
+from pytest_readable import readable
 #!/usr/bin/env python3
 """Test pattern matching for directory exclusion."""
 
@@ -6,6 +7,17 @@ sys.path.insert(0, '.')
 
 from src.workflows.ingestion.discovery.pattern_matching import PatternMatcher
 
+@readable(
+    intent="Test that pattern matching works for backup directories.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the pattern matching behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_pattern_matching():
     """Test that pattern matching works for backup directories."""
     matcher = PatternMatcher()

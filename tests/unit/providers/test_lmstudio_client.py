@@ -2,6 +2,8 @@ import pytest
 import requests
 
 from src.backends.llm.lmstudio.client import LLMService
+from pytest_readable import readable
+
 
 
 class ConfigStub:
@@ -32,6 +34,17 @@ class ResponseStub:
         return self._payload
 
 
+@readable(
+    intent="Verify llm service fallback.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the llm service fallback behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_llm_service_fallback(monkeypatch):
     service = LLMService(ConfigStub, ModelManagerStub())
 
@@ -52,6 +65,17 @@ def test_llm_service_fallback(monkeypatch):
     assert service.api_root == ConfigStub.LMSTUDIO_API_ROOTS[1]
 
 
+@readable(
+    intent="Verify llm service respects explicit model.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the llm service respects explicit model behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_llm_service_respects_explicit_model():
     class ConfigExplicit(ConfigStub):
         LMSTUDIO_CHAT_MODEL = "microsoft/phi-4-mini-reasoning"
@@ -60,6 +84,17 @@ def test_llm_service_respects_explicit_model():
     assert service.model == "microsoft/phi-4-mini-reasoning"
 
 
+@readable(
+    intent="Verify llm service require live raises.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the llm service require live raises behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_llm_service_require_live_raises(monkeypatch):
     class ConfigRequire(ConfigStub):
         LMSTUDIO_REQUIRE_SERVER = True

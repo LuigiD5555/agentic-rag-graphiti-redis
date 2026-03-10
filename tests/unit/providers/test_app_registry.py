@@ -2,8 +2,21 @@ from src.backends.llm.registry import list_providers, reset_provider_registry
 from src.backends.llm.app_registry import ensure_apps_loaded, reset_app_registry
 from src.backends.llm.builtins import _reset_for_tests as reset_builtin_providers
 from src.workflows.query.conf import Config
+from pytest_readable import readable
 
 
+
+@readable(
+    intent="Verify installed apps populate provider registry.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the installed apps populate provider registry behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_installed_apps_populate_provider_registry():
     reset_app_registry()
     reset_provider_registry()

@@ -1,3 +1,4 @@
+from pytest_readable import readable
 #!/usr/bin/env python3
 """Test script to verify ingestion handles volume failures gracefully."""
 
@@ -9,6 +10,17 @@ from pathlib import Path
 # Add project to path
 sys.path.insert(0, str(Path(__file__).parent))
 
+@readable(
+    intent="Test the volume detection logic.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the volume detection behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_volume_detection():
     """Test the volume detection logic."""
     print("=== Testing Volume Detection ===")
@@ -32,6 +44,17 @@ def test_volume_detection():
     
     return len(volumes) > 0
 
+@readable(
+    intent="Test the discovery service with multiple paths.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the discovery service behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_discovery_service():
     """Test the discovery service with multiple paths."""
     print("\n=== Testing Discovery Service ===")
@@ -85,6 +108,17 @@ def test_discovery_service():
         
         return True
 
+@readable(
+    intent="Test building ingestion options from config.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the build ingestion options behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_build_ingestion_options():
     """Test building ingestion options from config."""
     print("\n=== Testing Ingestion Options Building ===")

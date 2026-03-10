@@ -7,6 +7,8 @@ import pytest
 from src.workflows.ingestion.pipeline import IngestionPipeline, SplitterStrategy
 from src.workflows.query.cli.options import PipelineOptions
 from src.workflows.query.interfaces.vector_interface import VectorInterface, SupportsExists
+from pytest_readable import readable
+
 
 
 class DummyEmbedding:
@@ -79,6 +81,17 @@ class FailingLoader:
         raise LoaderError("boom")
 
 
+@readable(
+    intent="Verify ingestion pipeline sanitizes and upserts.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the ingestion pipeline sanitizes and upserts behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_ingestion_pipeline_sanitizes_and_upserts(tmp_path):
     target = tmp_path / "doc.txt"
     target.write_text("Hola\u2028RAG!\nAnother line.", encoding="utf-8")
@@ -119,6 +132,17 @@ def test_ingestion_pipeline_sanitizes_and_upserts(tmp_path):
         assert "\u2028" not in text
 
 
+@readable(
+    intent="Verify ingestion pipeline skips broken symlink.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the ingestion pipeline skips broken symlink behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 @pytest.mark.skipif(not hasattr(os, "symlink"), reason="Symlinks not supported on this platform.")
 def test_ingestion_pipeline_skips_broken_symlink(tmp_path):
     origin = tmp_path / "missing.txt"
@@ -145,6 +169,17 @@ def test_ingestion_pipeline_skips_broken_symlink(tmp_path):
     assert not embedding.calls
 
 
+@readable(
+    intent="Verify ingestion pipeline accepts file path.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the ingestion pipeline accepts file path behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_ingestion_pipeline_accepts_file_path(tmp_path):
     doc = tmp_path / "doc.md"
     doc.write_text("# Title\n\nContent.", encoding="utf-8")
@@ -167,6 +202,17 @@ def test_ingestion_pipeline_accepts_file_path(tmp_path):
     assert embedding.calls
 
 
+@readable(
+    intent="Verify loader failure is recorded.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the loader failure is recorded behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_loader_failure_is_recorded(tmp_path):
     doc = tmp_path / "doc.txt"
     doc.write_text("hi", encoding="utf-8")
@@ -187,6 +233,17 @@ def test_loader_failure_is_recorded(tmp_path):
     assert vector_store.failures[0]["failure_reason"] == "loader_skip"
 
 
+@readable(
+    intent="Verify embedding token limit splits chunks.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the embedding token limit splits chunks behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_embedding_token_limit_splits_chunks(tmp_path):
     doc = tmp_path / "long.txt"
     tokens = [f"tok{i}" for i in range(10)]
@@ -215,6 +272,17 @@ def test_embedding_token_limit_splits_chunks(tmp_path):
         assert metadata["chunk_total"] == 5
 
 
+@readable(
+    intent="Verify truncate respects token limit.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the truncate respects token limit behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_truncate_respects_token_limit(tmp_path):
     doc = tmp_path / "long2.txt"
     tokens = [f"tok{i}" for i in range(12)]

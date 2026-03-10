@@ -1,3 +1,4 @@
+from pytest_readable import readable
 #!/usr/bin/env python3
 """
 Test script to verify all improvements are working correctly.
@@ -11,6 +12,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "tools" / "document-processor" / "src"))
 
 
+@readable(
+    intent="Test that openpyxl warnings are suppressed.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the openpyxl warnings behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_openpyxl_warnings():
     """Test that openpyxl warnings are suppressed."""
     print("Testing openpyxl warnings suppression...")
@@ -24,6 +36,17 @@ def test_openpyxl_warnings():
         return False
 
 
+@readable(
+    intent="Test document validation.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the document validator behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_document_validator():
     """Test document validation."""
     print("\nTesting document validator...")
@@ -54,6 +77,17 @@ def test_document_validator():
         return False
 
 
+@readable(
+    intent="Test temporary file management.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the temp file manager behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_temp_file_manager():
     """Test temporary file management."""
     print("\nTesting temp file manager...")
@@ -92,6 +126,17 @@ def test_temp_file_manager():
         return False
 
 
+@readable(
+    intent="Test memory configuration.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the memory config behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_memory_config():
     """Test memory configuration."""
     print("\nTesting memory configuration...")
@@ -120,6 +165,17 @@ def test_memory_config():
         return False
 
 
+@readable(
+    intent="Test application initialization.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the init app behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_init_app():
     """Test application initialization."""
     print("\nTesting application initialization...")

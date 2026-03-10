@@ -2,6 +2,8 @@ import requests
 import pytest
 
 from src.backends.llm.lmstudio.model_manager import ModelManager
+from pytest_readable import readable
+
 
 
 class ResponseStub:
@@ -15,6 +17,17 @@ class ResponseStub:
         return self._payload
 
 
+@readable(
+    intent="Verify model manager uses fallback host.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the model manager uses fallback host behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_model_manager_uses_fallback_host(monkeypatch):
     hosts = ["http://fail-host:1234", "http://good-host:1234"]
 
@@ -33,6 +46,17 @@ def test_model_manager_uses_fallback_host(monkeypatch):
     assert hosts[0] in mm.failed_roots
 
 
+@readable(
+    intent="Verify model manager records failure when all hosts unreachable.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the model manager records failure when all hosts unreachable behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_model_manager_records_failure_when_all_hosts_unreachable(monkeypatch):
     hosts = ["http://nowhere:1234"]
 
@@ -48,6 +72,17 @@ def test_model_manager_records_failure_when_all_hosts_unreachable(monkeypatch):
     assert hosts[0] in mm.failed_roots
 
 
+@readable(
+    intent="Verify model manager require live raises.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the model manager require live raises behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_model_manager_require_live_raises(monkeypatch):
     hosts = ["http://fail-host:1234"]
 

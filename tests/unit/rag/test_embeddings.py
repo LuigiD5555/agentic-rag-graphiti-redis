@@ -4,6 +4,8 @@ import pytest
 import requests
 
 from src.backends.llm.lmstudio.embeddings import EmbeddingService
+from pytest_readable import readable
+
 
 
 class ConfigStub:
@@ -37,6 +39,17 @@ class ResponseStub:
         return self._payload
 
 
+@readable(
+    intent="Test that EMBEDDING_MODEL must be explicitly configured.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the embeddings requires explicit model behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_embeddings_requires_explicit_model():
     """Test that EMBEDDING_MODEL must be explicitly configured."""
     config = ConfigStub(embed_model=None, dim=6)
@@ -46,6 +59,17 @@ def test_embeddings_requires_explicit_model():
         EmbeddingService(config, manager)
 
 
+@readable(
+    intent="Verify embeddings parse valid response.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the embeddings parse valid response behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_embeddings_parse_valid_response(monkeypatch):
     config = ConfigStub(embed_model="test-embed", dim=4)
     manager = ModelManagerStub(model_name="test-embed")
@@ -61,6 +85,17 @@ def test_embeddings_parse_valid_response(monkeypatch):
     assert vector == pytest.approx([0.1, 0.2, 0.3, 0.4])
 
 
+@readable(
+    intent="Verify embeddings invalid dimension returns dummy.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the embeddings invalid dimension returns dummy behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_embeddings_invalid_dimension_returns_dummy(monkeypatch):
     config = ConfigStub(embed_model="test-embed", dim=5)
     manager = ModelManagerStub(model_name="test-embed")
@@ -76,6 +111,17 @@ def test_embeddings_invalid_dimension_returns_dummy(monkeypatch):
     assert vector == [0.0] * 5
 
 
+@readable(
+    intent="Verify embeddings attempts fallback hosts.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the embeddings attempts fallback hosts behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_embeddings_attempts_fallback_hosts(monkeypatch):
     config = ConfigStub(embed_model="test-embed", dim=4)
     manager = ModelManagerStub(model_name="test-embed", api_root=config.LMSTUDIO_API_ROOTS[0])
@@ -98,6 +144,17 @@ def test_embeddings_attempts_fallback_hosts(monkeypatch):
     assert vector == pytest.approx([0.4, 0.5, 0.6, 0.7])
 
 
+@readable(
+    intent="Test that missing EMBEDDING_MODEL raises RuntimeError.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the embeddings require live without model raises behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_embeddings_require_live_without_model_raises():
     """Test that missing EMBEDDING_MODEL raises RuntimeError."""
     config = ConfigStub(embed_model=None, dim=4)
@@ -108,6 +165,17 @@ def test_embeddings_require_live_without_model_raises():
         EmbeddingService(config, manager)
 
 
+@readable(
+    intent="Verify embeddings require live raises on connection failure.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the embeddings require live raises on connection failure behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_embeddings_require_live_raises_on_connection_failure(monkeypatch):
     config = ConfigStub(embed_model="test-embed", dim=4)
     config.LMSTUDIO_REQUIRE_SERVER = True

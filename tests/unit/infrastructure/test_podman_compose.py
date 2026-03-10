@@ -1,6 +1,8 @@
 from pathlib import Path
 import re
 import pytest
+from pytest_readable import readable
+
 
 yaml = pytest.importorskip("yaml")
 pytestmark = pytest.mark.preflight_host
@@ -77,6 +79,17 @@ def _ports_include_literal_or_env(ports_list, host_port: int, container_port: in
     )
 
 
+@readable(
+    intent="Validate required services and allow ports expressed as literals or env-interpolated strings.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the podman compose defines required services behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_podman_compose_defines_required_services():
     """
     Validate required services and allow ports expressed as literals or env-interpolated strings.

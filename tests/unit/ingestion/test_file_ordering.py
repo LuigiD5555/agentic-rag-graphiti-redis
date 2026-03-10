@@ -1,6 +1,19 @@
 from src.utils.file_operations import sort_paths_by_size_desc
+from pytest_readable import readable
 
 
+
+@readable(
+    intent="Verify sort paths by size desc.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the sort paths by size desc behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_sort_paths_by_size_desc(tmp_path):
     large = tmp_path / "z_large.txt"
     medium = tmp_path / "a_medium.txt"

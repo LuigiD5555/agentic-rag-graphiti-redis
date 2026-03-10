@@ -21,9 +21,13 @@ def _function_has_readable(node: ast.FunctionDef) -> bool:
 
 
 def _iter_test_functions(tree: ast.AST) -> Iterable[ast.FunctionDef]:
-    for node in ast.walk(tree):
+    for node in getattr(tree, "body", []):
         if isinstance(node, ast.FunctionDef) and node.name.startswith("test"):
             yield node
+        if isinstance(node, ast.ClassDef):
+            for child in node.body:
+                if isinstance(child, ast.FunctionDef) and child.name.startswith("test"):
+                    yield child
 
 
 def main(test_root: Path | None = None) -> int:

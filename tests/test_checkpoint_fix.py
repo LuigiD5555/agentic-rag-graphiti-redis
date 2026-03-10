@@ -6,6 +6,8 @@ import pytest
 
 from src.workflows.ingestion.orchestrator import IngestionOrchestrator
 from src.workflows.ingestion.options import IngestionOptions
+from pytest_readable import readable
+
 
 
 def _build_fixture_tree(tmp_path):
@@ -20,6 +22,17 @@ def _build_fixture_tree(tmp_path):
     return docs
 
 
+@readable(
+    intent="Second scan should reuse checkpoint/cache and keep a stable scan_run_id.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the checkpoint system behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 @pytest.mark.unit
 def test_checkpoint_system(tmp_path):
     """Second scan should reuse checkpoint/cache and keep a stable scan_run_id."""
@@ -49,6 +62,17 @@ def test_checkpoint_system(tmp_path):
     assert elapsed2 <= elapsed1 * 2.0
 
 
+@readable(
+    intent="Cache hit rate should improve on a second discovery pass.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the cache hit rate behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 @pytest.mark.unit
 def test_cache_hit_rate(tmp_path):
     """Cache hit rate should improve on a second discovery pass."""

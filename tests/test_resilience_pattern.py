@@ -1,6 +1,8 @@
 """Unit tests for OfficeToolClient runtime behavior."""
 
 from src.workflows.ingestion.loaders.office_client import OfficeToolClient
+from pytest_readable import readable
+
 
 
 class _ResponseStub:
@@ -8,6 +10,17 @@ class _ResponseStub:
         self.status_code = status_code
 
 
+@readable(
+    intent="Validate the currently supported resiliency surface:.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the resilience pattern behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_resilience_pattern(monkeypatch):
     """
     Validate the currently supported resiliency surface:

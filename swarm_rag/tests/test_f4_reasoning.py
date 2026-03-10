@@ -17,6 +17,8 @@ from swarm_rag.reasoning.conflict_resolver import resolve_conflicts
 from swarm_rag.reasoning.integration_layer import run_integration
 import swarm_rag.reasoning.logic_checker as lc
 import swarm_rag.reasoning.confidence_estimator as ce
+from pytest_readable import readable
+
 
 
 def _run(coro):
@@ -43,9 +45,31 @@ def _conflict(ctype, **kwargs):
 # ---------------------------------------------------------------------------
 
 class TestDot:
+    @readable(
+        intent="Verify unit vectors in dot.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the unit vectors behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_unit_vectors(self):
         assert _dot([1.0, 0.0], [1.0, 0.0]) == pytest.approx(1.0)
 
+    @readable(
+        intent="Verify orthogonal in dot.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the orthogonal behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_orthogonal(self):
         assert _dot([1.0, 0.0], [0.0, 1.0]) == pytest.approx(0.0)
 
@@ -55,11 +79,33 @@ class TestDot:
 # ---------------------------------------------------------------------------
 
 class TestLogicChecker:
+    @readable(
+        intent="Verify empty inputs return empty in logic checker.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the empty inputs return empty behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_empty_inputs_return_empty(self):
         assert check_consistency([], []) == []
         assert check_consistency(["hyp"], []) == []
         assert check_consistency([], [_hit("fact")]) == []
 
+    @readable(
+        intent="Mock NLI model returning contradiction for all pairs.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the nli model contradiction flagged behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_nli_model_contradiction_flagged(self):
         """Mock NLI model returning contradiction for all pairs."""
         # score_vec = [contradiction, entailment, neutral]
@@ -75,6 +121,17 @@ class TestLogicChecker:
         assert conflicts[0]["type"] == "nli_inconsistency"
         assert conflicts[0]["consistency_score"] < 0
 
+    @readable(
+        intent="Mock NLI returning entailment — no conflict expected.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the nli model entailment no conflict behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_nli_model_entailment_no_conflict(self):
         """Mock NLI returning entailment — no conflict expected."""
         mock_model = MagicMock()
@@ -87,6 +144,17 @@ class TestLogicChecker:
             )
         assert conflicts == []
 
+    @readable(
+        intent="Model crash should not raise — return empty.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the model exception skips gracefully behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_model_exception_skips_gracefully(self):
         """Model crash should not raise — return empty."""
         mock_model = MagicMock()
@@ -95,6 +163,17 @@ class TestLogicChecker:
             result = check_consistency(["hyp"], [_hit("fact")])
         assert result == []
 
+    @readable(
+        intent="With no NLI model, cosine fallback is attempted; result is always a list.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the no model falls back gracefully behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_no_model_falls_back_gracefully(self):
         """With no NLI model, cosine fallback is attempted; result is always a list."""
         with patch.object(lc, "_model", None), patch.object(lc, "_model_tried", True):
@@ -111,6 +190,17 @@ class TestLogicChecker:
 # ---------------------------------------------------------------------------
 
 class TestConflictResolver:
+    @readable(
+        intent="Verify year discrepancy resolved by recency in conflict resolver.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the year discrepancy resolved by recency behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_year_discrepancy_resolved_by_recency(self):
         conflict = {
             "type": "year_discrepancy",
@@ -126,6 +216,17 @@ class TestConflictResolver:
         assert resolved[0]["winner"] == "current"
         assert resolved[0]["winner_year"] == 2024
 
+    @readable(
+        intent="Verify vigente conflict resolved by vigente rule in conflict resolver.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the vigente conflict resolved by vigente rule behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_vigente_conflict_resolved_by_vigente_rule(self):
         conflict = {
             "type": "vigente_conflict",
@@ -138,6 +239,17 @@ class TestConflictResolver:
         assert resolved[0]["resolution"] == "rule_vigente"
         assert resolved[0]["winner"] == "vigente"
 
+    @readable(
+        intent="Verify unknown conflict resolved by score in conflict resolver.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the unknown conflict resolved by score behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_unknown_conflict_resolved_by_score(self):
         conflict = {"type": "unknown", "description": "unrecognized conflict"}
         hits = [_hit("high score fact", score=0.95), _hit("low score fact", score=0.3)]
@@ -145,18 +257,51 @@ class TestConflictResolver:
         assert not has_unresolved
         assert resolved[0]["resolution"] == "rule_score"
 
+    @readable(
+        intent="Verify conflict without hits is unresolved in conflict resolver.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the conflict without hits is unresolved behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_conflict_without_hits_is_unresolved(self):
         conflict = {"type": "unknown", "description": "no hits available"}
         resolved, has_unresolved = resolve_conflicts([conflict], [], [])
         assert has_unresolved
         assert resolved[0]["resolution"] == "unresolved"
 
+    @readable(
+        intent="Verify nli conflicts flagged not escalated in conflict resolver.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the nli conflicts flagged not escalated behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_nli_conflicts_flagged_not_escalated(self):
         nli = [{"type": "nli_inconsistency", "hypothesis": "hyp", "consistency_score": -0.5}]
         resolved, has_unresolved = resolve_conflicts([], nli, [])
         assert not has_unresolved  # NLI alone doesn't escalate
         assert resolved[0]["resolution"] == "flagged"
 
+    @readable(
+        intent="Verify multiple conflicts all resolved in conflict resolver.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the multiple conflicts all resolved behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_multiple_conflicts_all_resolved(self):
         conflicts = [
             {"type": "year_discrepancy", "stale_year": 2022, "current_year": 2024,
@@ -167,6 +312,17 @@ class TestConflictResolver:
         assert len(resolved) == 2
         assert not has_unresolved
 
+    @readable(
+        intent="Verify empty inputs return empty in conflict resolver.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the empty inputs return empty behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_empty_inputs_return_empty(self):
         resolved, has_unresolved = resolve_conflicts([], [], [])
         assert resolved == []
@@ -184,6 +340,17 @@ class TestIntegrationLayerF4:
             with patch.object(lc, "_model", None), patch.object(lc, "_model_tried", True):
                 return _run(run_integration(state))
 
+    @readable(
+        intent="Verify nli conflicts written to specialists in integration layer f4.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the nli conflicts written to specialists behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_nli_conflicts_written_to_specialists(self):
         mock_nli = MagicMock()
         mock_nli.predict.return_value = [[0.9, 0.05, 0.05]]  # contradiction
@@ -196,6 +363,17 @@ class TestIntegrationLayerF4:
         # conflicts_found should have the NLI result
         assert isinstance(result.specialists.conflicts_found, list)
 
+    @readable(
+        intent="Verify unresolved conflict triggers escalation in integration layer f4.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the unresolved conflict triggers escalation behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_unresolved_conflict_triggers_escalation(self):
         s = _state()
         # An unresolvable version conflict (type unknown, no hits)
@@ -203,6 +381,17 @@ class TestIntegrationLayerF4:
         result = self._patched_run(s)
         assert result.reasoning.escalate_to_llm is True
 
+    @readable(
+        intent="Verify year conflict resolved does not escalate alone in integration layer f4.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the year conflict resolved does not escalate alone behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_year_conflict_resolved_does_not_escalate_alone(self):
         s = _state()
         s.retrieval.version_conflicts = [{
@@ -216,6 +405,17 @@ class TestIntegrationLayerF4:
         resolved = result.specialists.conflicts_found
         assert any(c.get("resolution") == "rule_recency" for c in resolved)
 
+    @readable(
+        intent="Verify resolved conflicts appear in structured answer in integration layer f4.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the resolved conflicts appear in structured answer behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_resolved_conflicts_appear_in_structured_answer(self):
         s = _state()
         s.retrieval.version_conflicts = [{
@@ -229,6 +429,17 @@ class TestIntegrationLayerF4:
         combined = result.reasoning.structured_answer
         assert len(combined) > 0
 
+    @readable(
+        intent="Verify reasoning summary includes f4 fields in integration layer f4.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the reasoning summary includes f4 fields behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_reasoning_summary_includes_f4_fields(self):
         s = _state()
         result = self._patched_run(s)

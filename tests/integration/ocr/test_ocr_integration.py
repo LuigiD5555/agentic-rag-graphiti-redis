@@ -1,3 +1,4 @@
+from pytest_readable import readable
 #!/usr/bin/env python3
 """
 Test script for OCR integration with PDF loader.
@@ -23,6 +24,17 @@ def print_warning(message: str) -> None:
     print(f"{YELLOW}⚠ {message}{RESET}")
 
 
+@readable(
+    intent="Test OCR integration for scanned PDFs.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the ocr integration behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_ocr_integration():
     """Test OCR integration for scanned PDFs."""
     print("[OCR Integration Test] Testing OCR Integration for Scanned PDFs")
@@ -86,6 +98,17 @@ def test_ocr_integration():
     return True
 
 
+@readable(
+    intent="Test document processor endpoints.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the document processor endpoints behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_document_processor_endpoints():
     """Test document processor endpoints."""
     print("\n[Document Processor Test] Testing Document Processor Endpoints")

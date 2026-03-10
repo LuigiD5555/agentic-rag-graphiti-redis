@@ -38,6 +38,17 @@ def _make_client(*, response=None, exception=None):
 class TestRetrieverContract:
     """Test that retrievers return (results, metadata) tuple."""
 
+    @readable(
+        intent="Verify weaviate retriever returns tuple in retriever contract.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the weaviate retriever returns tuple behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_weaviate_retriever_returns_tuple(self):
         client = _make_client()
         retriever = WeaviateRetriever(client=client, collection_name="TestCollection", top_k=5)

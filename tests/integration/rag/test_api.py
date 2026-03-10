@@ -2,6 +2,8 @@
 import pytest
 import requests
 import json
+from pytest_readable import readable
+
 
 
 BASE_URL = "http://localhost:8000"
@@ -19,6 +21,17 @@ def print_json(data, title=""):
     print()
 
 
+@readable(
+    intent="Test health check endpoint.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the health behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_health():
     """Test health check endpoint."""
     print("\nTesting Health Check...")
@@ -28,6 +41,17 @@ def test_health():
     return True
 
 
+@readable(
+    intent="Test tags listing endpoint.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the tags behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_tags():
     """Test tags listing endpoint."""
     print("\nTesting GET /api/tags...")
@@ -37,6 +61,17 @@ def test_tags():
     return True
 
 
+@readable(
+    intent="Test chat endpoint.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the chat behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_chat():
     """Test chat endpoint."""
     print("\nTesting POST /api/chat...")
@@ -63,6 +98,17 @@ def test_chat():
     return True
 
 
+@readable(
+    intent="Test generate endpoint.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the generate behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_generate():
     """Test generate endpoint."""
     print("\nTesting POST /api/generate...")
@@ -85,6 +131,17 @@ def test_generate():
     return True
 
 
+@readable(
+    intent="Test embeddings endpoint.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the embeddings behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_embeddings():
     """Test embeddings endpoint."""
     print("\nTesting POST /api/embeddings...")
@@ -106,6 +163,17 @@ def test_embeddings():
     return True
 
 
+@readable(
+    intent="Test RAG query endpoint.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the rag query behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_rag_query():
     """Test RAG query endpoint."""
     print("\nTesting POST /rag/query...")

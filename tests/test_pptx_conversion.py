@@ -1,3 +1,4 @@
+from pytest_readable import readable
 #!/usr/bin/env python3
 """Test PPTX conversion with Redis-like resilience."""
 
@@ -7,6 +8,17 @@ sys.path.insert(0, 'src')
 
 from src.workflows.ingestion.loaders.office_client import OfficeToolClient
 
+@readable(
+    intent="Test PPTX conversion with the new resilient client.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the pptx conversion behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_pptx_conversion():
     """Test PPTX conversion with the new resilient client."""
     pptx_path = "/mnt/Documents/Documents/Presentation1.pptx"

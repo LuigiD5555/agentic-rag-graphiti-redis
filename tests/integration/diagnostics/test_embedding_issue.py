@@ -8,6 +8,8 @@ import weaviate
 from src.backends.llm.factory import ProviderFactory
 from src.conf import settings
 from src.workflows.query.embeddings_factory import get_embedding_service
+from pytest_readable import readable
+
 
 
 pytestmark = [
@@ -25,6 +27,17 @@ def _connect_client():
     )
 
 
+@readable(
+    intent="Verify embedding generation.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the embedding generation behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_embedding_generation():
     provider = ProviderFactory.get_provider("lmstudio")
     embedding_service = get_embedding_service(settings, provider)
@@ -34,6 +47,17 @@ def test_embedding_generation():
     assert not all(abs(value) < 0.0001 for value in embedding)
 
 
+@readable(
+    intent="Verify weaviate connection.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the weaviate connection behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_weaviate_connection():
     client = _connect_client()
     try:
@@ -47,6 +71,17 @@ def test_weaviate_connection():
         client.close()
 
 
+@readable(
+    intent="Verify vector storage roundtrip.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the vector storage roundtrip behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_vector_storage_roundtrip():
     client = _connect_client()
     try:
@@ -87,6 +122,17 @@ def test_vector_storage_roundtrip():
         client.close()
 
 
+@readable(
+    intent="Verify existing vectors.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the existing vectors behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_existing_vectors():
     client = _connect_client()
     try:

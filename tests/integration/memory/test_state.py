@@ -12,11 +12,24 @@ from src.workflows.memory.core.state import (
     get_recent_tool_executions,
     find_tool_execution_by_id,
 )
+from pytest_readable import readable
+
 
 
 class TestCreateInitialState:
     """Tests for create_initial_state()."""
 
+    @readable(
+        intent="Should create state with empty history.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the creates empty state behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_creates_empty_state(self):
         """Should create state with empty history."""
         state = create_initial_state(
@@ -33,6 +46,17 @@ class TestCreateInitialState:
         assert state["current_context"] is None
         assert state["message_count"] == 0
 
+    @readable(
+        intent="Should set created_at and last_updated.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the sets timestamps behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_sets_timestamps(self):
         """Should set created_at and last_updated."""
         before = time.time()
@@ -43,6 +67,17 @@ class TestCreateInitialState:
         assert before <= state["last_updated"] <= after
         assert state["created_at"] == state["last_updated"]
 
+    @readable(
+        intent="Should accept custom creation timestamp.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the custom timestamp behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_custom_timestamp(self):
         """Should accept custom creation timestamp."""
         custom_time = 1234567890.0
@@ -59,6 +94,17 @@ class TestCreateInitialState:
 class TestUpdateStateMetadata:
     """Tests for update_state_metadata()."""
 
+    @readable(
+        intent="Should update last_updated timestamp.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the updates timestamp behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_updates_timestamp(self):
         """Should update last_updated timestamp."""
         state = create_initial_state("user1", "thread1")
@@ -69,6 +115,17 @@ class TestUpdateStateMetadata:
 
         assert state["last_updated"] > original_time
 
+    @readable(
+        intent="Should update message count based on messages.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the updates message count behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_updates_message_count(self):
         """Should update message count based on messages."""
         state = create_initial_state("user1", "thread1")
@@ -86,6 +143,17 @@ class TestUpdateStateMetadata:
 class TestAddToolExecution:
     """Tests for add_tool_execution()."""
 
+    @readable(
+        intent="Should add tool execution to list.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the adds execution to state behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_adds_execution_to_state(self):
         """Should add tool execution to list."""
         state = create_initial_state("user1", "thread1")
@@ -106,6 +174,17 @@ class TestAddToolExecution:
         assert len(state["tool_executions"]) == 1
         assert state["tool_executions"][0]["doc_id"] == "doc#1"
 
+    @readable(
+        intent="Should update state metadata when adding execution.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the updates metadata behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_updates_metadata(self):
         """Should update state metadata when adding execution."""
         state = create_initial_state("user1", "thread1")
@@ -127,6 +206,17 @@ class TestAddToolExecution:
 
         assert state["last_updated"] > original_time
 
+    @readable(
+        intent="Should handle multiple tool executions.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the multiple executions behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_multiple_executions(self):
         """Should handle multiple tool executions."""
         state = create_initial_state("user1", "thread1")
@@ -151,12 +241,34 @@ class TestAddToolExecution:
 class TestGetRecentToolExecutions:
     """Tests for get_recent_tool_executions()."""
 
+    @readable(
+        intent="Should return empty list if no executions.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the returns empty for no executions behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_returns_empty_for_no_executions(self):
         """Should return empty list if no executions."""
         state = create_initial_state("user1", "thread1")
         recent = get_recent_tool_executions(state, n=5)
         assert recent == []
 
+    @readable(
+        intent="Should return all executions if less than N.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the returns all if less than n behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_returns_all_if_less_than_n(self):
         """Should return all executions if less than N."""
         state = create_initial_state("user1", "thread1")
@@ -177,6 +289,17 @@ class TestGetRecentToolExecutions:
         recent = get_recent_tool_executions(state, n=5)
         assert len(recent) == 2
 
+    @readable(
+        intent="Should return N most recent executions.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the returns n most recent behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_returns_n_most_recent(self):
         """Should return N most recent executions."""
         state = create_initial_state("user1", "thread1")
@@ -206,6 +329,17 @@ class TestGetRecentToolExecutions:
 class TestFindToolExecutionByID:
     """Tests for find_tool_execution_by_id()."""
 
+    @readable(
+        intent="Should find execution by doc_id.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the finds existing execution behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_finds_existing_execution(self):
         """Should find execution by doc_id."""
         state = create_initial_state("user1", "thread1")
@@ -227,6 +361,17 @@ class TestFindToolExecutionByID:
         assert found["doc_id"] == "doc#1"
         assert found["summary"] == "Target document"
 
+    @readable(
+        intent="Should return None if execution not found.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the returns none for missing behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_returns_none_for_missing(self):
         """Should return None if execution not found."""
         state = create_initial_state("user1", "thread1")
@@ -234,6 +379,17 @@ class TestFindToolExecutionByID:
         found = find_tool_execution_by_id(state, "doc#999")
         assert found is None
 
+    @readable(
+        intent="Should find correct execution among multiple.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the finds among multiple behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_finds_among_multiple(self):
         """Should find correct execution among multiple."""
         state = create_initial_state("user1", "thread1")
@@ -262,6 +418,17 @@ class TestFindToolExecutionByID:
 class TestToolExecutionType:
     """Tests for ToolExecution TypedDict."""
 
+    @readable(
+        intent="Should create valid tool execution dict.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the creates valid execution behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_creates_valid_execution(self):
         """Should create valid tool execution dict."""
         execution: ToolExecution = {
@@ -280,6 +447,17 @@ class TestToolExecutionType:
         assert execution["doc_id"] == "doc#1"
         assert execution["metadata"]["size_mb"] == 10.5
 
+    @readable(
+        intent="Should allow optional fields to be omitted.",
+        steps=[
+            "Set up the inputs and collaborators for the scenario.",
+            "Run the optional fields behavior under test.",
+            "Check the observable result and assertions.",
+        ],
+        criteria=[
+            "The assertions confirm the documented behavior.",
+        ],
+    )
     def test_optional_fields(self):
         """Should allow optional fields to be omitted."""
         execution: ToolExecution = {

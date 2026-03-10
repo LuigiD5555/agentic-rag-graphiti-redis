@@ -4,6 +4,8 @@ import time
 
 from src.workflows.query.audit import ProgressBar
 from src.workflows.query.audit import EmbeddingProgress
+from pytest_readable import readable
+
 
 
 def _last_line(buffer: io.StringIO) -> str:
@@ -27,6 +29,17 @@ class _Tee:
                 flush()
 
 
+@readable(
+    intent="Verify progress bar updates without scrolling and finishes with newline.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the progress bar updates without scrolling and finishes with newline behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_progress_bar_updates_without_scrolling_and_finishes_with_newline():
     buf = io.StringIO()
     bar = ProgressBar(total=3, stream=buf, prefix="Test", rewrite=True)
@@ -46,6 +59,17 @@ def test_progress_bar_updates_without_scrolling_and_finishes_with_newline():
     assert "(3/3)" in _last_line(buf).strip()
 
 
+@readable(
+    intent="Verify progress bar track advances iterable and returns items.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the progress bar track advances iterable and returns items behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_progress_bar_track_advances_iterable_and_returns_items():
     buf = io.StringIO()
     bar = ProgressBar(total=3, stream=buf, rewrite=True)
@@ -57,6 +81,17 @@ def test_progress_bar_track_advances_iterable_and_returns_items():
     assert buf.getvalue().count("\n") == 1  # newline only at completion
 
 
+@readable(
+    intent="Verify progress bar clears longer previous line.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the progress bar clears longer previous line behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_progress_bar_clears_longer_previous_line():
     buf = io.StringIO()
     bar = ProgressBar(total=3, stream=buf, rewrite=True)
@@ -68,6 +103,17 @@ def test_progress_bar_clears_longer_previous_line():
     assert "(2/3)" in _last_line(buf)
 
 
+@readable(
+    intent="Verify progress bar counts zero to twenty.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the progress bar counts zero to twenty behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_progress_bar_counts_zero_to_twenty():
     buf = io.StringIO()
     bar = ProgressBar(total=20, stream=buf, prefix="Count", rewrite=True)
@@ -83,6 +129,17 @@ def test_progress_bar_counts_zero_to_twenty():
     assert output.count("\n") == 1  # only the final newline
 
 
+@readable(
+    intent="Runs a short demo (0..20) to show the bar in terminal; use -s to view live.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the progress bar visual demo behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_progress_bar_visual_demo(capsys):
     """Runs a short demo (0..20) to show the bar in terminal; use -s to view live."""
     buf = io.StringIO()
@@ -102,6 +159,17 @@ def test_progress_bar_visual_demo(capsys):
     assert "100.00%" in captured
 
 
+@readable(
+    intent="Verify embedding progress uses file progress percent.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the embedding progress uses file progress percent behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_embedding_progress_uses_file_progress_percent():
     progress = EmbeddingProgress(bar_length=10)
     progress.add_total(10, source="file.pdf")

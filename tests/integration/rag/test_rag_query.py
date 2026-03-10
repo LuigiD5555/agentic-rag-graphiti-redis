@@ -1,3 +1,4 @@
+from pytest_readable import readable
 #!/usr/bin/env python3
 """Quick test script for RAG query system."""
 import sys
@@ -74,6 +75,17 @@ def main():
     return 0
 
 
+@readable(
+    intent="Verify rag query end to end.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the rag query end to end behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_rag_query_end_to_end():
     assert main() == 0
 

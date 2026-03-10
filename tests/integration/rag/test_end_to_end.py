@@ -1,6 +1,8 @@
 from src.workflows.query.cli.agent import Agent
 from src.workflows.query.engine import RAGEngine
 from src.workflows.query.interfaces.vector_interface import ScoredItem
+from pytest_readable import readable
+
 
 
 class DummyEmbedding:
@@ -52,6 +54,17 @@ class DummyLLM:
         return "Final Answer"
 
 
+@readable(
+    intent="Verify end to end flow uses context and cache.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the end to end flow uses context and cache behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_end_to_end_flow_uses_context_and_cache():
     embedding = DummyEmbedding()
     vector = DummyVector()

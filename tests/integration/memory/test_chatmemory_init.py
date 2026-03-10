@@ -9,6 +9,8 @@ from src.workflows.memory.storage.chat_memory_schema import (
     get_chat_memory_collection,
 )
 from src.workflows.memory.storage.chat_memory_persistence import ChatMemoryPersistence
+from pytest_readable import readable
+
 
 
 pytestmark = [
@@ -17,6 +19,17 @@ pytestmark = [
 ]
 
 
+@readable(
+    intent="Verify chatmemory initialization.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the chatmemory initialization behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_chatmemory_initialization():
     client = weaviate.connect_to_local(
         host="localhost",

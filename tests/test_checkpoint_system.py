@@ -1,3 +1,4 @@
+from pytest_readable import readable
 #!/usr/bin/env python3
 """Test script to verify checkpoint system functionality."""
 
@@ -14,6 +15,17 @@ from src.workflows.ingestion.discovery.cache import DiscoveryCacheManager
 from src.workflows.ingestion.options import DiscoveryOptions
 from src.backends.storage.cache.ingestion.manager import IngestionCacheManager
 
+@readable(
+    intent="Test that directory hashing works correctly.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the cache hashing behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_cache_hashing():
     """Test that directory hashing works correctly."""
     print("=== Testing Cache Hashing ===")
@@ -57,6 +69,17 @@ def test_cache_hashing():
         
         print("✅ All hash tests passed!")
 
+@readable(
+    intent="Test cache hit/miss detection.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the cache operations behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_cache_operations():
     """Test cache hit/miss detection."""
     print("\n=== Testing Cache Operations ===")
@@ -110,6 +133,17 @@ def test_cache_operations():
         
         print("✅ All cache operation tests passed!")
 
+@readable(
+    intent="Test that checkpointer integrates with discovery service.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the checkpoint integration behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_checkpoint_integration():
     """Test that checkpointer integrates with discovery service."""
     print("\n=== Testing Checkpoint Integration ===")

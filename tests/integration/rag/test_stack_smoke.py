@@ -5,12 +5,25 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from pytest_readable import readable
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_FILE = PROJECT_ROOT / "podman-compose.yml"
 
 
 @pytest.mark.integration
+@readable(
+    intent="Spin up podman-compose stack and ensure core services stay Up.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the podman compose stack smoke behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 @pytest.mark.skipif(os.getenv("RUN_STACK_SMOKE") != "1", reason="Set RUN_STACK_SMOKE=1 to enable stack smoke test")
 def test_podman_compose_stack_smoke():
     """Spin up podman-compose stack and ensure core services stay Up."""

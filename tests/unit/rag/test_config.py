@@ -1,6 +1,19 @@
 from src.workflows.query.conf import Config
+from pytest_readable import readable
 
 
+
+@readable(
+    intent="Verify config defaults.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the config defaults behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
 def test_config_defaults():
     config = Config()
 
