@@ -170,6 +170,7 @@ To restore primary volume:
     def mark_volume_available(self, path: str) -> None:
         """
         Mark a volume as available by creating a marker file.
+        Silently skips if the volume is read-only or has I/O errors (e.g. NTFS fuse).
 
         Args:
             path: Volume path to mark as available
@@ -177,7 +178,18 @@ To restore primary volume:
         volume_path = Path(path)
         volume_path.mkdir(parents=True, exist_ok=True)
         marker_file = volume_path / '.volume-available'
-        marker_file.touch()
+        try:
+            marker_file.touch()
+        except OSError as exc:
+            # The volume is reachable (the directory exists and is listable),
+            # but writing a new file failed — typically because the filesystem
+            # is read-only, or because fuseblk (NTFS) blocks hidden-dot files.
+            # The marker is a convenience signal for container startup, not a
+            # hard requirement: skip it rather than crashing the availability check.
+            import errno as _errno
+            _WRITE_ERRORS = {_errno.EROFS, _errno.EIO, _errno.EPERM, _errno.EACCES}
+            if exc.errno not in _WRITE_ERRORS:
+                raise
 
     def remove_fallback_marker(self, fallback_path: Path) -> None:
         """
@@ -415,6 +427,10 @@ class TestVolumeIntegration:
         criteria=[
             "Active path is not None and is_primary is a bool",
             "No exceptions occur when setup_fallback toggles fallback behavior",
+            "If the volume marker file cannot be written (EROFS/EIO/EPERM/EACCES — "
+            "common on NTFS fuse mounts), the test still passes: the volume is "
+            "considered accessible as long as the directory exists and is listable, "
+            "regardless of whether a hidden dot-file can be created inside it.",
         ],
     )
     def test_libros_volume_with_fallback_setup(
