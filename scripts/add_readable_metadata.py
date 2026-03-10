@@ -7,7 +7,7 @@ from typing import Iterable, Sequence
 
 
 READABLE_IMPORT = "from pytest_readable import readable\n"
-TARGET_ROOTS = (Path("tests"), Path("swarm_rag/tests"))
+TARGET_ROOTS = (Path("tests"), Path("experiments/swarm_rag/tests"))
 
 
 class TestFunctionVisitor:

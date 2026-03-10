@@ -36,7 +36,7 @@ FROM base AS test
 
 # Copy only what tests need
 COPY src/ src/
-COPY swarm_rag/ swarm_rag/
+COPY experiments/ experiments/
 COPY tests/ tests/
 
 # Optionally allow extra test-only tools here
@@ -61,7 +61,7 @@ ENV DOCS_EXCLUDE_FILE=/app/.ingestignore
 
 # Copy application code
 COPY src/ src/
-COPY swarm_rag/ swarm_rag/
+COPY experiments/ experiments/
 COPY tests/ tests/
 
 # Create data directory for API file uploads

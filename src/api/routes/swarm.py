@@ -65,7 +65,7 @@ def _build_pipeline():
     try:
         from src.backends.llm.factory import ProviderFactory
         from src.conf import settings as cfg
-        from swarm_rag.core.pipeline import SwarmPipeline
+        from experiments.swarm_rag.core.pipeline import SwarmPipeline
 
         chat = ProviderFactory(cfg).chat()
 
