@@ -7,23 +7,9 @@ from weaviate.classes.query import MetadataQuery
 from src.workflows.query.audit import get_logger
 from src.conf import settings
 from src.utils.structured_log import emit_structured_log
+from src.core.errors import RetrievalError, RetrievalTimeoutError, RetrievalConnectionError
 
 log = get_logger(__name__)
-
-
-class RetrievalError(Exception):
-    """Base exception for retrieval errors."""
-    pass
-
-
-class RetrievalTimeoutError(RetrievalError):
-    """Raised when retrieval times out."""
-    pass
-
-
-class RetrievalConnectionError(RetrievalError):
-    """Raised when connection to Weaviate fails."""
-    pass
 
 
 class WeaviateRetriever:

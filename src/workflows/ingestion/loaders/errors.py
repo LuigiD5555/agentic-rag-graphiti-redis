@@ -1,58 +1,35 @@
-"""Shared exceptions and helpers for ingestion loaders."""
+"""Loader exceptions — re-exported from the canonical domain hierarchy.
+
+All loader exception classes now live in ``src.core.errors``.
+This module re-exports them so existing imports keep working unchanged.
+"""
+
 import os
-from typing import Optional
+from src.core.errors import (
+    LoaderError,
+    LoaderFileNotFoundError,
+    LoaderDependencyError,
+    LoaderInvalidFormatError,
+    LoaderUnreadableTextError,
+)
 
-
-class LoaderError(Exception):
-    """Base class for loader-related exceptions."""
-
-
-class LoaderFileNotFoundError(LoaderError):
-    """Raised when a loader cannot find the file to process."""
-
-    def __init__(self, path: str):
-        super().__init__(f"File not found: {path}")
-        self.path = path
-
-
-class LoaderDependencyError(LoaderError):
-    """Raised when a loader requires an optional dependency."""
-
-    def __init__(self, dependency: str, detail: Optional[str] = None):
-        message = f"Required dependency missing: {dependency}"
-        if detail:
-            message = f"{message}. {detail}"
-        super().__init__(message)
-        self.dependency = dependency
-
-
-class LoaderInvalidFormatError(LoaderError):
-    """Raised when a file does not match the expected format."""
-
-    def __init__(self, path: str, expected: str, detail: Optional[str] = None):
-        message = f"Invalid format for {path}. Expected: {expected}"
-        if detail:
-            message = f"{message}. {detail}"
-        super().__init__(message)
-        self.path = path
-        self.expected = expected
-
-
-class LoaderUnreadableTextError(LoaderError):
-    """Raised when a text-like file cannot be decoded or appears to be binary."""
-
-    def __init__(self, path: str, detail: str):
-        super().__init__(f"Unreadable text encoding for {path}: {detail}")
-        self.path = path
-        self.detail = detail
+__all__ = [
+    "LoaderError",
+    "LoaderFileNotFoundError",
+    "LoaderDependencyError",
+    "LoaderInvalidFormatError",
+    "LoaderUnreadableTextError",
+    "ensure_file_exists",
+    "dependency_missing",
+]
 
 
 def ensure_file_exists(path: str) -> None:
-    """Raise a consistent error if the input file does not exist."""
+    """Raise LoaderFileNotFoundError if the file does not exist."""
     if not os.path.isfile(path):
         raise LoaderFileNotFoundError(path)
 
 
-def dependency_missing(dependency: str, detail: Optional[str] = None) -> LoaderDependencyError:
-    """Helper to raise dependency errors with consistent messaging."""
+def dependency_missing(dependency: str, detail: str | None = None) -> LoaderDependencyError:
+    """Raise LoaderDependencyError with consistent messaging."""
     raise LoaderDependencyError(dependency, detail)
