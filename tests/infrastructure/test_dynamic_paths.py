@@ -3,12 +3,22 @@
 
 import os
 import sys
-import tempfile
 from pathlib import Path
 
-# Add project to path
-sys.path.insert(0, str(Path(__file__).parent))
+from pytest_readable import readable
 
+@readable(
+    intent="Validate the path manager accepts a custom ingestion path and surfaces it to ingestion helpers.",
+    steps=[
+        "Create a temporary path with several test files",
+        "Add it to the document paths and update ingestion configuration",
+        "Build ingestion options and verify the new path is present",
+    ],
+    criteria=[
+        "The custom path appears in enabled ingestion paths",
+        "Ingestion options root paths include the newly added directory",
+    ],
+)
 def test_add_custom_path():
     """Test adding a custom path like '/work' and using it in ingestion."""
     print("=== Testing Custom Path Addition ===")
@@ -97,6 +107,18 @@ def test_add_custom_path():
     
     print("\n✓ Custom path addition test passed")
 
+@readable(
+    intent="Ensure removing a document path cleans it from the path manager and ingestion updates.",
+    steps=[
+        "Add a temporary path and enable it",
+        "Remove it through the path manager APIs",
+        "Refresh ingestion paths and inspect the enabled set",
+    ],
+    criteria=[
+        "The path no longer appears in enabled document paths",
+        "update_ingestion_paths reflects the removal",
+    ],
+)
 def test_remove_existing_path():
     """Test removing an existing path."""
     print("\n=== Testing Path Removal ===")
@@ -140,6 +162,18 @@ def test_remove_existing_path():
     
     print("\n✓ Path removal test passed")
 
+@readable(
+    intent="Confirm helpers and ingestion logic avoid hardcoded resource paths and rely on dynamic configuration.",
+    steps=[
+        "Scan the ingestion helpers source for banned literal paths",
+        "Assert the dynamic configuration utilities are referenced",
+        "Verify the path manager helper is mentioned where needed",
+    ],
+    criteria=[
+        "No prohibited '/mnt/resources/Libros' literals exist",
+        "load_external_volumes_config and get_enabled_document_paths calls are present",
+    ],
+)
 def test_no_hardcoded_paths():
     """Verify there are no hardcoded paths in critical functions."""
     print("\n=== Checking for Hardcoded Paths ===")
@@ -174,6 +208,18 @@ def test_no_hardcoded_paths():
     
     print("\n✓ No hardcoded paths test passed")
 
+@readable(
+    intent="Exercise the EXTERNAL_VOLUMES loader to ensure it returns a sane structure.",
+    steps=[
+        "Load the volume configuration from the system helper",
+        "Print metadata for each detected volume",
+        "Assert the helper returns without raising",
+    ],
+    criteria=[
+        "No exception is raised while loading EXTERNAL_VOLUMES",
+        "Each volume exposes mount, primary, and fallback attributes",
+    ],
+)
 def test_external_volumes_config():
     """Test EXTERNAL_VOLUMES configuration."""
     print("\n=== Testing EXTERNAL_VOLUMES Configuration ===")

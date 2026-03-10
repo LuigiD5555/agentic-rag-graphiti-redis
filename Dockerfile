@@ -15,6 +15,7 @@ RUN apk add --no-cache \
     musl-dev \
     linux-headers \
     curl \
+    git \
     libffi-dev \
     openssl-dev
 

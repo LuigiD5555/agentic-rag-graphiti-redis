@@ -9,6 +9,8 @@ import tempfile
 import time
 from pathlib import Path
 
+from pytest_readable import readable
+
 # Add the src directory to the import path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -19,6 +21,18 @@ from src.ingestion.ledger.ledger_repository import LedgerRepository, Stage
 from src.workflows.ingestion.metrics import MetricsCollector, IngestionMetrics
 
 
+@readable(
+    intent="Validate the wave planner and orchestrator correctly split input files into waves and execute callbacks.",
+    steps=[
+        "Create sample files and plan them with WavePlanner",
+        "Execute the default orchestrator with a mock callback",
+        "Aggregate results and inspect wave counts",
+    ],
+    criteria=[
+        "Planned waves cover all test files",
+        "The orchestrator reports zero failed waves and full success",
+    ],
+)
 def test_wave_planner():
     """Tests the Wave Planner."""
     print("=== Testing Wave Planner ===")
@@ -61,6 +75,18 @@ def test_wave_planner():
     print("✓ Wave Planner tested successfully\n")
 
 
+@readable(
+    intent="Ensure resource pools process tasks and expose expected metrics.",
+    steps=[
+        "Submit multiple tasks to ResourcePool and wait for completion",
+        "Check the metrics exposed by the pool",
+        "Instantiate IngestionPools and verify shutdown works",
+    ],
+    criteria=[
+        "All submitted tasks finish successfully",
+        "Resource metrics track completed tasks and the pools shut down cleanly",
+    ],
+)
 def test_resource_pools():
     """Tests the Resource Pools."""
     print("=== Testing Resource Pools ===")
@@ -111,6 +137,18 @@ def test_resource_pools():
     print("✓ Resource Pools tested successfully\n")
 
 
+@readable(
+    intent="Verify watermark cleanup detects disk usage and removes temporary files.",
+    steps=[
+        "Create staging files and initialize WatermarkCleanup",
+        "Check usage thresholds and run a cleanup cycle",
+        "Inspect cleanup metrics and stop monitoring",
+    ],
+    criteria=[
+        "Cleanup reports a status and freed bytes",
+        "Metrics summarizing cleanups are available",
+    ],
+)
 def test_watermark_cleanup():
     """Tests the Watermark Cleanup."""
     print("=== Testing Watermark Cleanup ===")
@@ -160,6 +198,18 @@ def test_watermark_cleanup():
     print("✓ Watermark Cleanup tested successfully\n")
 
 
+@readable(
+    intent="Test LedgerRepository deduplication, version tracking, and stage transitions.",
+    steps=[
+        "Store a temporary file and mark its stages as complete",
+        "Re-check the file to assert cache hits",
+        "Insert a duplicate file and expect duplicate skipping",
+    ],
+    criteria=[
+        "First visit is not skipped while second visit registers as cache_hit",
+        "Duplicate content is skipped with reason 'duplicate'",
+    ],
+)
 def test_ledger_repository():
     """Tests the LedgerRepository (replaces IdempotencyManager)."""
     print("=== Testing LedgerRepository ===")
@@ -213,6 +263,18 @@ def test_ledger_repository():
     print("✓ LedgerRepository tested successfully\n")
 
 
+@readable(
+    intent="Validate metrics collector and ingestion metrics record different metric types.",
+    steps=[
+        "Record counters, gauges, timers, and histograms",
+        "Decorate a function with timeit and export Prometheus output",
+        "Use IngestionMetrics helpers to record discovery and processing events",
+    ],
+    criteria=[
+        "Metrics store contains entries for each recorded namespace",
+        "Prometheus export produces readable output lines",
+    ],
+)
 def test_metrics_collector():
     """Tests the Metrics Collector."""
     print("=== Testing Metrics Collector ===")
@@ -266,6 +328,18 @@ def test_metrics_collector():
     print("✓ Metrics Collector tested successfully\n")
 
 
+@readable(
+    intent="Smoke test the ingestion pipeline by wiring waves, pools, cleanup, ledger, and metrics together.",
+    steps=[
+        "Initialize each subsystem and create integration files",
+        "Simulate planning, ledger checks, resource pool execution, and cleanup",
+        "Inspect aggregated metrics and close down resources",
+    ],
+    criteria=[
+        "All subsystems operate without raising exceptions",
+        "Integration metrics indicate processed files and cleanup steps",
+    ],
+)
 def test_integration():
     """Tests the integration of all components."""
     print("=== Testing Full Integration ===")

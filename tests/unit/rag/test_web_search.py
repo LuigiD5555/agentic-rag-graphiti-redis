@@ -1,108 +1,150 @@
 """Tests for async SearXNG web search client."""
-import pytest
+
 import httpx
-from unittest.mock import AsyncMock, Mock, patch
+import pytest
+from unittest.mock import AsyncMock, MagicMock
+from pytest_readable import readable
+
 from src.apps.websearch.searxng_client import SearXNGClient
+
+
+def _make_async_client(*, json_payload=None, status_code=200, exception=None):
+    """Build an async HTTP client mock."""
+    if exception:
+        get = AsyncMock(side_effect=exception)
+    else:
+        response = MagicMock()
+        response.status_code = status_code
+        response.json.return_value = json_payload or {}
+        response.raise_for_status = MagicMock()
+        get = AsyncMock(return_value=response)
+
+    client = MagicMock()
+    client.get = get
+    return client
+
+
+def _patch_client(searxng_client, async_client):
+    async def _get_client():
+        return async_client
+    searxng_client._get_client = _get_client
 
 
 @pytest.mark.asyncio
 class TestSearXNGClientAsync:
     """Test async SearXNGClient."""
 
+    @readable(
+        intent="Verify that search transforms SearXNG results correctly.",
+        steps=[
+            "Provide a 200 response with two results",
+            "Run search with a query",
+            "Validate output fields and positional scores",
+        ],
+        criteria=[
+            "Two results are returned",
+            "Each result contains title, URL, and the expected score",
+        ],
+    )
     async def test_search_returns_results(self):
-        """Test that search() returns formatted results."""
-        client = SearXNGClient(
-            base_url="http://localhost:8080",
-            max_results=3,
-        )
-
-        # Mock httpx response
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
+        client = SearXNGClient(base_url="http://localhost:8080", max_results=3)
+        payload = {
             "results": [
-                {
-                    "title": "Test Result 1",
-                    "content": "Content 1",
-                    "url": "https://example.com/1",
-                    "engine": "google",
-                    "category": "general",
-                },
-                {
-                    "title": "Test Result 2",
-                    "content": "Content 2",
-                    "url": "https://example.com/2",
-                    "engine": "duckduckgo",
-                    "category": "general",
-                },
+                {"title": "Result 1", "content": "Content 1", "url": "https://example.com/1", "engine": "google", "category": "general"},
+                {"title": "Result 2", "content": "Content 2", "url": "https://example.com/2", "engine": "duckduckgo", "category": "general"},
             ]
         }
+        _patch_client(client, _make_async_client(json_payload=payload))
 
-        # Mock async client
-        with patch.object(client, "_get_client", new_callable=AsyncMock) as mock_get:
-            mock_http_client = AsyncMock()
-            mock_http_client.get = AsyncMock(return_value=mock_response)
-            mock_get.return_value = mock_http_client
+        results = await client.search("test query")
 
-            results = await client.search("test query")
+        assert len(results) == 2
+        assert results[0]["title"] == "Result 1"
+        assert results[0]["url"] == "https://example.com/1"
+        assert results[0]["score"] == 1.0
+        assert results[1]["score"] == 0.9
 
-            # Assert results
-            assert len(results) == 2
-            assert results[0]["title"] == "Test Result 1"
-            assert results[0]["url"] == "https://example.com/1"
-            assert results[0]["score"] == 1.0  # First result
-            assert results[1]["score"] == 0.9  # Second result
-
+    @readable(
+        intent="Ensure search handles timeouts without breaking the flow.",
+        steps=[
+            "Force the HTTP client to raise TimeoutException",
+            "Run search",
+        ],
+        criteria=[
+            "Timeout results in an empty list",
+        ],
+    )
     async def test_search_handles_timeout(self):
-        """Test that search() handles timeout gracefully."""
-        client = SearXNGClient(
-            base_url="http://localhost:8080",
-            timeout=1.0,
+        client = SearXNGClient(base_url="http://localhost:8080", timeout=1.0)
+        _patch_client(client, _make_async_client(exception=httpx.TimeoutException("Timeout")))
+
+        assert await client.search("test query") == []
+
+    @readable(
+        intent="Ensure search handles HTTP errors with a safe fallback.",
+        steps=[
+            "Simulate an HTTPStatusError",
+            "Run search",
+        ],
+        criteria=[
+            "HTTP errors produce an empty list",
+        ],
+    )
+    async def test_search_handles_http_error(self):
+        client = SearXNGClient(base_url="http://localhost:8080")
+        error = httpx.HTTPStatusError(
+            "500 Server Error",
+            request=httpx.Request("GET", "http://localhost:8080"),
+            response=httpx.Response(500),
+        )
+        _patch_client(client, _make_async_client(exception=error))
+
+        assert await client.search("test query") == []
+
+    @readable(
+        intent="Cover forwarding categories and engines in the search request.",
+        steps=[
+            "Run search with categories and engines",
+            "Check HTTP parameters",
+        ],
+        criteria=[
+            "Params include comma-separated categories and engines",
+            "Mandatory q, format=json, and language keys are present",
+        ],
+    )
+    async def test_search_sends_categories_and_engines_params(self):
+        client = SearXNGClient(base_url="http://localhost:8080")
+        async_client = _make_async_client(json_payload={"results": []})
+        _patch_client(client, async_client)
+
+        await client.search(
+            "test query",
+            categories=["news", "science"],
+            engines=["duckduckgo", "google"],
         )
 
-        # Mock timeout
-        with patch.object(client, "_get_client", new_callable=AsyncMock) as mock_get:
-            mock_http_client = AsyncMock()
-            mock_http_client.get = AsyncMock(
-                side_effect=httpx.TimeoutException("Timeout")
-            )
-            mock_get.return_value = mock_http_client
+        params = async_client.get.call_args[1]["params"]
+        assert params["q"] == "test query"
+        assert params["format"] == "json"
+        assert params["language"] == client.language
+        assert params["categories"] == "news,science"
+        assert params["engines"] == "duckduckgo,google"
 
-            results = await client.search("test query")
-
-            # Assert empty results on timeout
-            assert results == []
-
-    async def test_search_handles_http_error(self):
-        """Test that search() handles HTTP errors gracefully."""
-        client = SearXNGClient(base_url="http://localhost:8080")
-
-        # Mock HTTP error
-        with patch.object(client, "_get_client", new_callable=AsyncMock) as mock_get:
-            mock_http_client = AsyncMock()
-            mock_request = Mock()
-            mock_http_client.get = AsyncMock(
-                side_effect=httpx.HTTPStatusError(
-                    "500 Server Error",
-                    request=mock_request,
-                    response=Mock(status_code=500)
-                )
-            )
-            mock_get.return_value = mock_http_client
-
-            results = await client.search("test query")
-
-            # Assert empty results on error
-            assert results == []
-
+    @readable(
+        intent="Validate that search_and_format creates RAG-compatible documents.",
+        steps=[
+            "Provide a single web search result",
+            "Run search_and_format",
+            "Inspect resulting document",
+        ],
+        criteria=[
+            "Document exposes uuid, text, source, chunk_index, score, distance, and _metadata",
+            "Text includes title and content",
+        ],
+    )
     async def test_search_and_format_returns_rag_format(self):
-        """Test that search_and_format() returns RAG-compatible docs."""
         client = SearXNGClient(base_url="http://localhost:8080")
-
-        # Mock httpx response
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
+        payload = {
             "results": [
                 {
                     "title": "Test Doc",
@@ -113,92 +155,90 @@ class TestSearXNGClientAsync:
                 },
             ]
         }
+        _patch_client(client, _make_async_client(json_payload=payload))
 
-        # Mock async client
-        with patch.object(client, "_get_client", new_callable=AsyncMock) as mock_get:
-            mock_http_client = AsyncMock()
-            mock_http_client.get = AsyncMock(return_value=mock_response)
-            mock_get.return_value = mock_http_client
+        docs = await client.search_and_format("test query")
 
-            docs = await client.search_and_format("test query")
+        assert len(docs) == 1
+        doc = docs[0]
+        assert "uuid" in doc
+        assert "text" in doc
+        assert "source" in doc
+        assert "chunk_index" in doc
+        assert "score" in doc
+        assert "distance" in doc
+        assert "_metadata" in doc
+        assert doc["uuid"].startswith("web_")
+        assert "# Test Doc" in doc["text"]
+        assert "This is test content" in doc["text"]
+        assert doc["source"] == "https://example.com/test"
+        assert doc["chunk_index"] == 0
+        assert doc["distance"] is None
 
-            # Assert RAG format
-            assert len(docs) == 1
-            doc = docs[0]
-
-            # Check required fields
-            assert "uuid" in doc
-            assert "text" in doc
-            assert "source" in doc
-            assert "chunk_index" in doc
-            assert "score" in doc
-            assert "distance" in doc
-            assert "_metadata" in doc
-
-            # Check values
-            assert doc["uuid"].startswith("web_")
-            assert "# Test Doc" in doc["text"]
-            assert "This is test content" in doc["text"]
-            assert doc["source"] == "https://example.com/test"
-            assert doc["chunk_index"] == 0
-            assert doc["distance"] is None
-
+    @readable(
+        intent="Confirm is_available checks healthz and detects positive availability.",
+        steps=[
+            "Provide a healthy response",
+            "Run is_available",
+        ],
+        criteria=[
+            "Returns True when health endpoint responds with 200",
+        ],
+    )
     async def test_is_available_checks_health(self):
-        """Test that is_available() checks health endpoint."""
         client = SearXNGClient(base_url="http://localhost:8080")
+        _patch_client(client, _make_async_client(status_code=200))
 
-        # Mock successful health check
-        mock_response = Mock()
-        mock_response.status_code = 200
+        assert await client.is_available() is True
 
-        with patch.object(client, "_get_client", new_callable=AsyncMock) as mock_get:
-            mock_http_client = AsyncMock()
-            mock_http_client.get = AsyncMock(return_value=mock_response)
-            mock_get.return_value = mock_http_client
-
-            available = await client.is_available()
-
-            # Assert available
-            assert available is True
-
+    @readable(
+        intent="Ensure is_available returns False when health check fails.",
+        steps=[
+            "Force a connection error",
+            "Run is_available",
+        ],
+        criteria=[
+            "Returns False when the health endpoint cannot be reached",
+        ],
+    )
     async def test_is_available_handles_failure(self):
-        """Test that is_available() returns False on failure."""
         client = SearXNGClient(base_url="http://localhost:8080")
+        _patch_client(client, _make_async_client(exception=httpx.ConnectError("Connection refused")))
 
-        # Mock failed health check
-        with patch.object(client, "_get_client", new_callable=AsyncMock) as mock_get:
-            mock_http_client = AsyncMock()
-            mock_http_client.get = AsyncMock(
-                side_effect=httpx.ConnectError("Connection refused")
-            )
-            mock_get.return_value = mock_http_client
+        assert await client.is_available() is False
 
-            available = await client.is_available()
-
-            # Assert not available
-            assert available is False
-
+    @readable(
+        intent="Verify client lifecycle behavior in async context manager usage.",
+        steps=[
+            "Enter the async context manager",
+            "Exit and observe cleanup",
+        ],
+        criteria=[
+            "The client stays usable inside the context and closes afterwards",
+        ],
+    )
     async def test_client_lifecycle(self):
-        """Test async context manager lifecycle."""
         async with SearXNGClient(base_url="http://localhost:8080") as client:
-            # Client should be usable
             assert client is not None
 
-        # Client should be closed after context
-        # (we can't easily test this without real client)
-
+    @readable(
+        intent="Validate that close shuts down AsyncClient and clears internal reference.",
+        steps=[
+            "Assign a stubbed AsyncClient",
+            "Call close",
+        ],
+        criteria=[
+            "aclose is called exactly once",
+            "_client is cleared",
+        ],
+    )
     async def test_close_closes_client(self):
-        """Test that close() closes the HTTP client."""
         client = SearXNGClient(base_url="http://localhost:8080")
-
-        # Create mock client
-        mock_http_client = AsyncMock()
-        mock_http_client.is_closed = False
-        mock_http_client.aclose = AsyncMock()
-        client._client = mock_http_client
+        stub = MagicMock()
+        stub.aclose = AsyncMock()
+        client._client = stub
 
         await client.close()
 
-        # Assert aclose was called
-        mock_http_client.aclose.assert_called_once()
+        stub.aclose.assert_called_once()
         assert client._client is None

@@ -125,6 +125,15 @@ class AppConfig(BaseSettings):
     LMSTUDIO_KEEPALIVE_RERANK: int = Field(default_factory=lambda: settings.LMSTUDIO_KEEPALIVE_RERANK)
     LMSTUDIO_API_ROOTS: List[str] = Field(default_factory=lambda: settings.LMSTUDIO_API_ROOTS)
 
+    # ===== Provider (Ollama) =====
+    OLLAMA_HOST: str = Field(default_factory=lambda: settings.OLLAMA_HOST)
+    OLLAMA_PORT: int = Field(default_factory=lambda: settings.OLLAMA_PORT)
+    OLLAMA_CHAT_MODEL: str = Field(default_factory=lambda: settings.OLLAMA_CHAT_MODEL)
+    OLLAMA_EMBED_MODEL: str = Field(default_factory=lambda: settings.OLLAMA_EMBED_MODEL)
+    OLLAMA_REQUIRE_SERVER: bool = Field(default_factory=lambda: settings.OLLAMA_REQUIRE_SERVER)
+    OLLAMA_REQUEST_TIMEOUT: int = Field(default_factory=lambda: settings.OLLAMA_REQUEST_TIMEOUT)
+    OLLAMA_AUTO_PROVISION: bool = Field(default_factory=lambda: settings.OLLAMA_AUTO_PROVISION)
+
     # ===== Embeddings =====
     EMBEDDING_MODEL: str = Field(default_factory=lambda: settings.EMBEDDING_MODEL)
     EMBEDDING_MODEL_QUERY: str = Field(default_factory=lambda: settings.EMBEDDING_MODEL_QUERY)

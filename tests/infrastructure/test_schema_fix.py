@@ -2,8 +2,21 @@
 """Test script to verify that the SchemaManager fix works."""
 
 import sys
-import pytest
 
+import pytest
+from pytest_readable import readable
+
+@readable(
+    intent="Confirm the SchemaManager fix creates the HNSW configuration using the VectorDistances enum.",
+    steps=[
+        "Map the string metric to VectorDistances",
+        "Call Configure.VectorIndex.hnsw with the enum",
+    ],
+    criteria=[
+        "The configuration object is created without raising",
+        "The distance metric resolves to an enum value",
+    ],
+)
 def test_schema_manager():
     """Tests that the SchemaManager can create the HNSW configuration correctly."""
     
@@ -36,6 +49,16 @@ def test_schema_manager():
     print(f"   - distance_metric value: {distance_metric}")
     print(f"   - HNSW configuration type: {type(hnsw_config)}")
 
+@readable(
+    intent="Demonstrate that the original string-based SchemaManager call remains broken.",
+    steps=[
+        "Call Configure.VectorIndex.hnsw with a string distance metric",
+        "Expect a ValueError or Exception",
+    ],
+    criteria=[
+        "The wrong signature raises an exception",
+    ],
+)
 def test_contraste_con_error():
     """Shows what happens with the original (broken) code."""
     

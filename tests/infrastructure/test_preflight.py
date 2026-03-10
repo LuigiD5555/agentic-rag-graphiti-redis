@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 import pytest
+from pytest_readable import readable
 
 try:
     import yaml
@@ -132,6 +133,17 @@ class TestSystemCommands:
         "curl",
         "python3",
     ])
+    @readable(
+        intent="Confirm critical system commands exist and publish their versions.",
+        steps=[
+            "Parametrize over curl and python3",
+            "Check each command with shutil.which and fetch its version string",
+        ],
+        criteria=[
+            "Both commands are discoverable in PATH",
+            "Their version output is printed for diagnostics",
+        ],
+    )
     def test_command_exists(self, command: str):
         """Test that required command is available in PATH."""
         assert command_exists(command), (
@@ -144,6 +156,16 @@ class TestSystemCommands:
         print(f"\n✓ {command}: {version}")
 
     @pytest.mark.preflight_host
+    @readable(
+        intent="Ensure podman-compose (or 'podman compose') is available on the host.",
+        steps=[
+            "Skip early if not in host preflight context",
+            "Check podman-compose executable and fall back to 'podman compose version'",
+        ],
+        criteria=[
+            "Either podman-compose or the podman compose command reports success",
+        ],
+    )
     def test_podman_compose_available(self):
         """Test that podman-compose is available."""
         if not is_host_preflight_context():
@@ -173,6 +195,17 @@ class TestSystemCommands:
 
         print(f"\n✓ podman-compose: available")
 
+    @readable(
+        intent="Validate pytest itself is installed for running the suite.",
+        steps=[
+            "Check PATH for pytest",
+            "Print version information for visibility",
+        ],
+        criteria=[
+            "pytest command is available",
+            "Version string is emitted to the log",
+        ],
+    )
     def test_pytest_available(self):
         """Test that pytest is available (for running tests)."""
         assert command_exists("pytest"), (
@@ -195,6 +228,16 @@ class TestSystemCommands:
 class TestConfigurationFiles:
     """Verify required configuration files exist and are valid."""
 
+    @readable(
+        intent="Ensure the podman-compose.yml exists before bootstrapping services.",
+        steps=[
+            "Skip if compose file is missing",
+            "Verify the file exists at the expected path",
+        ],
+        criteria=[
+            "Tests pass only when podman-compose.yml is present",
+        ],
+    )
     def test_compose_file_exists(self):
         """Test that podman-compose.yml exists."""
         if not COMPOSE_FILE.exists():
@@ -202,6 +245,17 @@ class TestConfigurationFiles:
         print(f"\n✓ Found podman-compose.yml")
 
     @pytest.mark.skipif(not HAS_YAML, reason="PyYAML not installed")
+    @readable(
+        intent="Validate that podman-compose.yml parses as YAML and defines services.",
+        steps=[
+            "Load the compose file via PyYAML",
+            "Assert the services mapping exists",
+        ],
+        criteria=[
+            "YAML parsing succeeds without exception",
+            "Services key is present and non-empty",
+        ],
+    )
     def test_compose_file_valid_yaml(self):
         """Test that podman-compose.yml is valid YAML."""
         if not COMPOSE_FILE.exists():
@@ -215,6 +269,16 @@ class TestConfigurationFiles:
             pytest.fail(f"Invalid YAML in podman-compose.yml: {e}")
 
     @pytest.mark.skipif(not HAS_YAML, reason="PyYAML not installed")
+    @readable(
+        intent="Detect whether the compose file declares the core services the platform needs.",
+        steps=[
+            "Load services from the compose file",
+            "Compare against the required list",
+        ],
+        criteria=[
+            "All required services (weaviate/neo4j/app) appear",
+        ],
+    )
     def test_compose_defines_required_services(self):
         """Test that required services are defined in compose file."""
         if not COMPOSE_FILE.exists():
@@ -231,6 +295,16 @@ class TestConfigurationFiles:
 
         print(f"\n✓ All required services defined: {', '.join(required_services)}")
 
+    @readable(
+        intent="Warn or skip appropriately when the environment file is missing.",
+        steps=[
+            "Check for .env and .env.example",
+            "Inform the user if only the example is present",
+        ],
+        criteria=[
+            "Either .env is present or the test explains how to create it",
+        ],
+    )
     def test_env_file_exists_or_example_exists(self):
         """Test that .env file exists or .env.example exists."""
         has_env = ENV_FILE.exists()
@@ -257,6 +331,16 @@ class TestConfigurationFiles:
 class TestPodmanConfiguration:
     """Verify Podman is properly configured."""
 
+    @readable(
+        intent="Validate Podman daemon is running and reachable.",
+        steps=[
+            "Skip if podman binary is missing",
+            "Run 'podman info' and ensure return code zero",
+        ],
+        criteria=[
+            "Podman reports a running service (returncode 0)",
+        ],
+    )
     def test_podman_running(self):
         """Test that Podman is running and accessible."""
         if not command_exists("podman"):
@@ -275,6 +359,16 @@ class TestPodmanConfiguration:
         except subprocess.TimeoutExpired:
             pytest.fail("Podman command timed out")
 
+    @readable(
+        intent="Record the Podman version to ensure compatibility without enforcing a strict minimum.",
+        steps=[
+            "Skip if podman missing",
+            "Capture the output of 'podman --version' for logging",
+        ],
+        criteria=[
+            "Output mentions 'version' so we know what is installed",
+        ],
+    )
     def test_podman_version_sufficient(self):
         """Test that Podman version is recent enough."""
         if not command_exists("podman"):
@@ -289,6 +383,16 @@ class TestPodmanConfiguration:
 
         print(f"\n✓ Podman version: {version_output.split()[2] if len(version_output.split()) > 2 else 'unknown'}")
 
+    @readable(
+        intent="Ensure the Podman socket exists even if it is just static or disabled.",
+        steps=[
+            "Call 'systemctl --user is-enabled podman.socket'",
+            "Log the status without failing on non-standard answers",
+        ],
+        criteria=[
+            "Command completes (or times out) and the status is printed",
+        ],
+    )
     def test_podman_socket_enabled(self):
         """Test that Podman socket is enabled (if using systemd)."""
         if not command_exists("systemctl"):
@@ -326,6 +430,17 @@ class TestPythonEnvironment:
         "langchain_core",
         "pydantic",
     ])
+    @readable(
+        intent="Verify container-only Python packages exist when running inside the runtime.",
+        steps=[
+            "Attempt to import each package",
+            "Fail inside container if missing, otherwise skip with instructions",
+        ],
+        criteria=[
+            "Inside container all imports succeed",
+            "Outside container the test is skipped with a helpful message",
+        ],
+    )
     def test_required_package_installed(self, package: str):
         """Test that required Python packages are installed.
 
@@ -350,6 +465,17 @@ class TestPythonEnvironment:
                         f"Run: podman exec -it app pytest tests/infrastructure/test_preflight.py"
                 )
 
+    @readable(
+        intent="Ensure the Python interpreter is at least 3.9.",
+        steps=[
+            "Inspect sys.version_info",
+            "Assert the major/minor version meets the minimum",
+        ],
+        criteria=[
+            "Test fails if version < 3.9",
+            "Prints the detected Python version for debugging",
+        ],
+    )
     def test_python_version_sufficient(self):
         """Test that Python version is 3.9 or higher."""
         import sys
@@ -370,6 +496,15 @@ class TestPythonEnvironment:
 class TestDirectoryStructure:
     """Verify required directories exist."""
 
+    @readable(
+        intent="Assert the src/ directory exists for code imports.",
+        steps=[
+            "Check PROJECT_ROOT/src directory presence",
+        ],
+        criteria=[
+            "Test passes only if src/ exists and is a directory",
+        ],
+    )
     def test_src_directory_exists(self):
         """Test that src/ directory exists."""
         src_dir = PROJECT_ROOT / "src"
@@ -378,6 +513,15 @@ class TestDirectoryStructure:
         )
         print(f"\n✓ src/ directory exists")
 
+    @readable(
+        intent="Ensure the data/ directory exists or can be created.",
+        steps=[
+            "Check for data/ and create it if needed",
+        ],
+        criteria=[
+            "data/ directory exists at the end of the check",
+        ],
+    )
     def test_data_directory_accessible(self):
         """Test that data/ directory exists or can be created."""
         data_dir = PROJECT_ROOT / "data"
@@ -392,6 +536,15 @@ class TestDirectoryStructure:
         else:
             print(f"\n✓ data/ directory exists")
 
+    @readable(
+        intent="Make sure the .volumes/ directory is available for mounts.",
+        steps=[
+            "Create .volumes/ if missing",
+        ],
+        criteria=[
+            ".volumes/ exists or is created without errors",
+        ],
+    )
     def test_volumes_directory_accessible(self):
         """Test that .volumes/ directory exists or can be created."""
         volumes_dir = PROJECT_ROOT / ".volumes"
@@ -405,6 +558,16 @@ class TestDirectoryStructure:
         else:
             print(f"\n✓ .volumes/ directory exists")
 
+    @readable(
+        intent="Verify the control plane SQLite file is reachable or its directory exists.",
+        steps=[
+            "Check for data/control_plane.db",
+            "Assert parent directory exists when file is missing",
+        ],
+        criteria=[
+            "Either the db file exists or its directory is available",
+        ],
+    )
     def test_control_plane_db_ready(self):
         """Ensure the control plane SQLite file is reachable or can be created."""
         control_plane_db = PROJECT_ROOT / "data" / "control_plane.db"
@@ -439,6 +602,16 @@ class TestPortAvailability:
     ]
 
     @pytest.mark.parametrize("port,service", REQUIRED_PORTS)
+    @readable(
+        intent="Check that the key service ports are free or report they are in use.",
+        steps=[
+            "Iterate over REQUIRED_PORTS",
+            "Call check_port_available for each port",
+        ],
+        criteria=[
+            "Ports are logged as available or a warning is emitted if already in use",
+        ],
+    )
     def test_port_available(self, port: int, service: str):
         """Test that required port is not already in use."""
         if not check_port_available(port):
@@ -457,6 +630,16 @@ class TestPortAvailability:
 class TestSystemResources:
     """Check that system has sufficient resources."""
 
+    @readable(
+        intent="Report available disk space and fail if it is critically low.",
+        steps=[
+            "Calculate available GB via os.statvfs",
+            "Warn if recommended threshold is not met and assert >1GB",
+        ],
+        criteria=[
+            "Disk space > 1GB or test fails with clear message",
+        ],
+    )
     def test_disk_space_available(self):
         """Test that sufficient disk space is available."""
         statvfs = os.statvfs(PROJECT_ROOT)
@@ -478,6 +661,16 @@ class TestSystemResources:
             f"Need at least 1GB to start."
         )
 
+    @readable(
+        intent="Ensure the system reports sufficient available memory or skip gracefully.",
+        steps=[
+            "Read /proc/meminfo and parse MemAvailable",
+            "Warn when below recommended threshold, fail only if <1GB",
+        ],
+        criteria=[
+            "Test passes if available memory >1GB, otherwise skipped with context",
+        ],
+    )
     def test_memory_available(self):
         """Test that sufficient memory is available."""
         try:

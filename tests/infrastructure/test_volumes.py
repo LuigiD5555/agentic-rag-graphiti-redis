@@ -25,6 +25,7 @@ from typing import Tuple, List, Dict
 
 import pytest
 from dotenv import load_dotenv, set_key
+from pytest_readable import readable
 
 
 # ============================================================================
@@ -271,6 +272,16 @@ def setup_fallback(request):
 class TestVolumeAccessibility:
     """Tests for volume accessibility checks."""
 
+    @readable(
+        intent="Check whether the Libros volume path is reachable and log the result.",
+        steps=[
+            "Call VolumeChecker.check_volume_accessible with host Libros directory",
+            "Assert the return type is boolean and log the access state",
+        ],
+        criteria=[
+            "Test always returns a bool even if the volume is missing",
+        ],
+    )
     def test_libros_volume_check(self, volume_checker, volume_config):
         """Test that we can check if Libros volume is accessible."""
         result = volume_checker.check_volume_accessible(
@@ -286,6 +297,16 @@ class TestVolumeAccessibility:
         else:
             print(f"\n⚠ Libros volume is NOT accessible: {volume_config.host_libros_dir}")
 
+    @readable(
+        intent="Ensure volume checks handle missing paths without hanging.",
+        steps=[
+            "Call check_volume_accessible on a path that doesn't exist",
+            "Assert the function returns False rather than raising",
+        ],
+        criteria=[
+            "Timeout handling gracefully returns False",
+        ],
+    )
     def test_volume_timeout_handling(self, volume_checker):
         """Test that volume checks handle timeouts properly."""
         # This should timeout quickly for non-existent paths
@@ -301,6 +322,17 @@ class TestVolumeAccessibility:
 class TestFallbackSetup:
     """Tests for fallback directory setup."""
 
+    @readable(
+        intent="Verify fallback directories and marker files are created correctly.",
+        steps=[
+            "Create a temporary fallback path",
+            "Invoke setup_fallback_directory and inspect the marker file content",
+        ],
+        criteria=[
+            "Fallback directory and .using-fallback marker exist",
+            "Marker text references the primary path",
+        ],
+    )
     def test_fallback_directory_creation(self, volume_checker, volume_config, tmp_path):
         """Test that fallback directory is created correctly."""
         # Use tmp_path for testing
@@ -323,6 +355,16 @@ class TestFallbackSetup:
         assert test_primary in content
         assert 'fallback directory' in content.lower()
 
+    @readable(
+        intent="Ensure the '.volume-available' marker is created for accessible volumes.",
+        steps=[
+            "Call mark_volume_available on a temporary path",
+            "Assert the marker file exists",
+        ],
+        criteria=[
+            "Marker file is created even if volume path is artificial",
+        ],
+    )
     def test_volume_marker_creation(self, volume_checker, tmp_path):
         """Test that volume available marker is created."""
         test_volume = tmp_path / 'test-volume'
@@ -334,6 +376,16 @@ class TestFallbackSetup:
         marker_file = test_volume / '.volume-available'
         assert marker_file.exists()
 
+    @readable(
+        intent="Assert that fallback markers are removed when they are no longer needed.",
+        steps=[
+            "Create a '.using-fallback' marker",
+            "Call remove_fallback_marker and ensure the file disappears",
+        ],
+        criteria=[
+            "Marker file is deleted without raising errors",
+        ],
+    )
     def test_fallback_marker_removal(self, volume_checker, tmp_path):
         """Test that fallback marker is removed correctly."""
         test_fallback = tmp_path / 'test-fallback'
@@ -353,6 +405,18 @@ class TestFallbackSetup:
 class TestVolumeIntegration:
     """Integration tests for full volume check and setup workflow."""
 
+    @readable(
+        intent="Drive the Libros volume check and update fallback settings when requested.",
+        steps=[
+            "Run check_and_setup_libros_volume with the setup flag",
+            "Verify the returned active path and fallback flag types",
+            "Update .env if fallback setup occurred",
+        ],
+        criteria=[
+            "Active path is not None and is_primary is a bool",
+            "No exceptions occur when setup_fallback toggles fallback behavior",
+        ],
+    )
     def test_libros_volume_with_fallback_setup(
         self,
         volume_checker,
@@ -406,6 +470,17 @@ class TestVolumeIntegration:
             # In check-only mode, we just verify we can check
             assert isinstance(is_primary, bool)
 
+    @readable(
+        intent="Ensure the .env file records the active Libros path without duplication.",
+        steps=[
+            "Instantiate VolumeChecker pointing at a temporary .env",
+            "Update the file twice with different paths and inspect content",
+        ],
+        criteria=[
+            "Only one ACTIVE_LIBROS_DIR entry exists",
+            "The second update replaces the first path",
+        ],
+    )
     def test_env_file_update(self, volume_checker, tmp_path):
         """Test that .env file is updated correctly."""
         # Create temporary config with test .env path

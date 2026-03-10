@@ -277,6 +277,15 @@ LMSTUDIO_KEEPALIVE_EMBED = 30
 LMSTUDIO_KEEPALIVE_RERANK = 30
 LMSTUDIO_API_ROOTS = []
 
+# ===== Provider (Ollama) =====
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "localhost")
+OLLAMA_PORT = int(os.getenv("OLLAMA_PORT", "11434"))
+OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "llama3.2")
+OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+OLLAMA_REQUIRE_SERVER = os.getenv("OLLAMA_REQUIRE_SERVER", "false").lower() in ("true", "1")
+OLLAMA_REQUEST_TIMEOUT = int(os.getenv("OLLAMA_REQUEST_TIMEOUT", "120"))
+OLLAMA_AUTO_PROVISION = os.getenv("OLLAMA_AUTO_PROVISION", "false").lower() in ("true", "1")
+
 # ===== Embeddings =====
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", LMSTUDIO_EMBED_MODEL).strip()
 EMBEDDING_MODEL_QUERY = os.getenv("EMBEDDING_MODEL_QUERY", "").strip()

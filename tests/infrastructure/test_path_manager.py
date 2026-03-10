@@ -5,6 +5,20 @@ import os
 import tempfile
 from pathlib import Path
 
+from pytest_readable import readable
+
+@readable(
+    intent="Verify PathManager can add, disable, and remove paths while keeping ingestion settings in sync.",
+    steps=[
+        "Initialize PathManager with a temporary configuration file",
+        "Add, disable, and remove a custom path while printing the state",
+        "Ensure the list of paths reflects each mutation",
+    ],
+    criteria=[
+        "Each step returns success and the final path count reflects removals",
+        "Enabled path lists update after disable/remove operations",
+    ],
+)
 def test_path_manager_basic():
     """Test basic path manager functionality."""
     print("=== Testing Path Manager ===")
@@ -76,6 +90,18 @@ def test_path_manager_basic():
         os.unlink(temp_file)
 
 
+@readable(
+    intent="Ensure the path manager updates the global settings module when ingestion paths change.",
+    steps=[
+        "Query get_enabled_document_paths and update_ingestion_paths",
+        "Import src.settings and compare DOCS_PATHS with the updated list",
+        "Raise a clear error if the settings module is missing or out of sync",
+    ],
+    criteria=[
+        "Updated ingestion paths match settings.DOCS_PATHS",
+        "An ImportError surfaces clearly if src.settings cannot be loaded",
+    ],
+)
 def test_integration_with_settings():
     """Test integration with existing settings system."""
     print("\n=== Testing Integration with Settings ===")
@@ -101,6 +127,18 @@ def test_integration_with_settings():
         raise AssertionError(f"Could not import settings: {e}") from e
 
 
+@readable(
+    intent="Confirm PathManager accepts entries that point to nonexistent locations without crashing.",
+    steps=[
+        "Create a temporary config and add an explicitly inaccessible path",
+        "List paths and assert the inaccessible entry appears",
+        "Clean up the temporary file",
+    ],
+    criteria=[
+        "The inaccessible path is added to the list even if it cannot be reached",
+        "No exceptions propagate from the PathManager call sequence",
+    ],
+)
 def test_path_validation():
     """Test path validation and accessibility."""
     print("\n=== Testing Path Validation ===")
@@ -138,6 +176,17 @@ def test_path_validation():
         os.unlink(temp_file)
 
 
+@readable(
+    intent="Document mounted container paths so the test suite records which volumes are expected.",
+    steps=[
+        "Enumerate known container-mounted directories and print their existence/status",
+        "Check common container markers to infer whether we run inside a container",
+    ],
+    criteria=[
+        "The informational checks execute without assertions (just logging)",
+        "Container detection logic reports the environment marker state",
+    ],
+)
 def test_container_paths():
     """Test paths that should be accessible from inside container."""
     print("\n=== Testing Container Paths ===")
