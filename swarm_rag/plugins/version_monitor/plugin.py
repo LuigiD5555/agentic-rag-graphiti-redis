@@ -95,8 +95,12 @@ class VersionMonitorPlugin(BasePlugin):
                 "stale_sources": [_source_label(h) for h in non_vigente_hits],
             })
 
-        state.version_conflicts = conflicts
-        state.active_versions = active_versions
+        state.retrieval.version_conflicts = conflicts
+        # active_versions stored in specialists for now (not in v3 schema top-level)
+        if active_versions:
+            state.specialists.extracted_facts.extend(
+                [{"type": "active_version", **v} for v in active_versions]
+            )
 
         if conflicts:
             logger.info("VersionMonitor: %d conflict(s) detected", len(conflicts))

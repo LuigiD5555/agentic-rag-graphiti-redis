@@ -1,76 +1,89 @@
 """
-Blackboard shared state schema.
+Blackboard shared state — v3 schema.
 
-The blackboard is the central contract of the SWARM RAG system.
-All plugins read from and write to this state. It is created per-query
-and cleaned up after the response is delivered.
+Four structured sub-states written by each layer:
+  perception  <- Perception Layer (encoders)
+  retrieval   <- Knowledge Layer (Weaviate + Neo4j)
+  specialists <- Specialist Layer (seq2seq)
+  reasoning   <- Integration/Reasoning Layer
+
+The generador final (SLM) reads reasoning.structured_answer only.
+State is per-query and cleaned up after response delivery.
 """
 from __future__ import annotations
 
+import uuid
+from datetime import datetime, timezone
 from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 
-class MathContext(BaseModel):
-    detected: bool = False
-    problem_type: Optional[str] = None
-    variables: list[dict] = Field(default_factory=list)
-    required_operation: Optional[str] = None
-    missing_inputs: list[str] = Field(default_factory=list)
-    tool_hint: Optional[str] = None
-    result: Optional[Any] = None
+class PerceptionOutput(BaseModel):
+    intent: str = "general"
+    domain: str = "general"
+    entities: list[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
+    language: str = "es"
+    complexity: str = "low"
+    needs_retrieval: bool = True
+    needs_math: bool = False
+    needs_code: bool = False
+    tone: str = "neutral"
 
 
-class CodeContext(BaseModel):
-    detected: bool = False
-    language: Optional[str] = None
-    task_type: Optional[str] = None
-    symbols: list[str] = Field(default_factory=list)
-    likely_files: list[str] = Field(default_factory=list)
-    issues: list[str] = Field(default_factory=list)
-    tool_hint: Optional[str] = None
-    result: Optional[Any] = None
-
-
-class RetrievalResults(BaseModel):
+class RetrievalOutput(BaseModel):
     weaviate_hits: list[dict] = Field(default_factory=list)
     neo4j_hits: list[dict] = Field(default_factory=list)
     memory_hits: list[dict] = Field(default_factory=list)
+    version_conflicts: list[dict] = Field(default_factory=list)
+
+
+class SpecialistOutput(BaseModel):
+    rewritten_query: Optional[str] = None
+    subquestions: list[str] = Field(default_factory=list)
+    retrieved_plan: Optional[dict] = None
+    extracted_facts: list[dict] = Field(default_factory=list)
+    ranked_evidence: list[dict] = Field(default_factory=list)
+    hypotheses: list[str] = Field(default_factory=list)
+    conflicts_found: list[dict] = Field(default_factory=list)
+    math_result: Optional[Any] = None
+    code_analysis: Optional[dict] = None
+
+
+class ReasoningOutput(BaseModel):
+    structured_answer: Optional[str] = None
+    key_points: list[str] = Field(default_factory=list)
+    reasoning_summary: str = ""
+    confidence_score: float = 0.0
+    escalate_to_llm: bool = False
 
 
 class BlackboardState(BaseModel):
-    # --- Input ---
-    user_query: str
     session_id: str
+    user_query: str
     timestamp: str
 
-    # --- Intent & routing ---
-    intents: list[str] = Field(default_factory=list)
-    active_plugins: list[str] = Field(default_factory=list)
+    perception: PerceptionOutput = Field(default_factory=PerceptionOutput)
+    retrieval: RetrievalOutput = Field(default_factory=RetrievalOutput)
+    specialists: SpecialistOutput = Field(default_factory=SpecialistOutput)
+    reasoning: ReasoningOutput = Field(default_factory=ReasoningOutput)
 
-    # --- Specialist contexts ---
-    math_context: MathContext = Field(default_factory=MathContext)
-    code_context: CodeContext = Field(default_factory=CodeContext)
-
-    # --- Retrieval ---
-    retrieval: RetrievalResults = Field(default_factory=RetrievalResults)
-
-    # --- Tool execution ---
-    tool_plan: list[dict] = Field(default_factory=list)
-    tool_results: list[dict] = Field(default_factory=list)
-
-    # --- Version / conflict detection ---
-    version_conflicts: list[dict] = Field(default_factory=list)
-    active_versions: list[dict] = Field(default_factory=list)
-
-    # --- Privacy ---
-    anonymized: bool = False
-    entity_map: dict = Field(default_factory=dict)  # PII -> anonymous token
-
-    # --- Final output ---
-    evidence_summary: Optional[str] = None
     final_response: Optional[str] = None
-
-    # --- Observability ---
     execution_trace: list[dict] = Field(default_factory=list)
     latency_ms: dict = Field(default_factory=dict)
+    active_branches: list[str] = Field(default_factory=list)
+
+    @classmethod
+    def new_session(cls, query: str, session_id: Optional[str] = None) -> "BlackboardState":
+        return cls(
+            session_id=session_id or str(uuid.uuid4()),
+            user_query=query,
+            timestamp=datetime.now(tz=timezone.utc).isoformat(),
+        )
+
+    def clear_temp(self) -> None:
+        """Clear intermediate data, keeping final_response and execution_trace."""
+        self.retrieval = RetrievalOutput()
+        self.specialists = SpecialistOutput()
+        self.reasoning = ReasoningOutput()
+        self.active_branches = []

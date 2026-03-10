@@ -1,17 +1,17 @@
 """
-Evidence Merger plugin — fuses all plugin outputs into a single evidence_summary.
+Evidence Merger plugin — fuses all layer outputs into evidence_summary.
 
-Phase 1 (current): template-based with fixed sections.
-Only sections with data are included. Output is a plain string that the
-SLM Verbalizer receives as its sole context.
+Reads from the v3 blackboard schema:
+  state.retrieval.*       — Knowledge Layer hits
+  state.specialists.*     — Specialist Layer outputs
+  state.retrieval.version_conflicts — conflicts
 
-Section order (when data present):
-  1. HECHOS RECUPERADOS      ← weaviate + neo4j hits
-  2. MEMORIA DE SESIÓN       ← memory hits
-  3. RESULTADO MATEMÁTICO    ← math_context.result
-  4. ANÁLISIS DE CÓDIGO      ← code_context.result
-  5. CONFLICTOS DE VERSIÓN   ← version_conflicts
-  6. RESULTADOS DE TOOLS     ← tool_results
+Writes to:
+  state.reasoning.structured_answer (via reasoning layer in F2+)
+  state.specialists.ranked_evidence is the input for reasoning
+
+For F1: writes directly to state.reasoning.structured_answer as a
+template-based string for the SLM to verbalize.
 """
 from __future__ import annotations
 
@@ -42,31 +42,24 @@ def _format_hits(hits: list[dict], label: str) -> str:
     return "\n".join(lines)
 
 
-def _format_math(math_ctx) -> str:
-    if not math_ctx.detected:
+def _format_math(specialists) -> str:
+    result = specialists.math_result
+    if result is None:
         return ""
-    lines = ["### RESULTADO MATEMÁTICO"]
-    if math_ctx.problem_type:
-        lines.append(f"Tipo: {math_ctx.problem_type}")
-    if math_ctx.result is not None:
-        lines.append(f"Resultado: {math_ctx.result}")
-    if math_ctx.missing_inputs:
-        lines.append(f"Datos faltantes: {', '.join(math_ctx.missing_inputs)}")
-    return "\n".join(lines)
+    return f"### RESULTADO MATEMÁTICO\nResultado: {result}"
 
 
-def _format_code(code_ctx) -> str:
-    if not code_ctx.detected:
+def _format_code(specialists) -> str:
+    analysis = specialists.code_analysis
+    if not analysis:
         return ""
     lines = ["### ANÁLISIS DE CÓDIGO"]
-    if code_ctx.language:
-        lines.append(f"Lenguaje: {code_ctx.language}")
-    if code_ctx.task_type:
-        lines.append(f"Tarea: {code_ctx.task_type}")
-    if code_ctx.result is not None:
-        lines.append(f"Resultado:\n{code_ctx.result}")
-    if code_ctx.issues:
-        lines.append("Problemas detectados: " + "; ".join(code_ctx.issues))
+    if analysis.get("language"):
+        lines.append(f"Lenguaje: {analysis['language']}")
+    if analysis.get("result"):
+        lines.append(f"Resultado:\n{analysis['result']}")
+    if analysis.get("issues"):
+        lines.append("Problemas: " + "; ".join(analysis["issues"]))
     return "\n".join(lines)
 
 
@@ -75,70 +68,65 @@ def _format_conflicts(conflicts: list[dict]) -> str:
         return ""
     lines = ["### CONFLICTOS DE VERSIÓN"]
     for c in conflicts:
-        desc = c.get("description") or str(c)
-        lines.append(f"- {desc}")
+        lines.append(f"- {c.get('description', str(c))}")
     return "\n".join(lines)
 
 
-def _format_tool_results(results: list[dict]) -> str:
-    if not results:
+def _format_hypotheses(hypotheses: list[str]) -> str:
+    if not hypotheses:
         return ""
-    lines = ["### RESULTADOS DE TOOLS"]
-    for r in results:
-        tool = r.get("tool", "tool")
-        output = r.get("output") or str(r)
-        lines.append(f"[{tool}] {output}")
+    lines = ["### HIPÓTESIS"]
+    for i, h in enumerate(hypotheses, 1):
+        lines.append(f"{i}. {h}")
     return "\n".join(lines)
 
 
 class EvidenceMerger(BasePlugin):
     name = "evidence_merger"
     capabilities = ["evidence_fusion", "context_preparation"]
-    inputs = ["retrieval", "math_context", "code_context", "version_conflicts"]
-    outputs = ["evidence_summary"]
+    inputs = ["retrieval", "specialists"]
+    outputs = ["reasoning.structured_answer"]
     dependencies = ["context_compressor"]
 
     async def run(self, state: BlackboardState) -> BlackboardState:
         sections: list[str] = []
 
-        # 1. Retrieved facts (weaviate + neo4j combined)
+        # 1. Retrieved facts
         all_hits = state.retrieval.weaviate_hits + state.retrieval.neo4j_hits
-        docs_section = _format_hits(all_hits, "HECHOS RECUPERADOS")
-        if docs_section:
-            sections.append(docs_section)
+        docs = _format_hits(all_hits, "HECHOS RECUPERADOS")
+        if docs:
+            sections.append(docs)
 
-        # 2. Session memory
-        mem_section = _format_hits(state.retrieval.memory_hits, "MEMORIA DE SESIÓN")
-        if mem_section:
-            sections.append(mem_section)
+        # 2. Memory
+        mem = _format_hits(state.retrieval.memory_hits, "MEMORIA DE SESIÓN")
+        if mem:
+            sections.append(mem)
 
         # 3. Math result
-        math_section = _format_math(state.math_context)
-        if math_section:
-            sections.append(math_section)
+        math = _format_math(state.specialists)
+        if math:
+            sections.append(math)
 
         # 4. Code analysis
-        code_section = _format_code(state.code_context)
-        if code_section:
-            sections.append(code_section)
+        code = _format_code(state.specialists)
+        if code:
+            sections.append(code)
 
         # 5. Version conflicts
-        conflicts_section = _format_conflicts(state.version_conflicts)
-        if conflicts_section:
-            sections.append(conflicts_section)
+        conflicts = _format_conflicts(state.retrieval.version_conflicts)
+        if conflicts:
+            sections.append(conflicts)
 
-        # 6. Tool results
-        tools_section = _format_tool_results(state.tool_results)
-        if tools_section:
-            sections.append(tools_section)
+        # 6. Hypotheses (populated in F3+)
+        hyp = _format_hypotheses(state.specialists.hypotheses)
+        if hyp:
+            sections.append(hyp)
 
-        if sections:
-            state.evidence_summary = _SEP.join(sections)
-            logger.info("EvidenceMerger: %d sections, %d chars",
-                        len(sections), len(state.evidence_summary))
-        else:
-            state.evidence_summary = ""
-            logger.warning("EvidenceMerger: no evidence collected for query='%.60s…'",
-                           state.user_query)
+        structured = _SEP.join(sections) if sections else ""
+        state.reasoning.structured_answer = structured
 
+        logger.info(
+            "EvidenceMerger: %d sections, %d chars",
+            len(sections), len(structured),
+        )
         return state

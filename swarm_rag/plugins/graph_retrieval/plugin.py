@@ -31,8 +31,8 @@ _STOPWORDS = {
 def _extract_keywords(state: BlackboardState, max_kw: int = 8) -> list[str]:
     """Derive keywords from code symbols, intents, and query tokens."""
     kw: list[str] = []
-    # Symbols from code context
-    kw.extend(state.code_context.symbols[:4])
+    # Symbols from perception keywords (v3 schema)
+    kw.extend(state.perception.keywords[:4])
     # Bare words from query (>3 chars, not stopwords)
     tokens = re.findall(r"[a-záéíóúüñA-Z]{4,}", state.user_query)
     kw.extend(t.lower() for t in tokens if t.lower() not in _STOPWORDS)
