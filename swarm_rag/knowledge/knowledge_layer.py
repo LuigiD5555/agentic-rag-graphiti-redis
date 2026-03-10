@@ -32,6 +32,7 @@ _version_monitor = VersionMonitorPlugin()
 def build_knowledge_layer(
     weaviate_retriever: Any,
     neo4j_repository: Optional[Any] = None,
+    memory_retriever: Optional[Any] = None,
     top_k: int = 10,
 ):
     """
@@ -42,29 +43,56 @@ def build_knowledge_layer(
         neo4j_repository:   Neo4jRepository instance (optional)
         top_k:              Max hits per retriever
     """
+    from swarm_rag.knowledge.memory_retrieval import build_memory_retrieval
+    from swarm_rag.knowledge.privacy_scrubber import run_privacy_scrubber
+
     retrieval_plugin = RetrievalPlugin(weaviate_retriever, top_k=top_k)
     graph_plugin = GraphRetrievalPlugin(neo4j_repository, limit=top_k * 3) if neo4j_repository else None
+    memory_fn = build_memory_retrieval(memory_retriever) if memory_retriever else None
 
     async def run_knowledge(state: BlackboardState) -> BlackboardState:
         t0 = time.monotonic()
         active = set(state.active_branches)
 
-        # Run Weaviate (always) and Neo4j (if active) in parallel
-        tasks = [retrieval_plugin.run(state)]
+        # Privacy scrubber FIRST — anonymize before any external retrieval
+        if "privacy_scrubber" in active:
+            state = await run_privacy_scrubber(state)
+
+        # If RetrievalPlanner produced a plan, use its weaviate_queries for parallel retrieval
+        plan = state.specialists.retrieved_plan
+        if plan and plan.get("weaviate_queries"):
+            # Run one retrieval per planned query (up to 3 for latency control)
+            tasks = [
+                retrieval_plugin.run(
+                    state.model_copy(update={"user_query": q})
+                )
+                for q in plan["weaviate_queries"][:3]
+            ]
+        else:
+            tasks = [retrieval_plugin.run(state)]
+
         if graph_plugin and "retrieval_neo4j" in active:
             tasks.append(graph_plugin.run(state))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Merge results back — each plugin returns a modified copy
+        # Merge results back — accumulate hits across all parallel retrievals
+        seen_chunks: set[str] = set()
         for r in results:
             if isinstance(r, Exception):
                 logger.error("Knowledge layer plugin error: %s", r)
                 continue
-            if r.retrieval.weaviate_hits:
-                state.retrieval.weaviate_hits = r.retrieval.weaviate_hits
+            for hit in r.retrieval.weaviate_hits:
+                cid = hit.get("chunk_id", "")
+                if cid not in seen_chunks:
+                    seen_chunks.add(cid)
+                    state.retrieval.weaviate_hits.append(hit)
             if r.retrieval.neo4j_hits:
                 state.retrieval.neo4j_hits = r.retrieval.neo4j_hits
+
+        # Memory retrieval (past sessions)
+        if memory_fn and "memory_retrieval" in active:
+            state = await memory_fn(state)
 
         # Compress: deduplicate + score-filter
         state = await _compressor.run(state)

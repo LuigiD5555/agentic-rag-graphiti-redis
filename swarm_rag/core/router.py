@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 
 _RULES_PATH = Path(__file__).parent.parent / "config" / "router_rules.yaml"
 
-# Branches always active
-_ALWAYS_ON = ["retrieval_weaviate", "evidence_merger"]
+# Branches always active (evidence_merger runs inside integration_layer, not as a separate branch)
+_ALWAYS_ON = ["retrieval_weaviate"]
 
 
 def route(state: BlackboardState) -> list[str]:
@@ -52,11 +52,15 @@ def route(state: BlackboardState) -> list[str]:
 
     # --- Math branch (F3) ---
     if p.needs_math:
-        active += ["math_specialist", "math_tool_agent"]
+        active.append("math_specialist")
+        # math_tool_agent: stub only — activate when MCP is connected
+        # active.append("math_tool_agent")
 
     # --- Code branch (F3) ---
     if p.needs_code:
-        active += ["code_specialist", "code_agent_mcp"]
+        active.append("code_specialist")
+        # code_agent_mcp: stub only — activate when MCP/Digit is connected
+        # active.append("code_agent_mcp")
 
     # --- Fact extraction + hypothesis: medium/high complexity ---
     if p.complexity in ("medium", "high"):
@@ -65,6 +69,16 @@ def route(state: BlackboardState) -> list[str]:
     # --- Version conflicts (populated by knowledge layer) ---
     if state.retrieval.version_conflicts:
         active.append("conflict_resolver")
+
+    # --- Memory retrieval (session history) ---
+    if p.intent == "memory" or any(kw in state.user_query.lower()
+                                    for kw in ("recuerdas", "anteriormente", "antes", "previo")):
+        active.append("memory_retrieval")
+
+    # --- Privacy scrubber ---
+    if any(kw in state.user_query.lower()
+           for kw in ("confidencial", "privado", "secreto", "pii", "gdpr", "datos personales")):
+        active.append("privacy_scrubber")
 
     # --- Reasoning always at the end ---
     active += ["evidence_ranker", "integration_layer"]

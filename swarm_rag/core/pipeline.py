@@ -57,6 +57,7 @@ class SwarmPipeline:
         llm_api_client: Optional[Any] = None,
         weaviate_retriever: Optional[Any] = None,
         neo4j_repository: Optional[Any] = None,
+        memory_retriever: Optional[Any] = None,
         knowledge_layer: Optional[Any] = None,
         specialist_layer: Optional[Any] = None,
         top_k: int = 10,
@@ -69,6 +70,7 @@ class SwarmPipeline:
             llm_api_client:     Optional LLMApiClient for escalation (Claude/DeepSeek)
             weaviate_retriever: WeaviateRetriever instance for semantic search
             neo4j_repository:   Neo4jRepository instance for graph retrieval (optional)
+            memory_retriever:   CrossChatRetriever instance for session memory (optional)
             knowledge_layer:    Override the auto-built knowledge layer callable
             specialist_layer:   Override the specialist layer callable
             top_k:              Max retrieval hits per source
@@ -84,7 +86,9 @@ class SwarmPipeline:
 
         # Build knowledge layer from retrievers if not explicitly provided
         if knowledge_layer is None and weaviate_retriever is not None:
-            knowledge_layer = build_knowledge_layer(weaviate_retriever, neo4j_repository, top_k)
+            knowledge_layer = build_knowledge_layer(
+                weaviate_retriever, neo4j_repository, memory_retriever, top_k
+            )
 
         return cls(
             knowledge_layer=knowledge_layer,
@@ -104,11 +108,21 @@ class SwarmPipeline:
         # 2. Router (sync — fast rule evaluation)
         route(state)
 
-        # 3. Knowledge Layer (retrieval)
+        # 3a. Pre-retrieval specialists: QueryRewriter, SubquestionGenerator, RetrievalPlanner
+        #     Run these BEFORE the knowledge layer so the plan can guide retrieval.
+        if _has_preretieval_branches(state):
+            state = await _timed(self._specialist, state, "specialists_pre")
+            # Re-route after subquestions are generated (version_conflicts not yet populated)
+            route(state)
+
+        # 3b. Knowledge Layer (retrieval — uses retrieved_plan if populated)
         if state.perception.needs_retrieval or state.perception.complexity != "low":
             state = await _timed(self._knowledge, state, "knowledge")
 
-        # 4. Specialist Layer (conditional on router)
+        # 3c. Re-route now that version_conflicts may be populated
+        route(state)
+
+        # 4. Specialist Layer (main pass: FactExtractor, EvidenceRanker, HypothesisGen, etc.)
         if _has_specialist_branches(state):
             state = await _timed(self._specialist, state, "specialists")
 
@@ -133,13 +147,19 @@ class SwarmPipeline:
 # Helpers
 # ---------------------------------------------------------------------------
 
+_PRE_RETRIEVAL = {"query_rewriter", "subquestion_generator", "retrieval_planner"}
+_POST_RETRIEVAL = {
+    "math_specialist", "code_specialist",
+    "fact_extractor", "evidence_ranker", "hypothesis_generator",
+}
+
+
+def _has_preretieval_branches(state: BlackboardState) -> bool:
+    return bool(set(state.active_branches) & _PRE_RETRIEVAL)
+
+
 def _has_specialist_branches(state: BlackboardState) -> bool:
-    specialist_names = {
-        "query_rewriter", "subquestion_generator", "math_specialist",
-        "math_tool_agent", "code_specialist", "code_agent_mcp",
-        "fact_extractor", "hypothesis_generator",
-    }
-    return bool(set(state.active_branches) & specialist_names)
+    return bool(set(state.active_branches) & _POST_RETRIEVAL)
 
 
 async def _timed(fn, state: BlackboardState, label: str) -> BlackboardState:
