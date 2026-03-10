@@ -1,53 +1,75 @@
+############################
+# Core validation / config
+############################
+pydantic>=2.7,<3
+pydantic-settings>=2.3,<3
+
+############################
 # LangChain stack
-langchain-core
-langchain-community
-langchain-text-splitters
-langchain-experimental
+############################
+langchain-core>=0.3
+langchain-community>=0.3
+langchain-text-splitters>=0.3
+langchain-experimental>=0.0.65
 
-# LangGraph for memory/state management
-langgraph
-# Note: SQLite control plane handles checkpoint persistence
+############################
+# LangGraph (state + orchestration)
+############################
+langgraph>=0.2
 
-# Storage / graph / cache
-# External cache removed - using SQLite control plane instead
-neo4j
+############################
+# Vector / graph storage
+############################
+neo4j>=5.21
 weaviate-client>=4,<5
-grpcio
+grpcio>=1.60
 
-# Ingestion (Office tools delegated to rag-tool-document-processor)
-networkx
-python-docx  # Still needed for DOCX native parsing (fallback to rag-tool-document-processor)
-pypdf
-pymupdf
+############################
+# Document ingestion
+############################
+networkx>=3.3
+python-docx>=1.1
+pypdf>=4.2
+pymupdf>=1.24
 
+############################
 # API
-fastapi
-uvicorn[standard]
-python-multipart  # Required for file uploads in FastAPI
-openai
+############################
+fastapi>=0.111
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+openai>=1.30
 
-# Utils
-python-dotenv
-requests
-httpx
-pytest
-pytest-asyncio
+############################
+# Utilities
+############################
+python-dotenv>=1.0
+requests>=2.32
+httpx>=0.27
+langdetect>=1.0.9
+
+############################
+# Testing
+############################
+pytest>=8.2
+pytest-asyncio>=0.23
+coverage>=7.5
+
+# Pytest-Readable
 pytest-readable @ git+https://github.com/LuigiD5555/pytest-readable.git@main
-pydantic
-pydantic-settings
-langdetect
 
-# SWARM RAG — ML models
-torch
-transformers
-sentence-transformers
-accelerate      # required by some HuggingFace seq2seq models
-keybert         # keyword extraction (F2 perception upgrade)
+############################
+# ML / RAG models
+############################
+torch>=2.3
+transformers>=4.41
+sentence-transformers>=2.7
+accelerate>=0.30
+keybert>=0.8
 
-# RabbitMQ for message queuing
+############################
+# Messaging / async tasks
+############################
 pika==1.3.2
-aio-pika==9.4.1
-celery==5.3.6
-
-# Code coverage for dynamic analysis
-coverage>=7.0.0
+aio-pika>=9.4
+celery>=5.3
