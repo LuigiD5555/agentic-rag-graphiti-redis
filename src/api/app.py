@@ -170,6 +170,11 @@ logger.info("Stats router (/api/stats) included")
 app.include_router(system_router)
 logger.info("System router (/api/system) included")
 
+# Include SWARM RAG router
+from src.api.routes.swarm import router as swarm_router
+app.include_router(swarm_router)
+logger.info("SWARM router (/swarm) included")
+
 
 # Exception handlers
 @app.exception_handler(Exception)
