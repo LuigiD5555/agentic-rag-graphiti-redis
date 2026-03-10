@@ -236,6 +236,7 @@ class TestSearXNGClientAsync:
         client = SearXNGClient(base_url="http://localhost:8080")
         stub = MagicMock()
         stub.aclose = AsyncMock()
+        stub.is_closed = False  # must be False so close() proceeds with aclose()
         client._client = stub
 
         await client.close()

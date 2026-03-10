@@ -99,6 +99,18 @@ def test_rag_engine_builds_prompt_with_vector_and_graph_context():
 def test_rag_engine_reuses_cached_answer_for_identical_query():
     engine = _build_engine()
 
+    # Simulate real cache behaviour: get returns None on first call, stored value on second
+    _store: dict = {}
+
+    def _cache_get(key):
+        return _store.get(key)
+
+    def _cache_set(key, value):
+        _store[key] = value
+
+    engine.cache.get.side_effect = _cache_get
+    engine.cache.set.side_effect = _cache_set
+
     engine.answer("What is Graphiti?", user_id="user-42", tenant_id="tenant-A")
     cached = engine.answer("What is Graphiti?", user_id="user-42", tenant_id="tenant-A")
 
