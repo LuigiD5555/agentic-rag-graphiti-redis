@@ -1,36 +1,47 @@
 """
 Specialist Layer — runs the active specialists in the correct dependency order.
 
-Dependency order (F2):
-  1. QueryRewriter     (no deps — can run after perception)
-  2. FactExtractor     (depends on retrieval hits being populated)
-  3. EvidenceRanker    (depends on extracted_facts or raw hits)
+Dependency order (F2 + F3):
+  1. QueryRewriter          (no deps)
+  2. SubquestionGenerator   (no deps, only high-complexity)
+  3. MathSpecialist         (no deps, only when needs_math)
+  4. CodeSpecialist         (no deps, only when needs_code)
+  5. FactExtractor          (depends on retrieval hits)
+  6. RetrievalPlanner       (depends on subquestions)
+  7. EvidenceRanker         (depends on extracted_facts)
+  8. HypothesisGenerator    (depends on ranked_evidence)
 
 Specialists not in active_branches are skipped.
 All specialists degrade gracefully if their model is unavailable.
-
 Pre-loads all registered models at startup via preload_all().
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
-from typing import Optional
 
 from swarm_rag.schemas.blackboard_schema import BlackboardState
 from swarm_rag.specialists.query_rewriter import QueryRewriter
+from swarm_rag.specialists.subquestion_generator import SubquestionGenerator
+from swarm_rag.specialists.math_specialist import MathSpecialist
+from swarm_rag.specialists.code_specialist import CodeSpecialist
 from swarm_rag.specialists.fact_extractor import FactExtractor
+from swarm_rag.specialists.retrieval_planner import RetrievalPlanner
 from swarm_rag.specialists.evidence_ranker import EvidenceRanker
+from swarm_rag.specialists.hypothesis_generator import HypothesisGenerator
 
 logger = logging.getLogger(__name__)
 
-# Ordered list: each specialist only runs if its name is in active_branches
-# Order matters — later specialists depend on earlier ones
+# Ordered: later specialists depend on earlier ones
 _SPECIALIST_SEQUENCE = [
     QueryRewriter(),
+    SubquestionGenerator(),
+    MathSpecialist(),
+    CodeSpecialist(),
     FactExtractor(),
+    RetrievalPlanner(),
     EvidenceRanker(),
+    HypothesisGenerator(),
 ]
 
 

@@ -48,15 +48,19 @@ def route(state: BlackboardState) -> list[str]:
         active.append("query_rewriter")
 
     if p.complexity == "high":
-        active.append("subquestion_generator")
+        active += ["subquestion_generator", "retrieval_planner"]
 
-    # --- Math branch ---
+    # --- Math branch (F3) ---
     if p.needs_math:
         active += ["math_specialist", "math_tool_agent"]
 
-    # --- Code branch ---
+    # --- Code branch (F3) ---
     if p.needs_code:
         active += ["code_specialist", "code_agent_mcp"]
+
+    # --- Fact extraction + hypothesis: medium/high complexity ---
+    if p.complexity in ("medium", "high"):
+        active += ["fact_extractor", "hypothesis_generator"]
 
     # --- Version conflicts (populated by knowledge layer) ---
     if state.retrieval.version_conflicts:
