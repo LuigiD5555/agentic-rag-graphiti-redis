@@ -84,7 +84,7 @@ services:
   open-webui:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_open-webui_1"
     build:
-      context: ./open-webui
+      context: ./vendor/open-webui
       dockerfile: Dockerfile
     image: "open-webui-local:${OPEN_WEBUI_IMAGE_TAG:-main-slim}"
     restart: "no"

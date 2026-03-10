@@ -1,7 +1,7 @@
 #!/bin/bash
 # Legacy Code Cleanup Script
 # Removes unused integration artifacts (qdrant, redis, etc.)
-# Note: Excludes the open-webui directory as it contains external code
+# Note: Excludes the vendor/open-webui directory as it contains external code
 
 set -e
 
@@ -37,9 +37,9 @@ fi
 print_info "Starting legacy code cleanup..."
 echo ""
 
-# Step 1: Find and remove qdrant-related files (excluding open-webui directory)
+# Step 1: Find and remove qdrant-related files (excluding vendor/open-webui directory)
 print_info "Step 1: Removing qdrant integration artifacts..."
-qdrant_files=$(find . -type f \( -name "*qdrant*" -o -name "*Qdrant*" \) ! -path "./open-webui/*" ! -path "./open-webui/**" 2>/dev/null || true)
+qdrant_files=$(find . -type f \( -name "*qdrant*" -o -name "*Qdrant*" \) ! -path "./vendor/open-webui/*" ! -path "./vendor/open-webui/**" 2>/dev/null || true)
 if [ -n "$qdrant_files" ]; then
     echo "Found qdrant files:"
     echo "$qdrant_files"
@@ -55,9 +55,9 @@ else
     print_info "No qdrant files found"
 fi
 
-# Step 2: Find and remove redis-related files (excluding open-webui directory)
+# Step 2: Find and remove redis-related files (excluding vendor/open-webui directory)
 print_info "Step 2: Removing redis integration artifacts..."
-redis_files=$(find . -type f \( -name "*redis*" -o -name "*Redis*" \) ! -path "./open-webui/*" ! -path "./open-webui/**" 2>/dev/null || true)
+redis_files=$(find . -type f \( -name "*redis*" -o -name "*Redis*" \) ! -path "./vendor/open-webui/*" ! -path "./vendor/open-webui/**" 2>/dev/null || true)
 if [ -n "$redis_files" ]; then
     echo "Found redis files:"
     echo "$redis_files"
@@ -129,9 +129,9 @@ if [ -f ".env" ]; then
     print_info "Original saved as .env.backup"
 fi
 
-# Step 7: Clean up Python imports (excluding open-webui directory)
+# Step 7: Clean up Python imports (excluding vendor/open-webui directory)
 print_info "Step 7: Cleaning up Python imports..."
-python_files=$(find . -name "*.py" -type f ! -path "./open-webui/*" ! -path "./open-webui/**" 2>/dev/null || true)
+python_files=$(find . -name "*.py" -type f ! -path "./vendor/open-webui/*" ! -path "./vendor/open-webui/**" 2>/dev/null || true)
 if [ -n "$python_files" ]; then
     for file in $python_files; do
         # Remove qdrant and redis imports
@@ -157,13 +157,13 @@ echo ""
 print_success "Legacy cleanup completed!"
 echo ""
 print_info "Summary of changes:"
-echo "1. Removed qdrant integration files (excluding open-webui directory)"
-echo "2. Removed redis integration files (excluding open-webui directory)"
+echo "1. Removed qdrant integration files (excluding vendor/open-webui directory)"
+echo "2. Removed redis integration files (excluding vendor/open-webui directory)"
 echo "3. Cleaned requirements.txt"
 echo "4. Cleaned Dockerfile"
 echo "5. Cleaned podman-compose.yml"
 echo "6. Cleaned .env file"
-echo "7. Cleaned Python imports (excluding open-webui directory)"
+echo "7. Cleaned Python imports (excluding vendor/open-webui directory)"
 echo "8. Ran bloat analyzer for further detection"
 echo ""
 print_warning "IMPORTANT: Review the changes before committing!"
