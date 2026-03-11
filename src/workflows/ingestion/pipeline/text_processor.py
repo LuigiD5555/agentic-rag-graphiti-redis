@@ -52,6 +52,8 @@ from src.utils.text import (
     truncate_to_token_limit_presanitized,
 )
 from src.utils.structured_log import emit_structured_log
+from src.core.telemetry import emit_error
+from src.core.errors import VectorStoreError, LedgerError
 
 
 def _extract_entities(pipeline: Any, chunk_id: str, text: str, metadata: Dict[str, Any]) -> None:
@@ -276,7 +278,8 @@ def process_text_document(pipeline: Any, loader: object, context_generator: Any 
             if active_version:
                 ledger.mark_stage_done(active_version, Stage.CHUNK, int(time.time()))
         except Exception as _exc:
-            logger.debug("Ledger CHUNK mark failed for %s: %s", source, _exc)
+            _ledger_err = LedgerError(f"mark_stage_done CHUNK for {source}: {_exc}", cause=_exc)
+            emit_error(_ledger_err, component="text_processor", operation="ledger_mark_chunk", extra={"source": source})
 
     # Contextual Retrieval enrichment: prepend LLM-generated context to each chunk.
     # Runs only when CONTEXT_ENRICHMENT_ENABLED=true and a context_generator is wired in.
@@ -579,9 +582,16 @@ def process_text_document(pipeline: Any, loader: object, context_generator: Any 
                             except Exception as _exc:
                                 logger.debug("ChunkRegistry UPSERTED update failed: %s", _exc)
                     except Exception as _upsert_exc:
-                        logger.error(
-                            "Upsert failed for chunk %d of %s: %s",
-                            record["chunk_index"], os.path.basename(source), _upsert_exc,
+                        _upsert_err = VectorStoreError(
+                            "upsert",
+                            f"chunk {record['chunk_index']} of {os.path.basename(source)}: {_upsert_exc}",
+                            cause=_upsert_exc,
+                        )
+                        emit_error(
+                            _upsert_err,
+                            component="text_processor",
+                            operation="upsert_chunk",
+                            extra={"source": source, "chunk_index": record["chunk_index"]},
                         )
                         if chunk_registry is not None and record.get("chunk_id"):
                             try:
@@ -629,7 +639,8 @@ def process_text_document(pipeline: Any, loader: object, context_generator: Any 
             if active_version:
                 ledger.mark_stage_done(active_version, Stage.EMBED, int(time.time()))
         except Exception as _exc:
-            logger.debug("Ledger EMBED mark failed for %s: %s", source, _exc)
+            _ledger_err = LedgerError(f"mark_stage_done EMBED for {source}: {_exc}", cause=_exc)
+            emit_error(_ledger_err, component="text_processor", operation="ledger_mark_embed", extra={"source": source})
 
     _score_file(pipeline, source, 1, "extracted_ok")
     finalize_file_ingestion(pipeline, file_info, chunk_total=segment_total)

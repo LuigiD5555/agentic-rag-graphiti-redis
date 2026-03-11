@@ -14,6 +14,8 @@ import json
 from src import logger
 from src.workflows.query.interfaces.chat_interface import ChatInterface
 from src.workflows.query.interfaces.ner_interface import NERRepository
+from src.core.telemetry import emit_error
+from src.core.errors import GraphError
 
 
 class NERExtractor:
@@ -102,8 +104,9 @@ class NERExtractor:
 
             try:
                 self.repo.add_entity(name, type_)
-            except (ValueError, TypeError) as ex:
-                logger.error("Failed to insert entity '%s': %s", name, ex)
+            except (ValueError, TypeError) as exc:
+                err = GraphError("add_entity", f"entity='{name}' type='{type_}': {exc}", cause=exc)
+                emit_error(err, component="ner_extractor", operation="insert_entities", extra={"entity": name, "type": type_})
 
     def _insert_relations(self, relations: List[Dict[str, Any]]) -> None:
         """
@@ -121,5 +124,6 @@ class NERExtractor:
 
             try:
                 self.repo.add_relation(src, rel, dst)
-            except (ValueError, TypeError) as ex:
-                logger.error("Failed to insert relation '%s' (%s -> %s): %s", rel, src, dst, ex)
+            except (ValueError, TypeError) as exc:
+                err = GraphError("add_relation", f"'{src}' -[{rel}]-> '{dst}': {exc}", cause=exc)
+                emit_error(err, component="ner_extractor", operation="insert_relations", extra={"src": src, "rel": rel, "dst": dst})

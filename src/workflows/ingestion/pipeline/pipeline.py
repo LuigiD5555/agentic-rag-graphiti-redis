@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional, Set
 
 from src import logger
 from src.workflows.ingestion.options import PipelineOptions
+from src.core.telemetry import emit_error
+from src.core.errors import IngestionError
 from src.workflows.ingestion.catalog import IngestionCatalog
 from src.backends.storage.cache.ingestion import IngestionCacheManager
 from src.workflows.query.interfaces.embedding_interface import EmbeddingInterface
@@ -189,8 +191,9 @@ class IngestionPipeline:
             )
             return (full_path, True, None)
         except Exception as e:
-            error_msg = f"Error processing {full_path}: {e}"
-            logger.error(error_msg)
+            err = IngestionError(f"file processing failed: {full_path}", cause=e)
+            emit_error(err, component="ingestion_pipeline", operation="_process_single_file_safe", extra={"path": full_path})
+            logger.error("Error processing %s: %s", full_path, e)
             return (full_path, False, str(e))
 
     def ingest_files(
@@ -515,10 +518,11 @@ class IngestionPipeline:
                 logger.warning("Failed to process job: %s (error=%s)", job.file_path, error)
                 return False, error
 
-        except Exception as e:
-            error_msg = f"Error processing job {job.file_path}: {e}"
-            logger.error(error_msg)
-            return False, str(e)
+        except Exception as exc:
+            err = IngestionError(f"job processing failed: {job.file_path}", cause=exc)
+            emit_error(err, component="ingestion_pipeline", operation="_process_job", extra={"path": job.file_path})
+            logger.error("Error processing job %s: %s", job.file_path, exc)
+            return False, str(exc)
 
     @logged("Ingesting candidate paths")
     @timed()

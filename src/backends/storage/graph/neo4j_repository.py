@@ -4,6 +4,8 @@ from typing import Optional, cast, LiteralString, Dict, Any, List
 from neo4j import GraphDatabase, Query
 from neo4j.exceptions import Neo4jError
 from src import logger
+from src.core import Result
+from src.core.errors import GraphError
 
 
 # Validators
@@ -150,7 +152,12 @@ class Neo4jRepository:
             logger.error("Search failed for keyword '%s': %s", keyword, e)
             raise
 
-    def get_related_context(self, keywords: List[str], max_hops: int = 1, limit: int = 40) -> List[Dict[str, Any]]:
+    def get_related_context(
+        self,
+        keywords: List[str],
+        max_hops: int = 1,
+        limit: int = 40,
+    ) -> "Result[List[Dict[str, Any]], GraphError]":
         """Return entity neighbourhood for the given keywords.
 
         Walks up to *max_hops* away from any Entity whose name matches one of
@@ -163,18 +170,17 @@ class Neo4jRepository:
 
         This is used by the RAG orchestrator to inject structured graph
         context alongside the Weaviate text chunks.
+
+        Returns:
+            Result[list[dict], GraphError] — Ok with edges, or Err with cause.
         """
         if not keywords:
-            return []
+            return Result.ok([])
 
-        # Build a list of lowercase keywords for CONTAINS matching
         kw_lower = [k.lower() for k in keywords if k.strip()]
         if not kw_lower:
-            return []
+            return Result.ok([])
 
-        # Cypher: match Entity nodes whose name contains any keyword,
-        # then traverse RELATED_TO / PART_OF edges up to max_hops.
-        # We keep it simple (1 hop default) to stay fast.
         cypher = """
         UNWIND $keywords AS kw
         MATCH (e:Entity)
@@ -214,15 +220,14 @@ class Neo4jRepository:
                 "get_related_context: keywords=%s returned %d edges",
                 keywords, len(rows),
             )
-            return rows
-        except Neo4jError as e:
-            logger.error("get_related_context failed: %s", e)
-            return []
+            return Result.ok(rows)
+        except Neo4jError as exc:
+            return Result.err(GraphError("get_related_context", str(exc), cause=exc))
 
     def get_shareable_chunks(
         self,
         contribution_types: Optional[List[str]] = None,
-    ) -> List[str]:
+    ) -> "Result[List[str], GraphError]":
         """Return IDs of chunks whose Source is marked shareable=True.
 
         Args:
@@ -230,8 +235,8 @@ class Neo4jRepository:
                 contribution_type (e.g. ["original", "ai_assisted"]).
                 When None, all shareable chunks are returned regardless of type.
 
-        Used by the marketplace export pipeline to identify chunks that can be
-        shared publicly (i.e. user-generated knowledge, not copyrighted material).
+        Returns:
+            Result[list[str], GraphError] — Ok with chunk IDs, or Err with cause.
         """
         if contribution_types:
             cypher = """
@@ -252,9 +257,8 @@ class Neo4jRepository:
                 result = session.run(safe_query(cypher), **params)
                 ids = [record["chunk_id"] for record in result if record["chunk_id"]]
             logger.info("get_shareable_chunks: returned %d chunk IDs", len(ids))
-            return ids
-        except Neo4jError as e:
-            logger.error("get_shareable_chunks failed: %s", e)
-            return []
+            return Result.ok(ids)
+        except Neo4jError as exc:
+            return Result.err(GraphError("get_shareable_chunks", str(exc), cause=exc))
 
     get_shareable_chunk_ids = get_shareable_chunks

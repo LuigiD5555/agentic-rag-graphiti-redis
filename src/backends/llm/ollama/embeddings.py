@@ -16,6 +16,8 @@ from typing import List, Optional
 
 import requests
 
+from src.core import Result, emit_error
+from src.core.errors import EmbeddingError
 from src.utils.structured_log import emit_structured_log
 
 logger = logging.getLogger(__name__)
@@ -46,7 +48,7 @@ class OllamaEmbeddingService:
         source: Optional[str] = None,
         chunk_index: Optional[int] = None,
         request_id: Optional[str] = None,
-    ) -> List[float]:
+    ) -> "Result[List[float], EmbeddingError]":
         request_id = request_id or f"ollama-emb-{uuid.uuid4().hex[:12]}"
         payload = {"model": self._model_name, "prompt": text}
         try:
@@ -74,17 +76,29 @@ class OllamaEmbeddingService:
                 duration_ms=(time.perf_counter() - t0) * 1000,
                 embedding_dim=len(vector),
             )
-            return vector
+            return Result.ok(vector)
         except requests.exceptions.RequestException as exc:
-            logger.error("Ollama embedding HTTP error: %s", exc)
+            err = EmbeddingError(f"Ollama embedding HTTP error: {exc}", cause=exc)
+            emit_error(
+                err,
+                component="ollama_embedding",
+                operation="generate",
+                extra={"model": self._model_name, "request_id": request_id},
+            )
             if self._require_live:
                 raise RuntimeError(f"Ollama embeddings failed: {exc}") from exc
-            return self._dummy()
+            return Result.err(err)
         except (ValueError, TypeError) as exc:
-            logger.error("Invalid Ollama embedding response: %s", exc)
+            err = EmbeddingError(f"Invalid Ollama embedding response: {exc}", cause=exc)
+            emit_error(
+                err,
+                component="ollama_embedding",
+                operation="generate",
+                extra={"model": self._model_name, "request_id": request_id},
+            )
             if self._require_live:
                 raise
-            return self._dummy()
+            return Result.err(err)
 
     def _validate(self, vector) -> List[float]:
         if not isinstance(vector, (list, tuple)):

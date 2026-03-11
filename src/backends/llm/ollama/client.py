@@ -18,6 +18,8 @@ from typing import Dict, List, Optional
 
 import requests
 
+from src.core import Result, emit_error
+from src.core.errors import GenerationError
 from src.utils.structured_log import emit_structured_log
 from src.workflows.query.interfaces.chat_interface import ChatInterface
 
@@ -48,7 +50,7 @@ class OllamaChat(ChatInterface):
         model: Optional[str] = None,
         request_id: Optional[str] = None,
         ttl: Optional[int] = None,
-    ) -> str:
+    ) -> "Result[str, GenerationError]":
         selected_model = model or self.model
         temp = temperature if temperature is not None else self._temperature
         request_id = request_id or f"ollama-chat-{uuid.uuid4().hex[:12]}"
@@ -84,9 +86,15 @@ class OllamaChat(ChatInterface):
                 duration_ms=(time.perf_counter() - t0) * 1000,
                 response_chars=len(text),
             )
-            return text
+            return Result.ok(text)
         except requests.exceptions.RequestException as exc:
-            logger.error("Ollama chat error: %s", exc)
+            err = GenerationError(f"Ollama chat request failed: {exc}", cause=exc)
+            emit_error(
+                err,
+                component="ollama_client",
+                operation="chat",
+                extra={"model": selected_model, "request_id": request_id},
+            )
             emit_structured_log(
                 logger,
                 component="ollama_client",
@@ -97,7 +105,7 @@ class OllamaChat(ChatInterface):
             )
             if self._require_live:
                 raise RuntimeError(f"Ollama chat failed: {exc}") from exc
-            return ""
+            return Result.err(err)
 
     def complete(
         self,
@@ -105,7 +113,7 @@ class OllamaChat(ChatInterface):
         max_tokens: int = 256,
         request_id: Optional[str] = None,
         ttl: Optional[int] = None,
-    ) -> str:
+    ) -> "Result[str, GenerationError]":
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": prompt},

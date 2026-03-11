@@ -13,6 +13,9 @@ from pathlib import Path
 from typing import List, Set, Optional
 from dataclasses import dataclass, asdict
 
+from src.core import Result, emit_error
+from src.core.errors import StorageError
+
 logger = logging.getLogger(__name__)
 
 
@@ -90,7 +93,7 @@ class PathManager:
             # Fallback to empty list
             self._paths = []
     
-    def _save_paths(self) -> bool:
+    def _save_paths(self) -> "Result[bool, StorageError]":
         """Save paths to settings.json file."""
         try:
             # Load existing settings
@@ -98,43 +101,44 @@ class PathManager:
             if self.settings_file.exists():
                 with open(self.settings_file, 'r', encoding='utf-8') as f:
                     settings = json.load(f)
-            
+
             # Convert paths to simple list for backward compatibility
             # We store as strings for compatibility with existing code
             docs_paths = []
             for entry in self._paths:
                 if entry.enabled:
                     docs_paths.append(entry.path)
-            
+
             # Update settings
             settings['DOCS_PATHS'] = docs_paths
-            
+
             # Save back to file
             with open(self.settings_file, 'w', encoding='utf-8') as f:
                 json.dump(settings, f, indent=2, ensure_ascii=False)
-            
+
             logger.info(f"Saved {len(docs_paths)} document paths to {self.settings_file}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to save paths to {self.settings_file}: {e}")
-            return False
+            return Result.ok(True)
+
+        except Exception as exc:
+            err = StorageError(f"Failed to save paths to {self.settings_file}", cause=exc)
+            emit_error(err, component="path_manager", operation="_save_paths", extra={"path": str(self.settings_file)})
+            return Result.err(err)
     
-    def add_path(self, path: str, description: str = "", enable: bool = True) -> bool:
+    def add_path(self, path: str, description: str = "", enable: bool = True) -> "Result[bool, StorageError]":
         """
         Add a new document path.
-        
+
         Args:
             path: The filesystem path to add
             description: Optional description of the path
             enable: Whether to enable the path immediately
-            
+
         Returns:
-            True if path was added successfully, False otherwise
+            Result[True, StorageError] if path was added successfully, or error.
         """
         # Normalize path
         normalized_path = os.path.abspath(path) if os.path.isabs(path) else path
-        
+
         # Check if path already exists
         for entry in self._paths:
             if entry.path == normalized_path:
@@ -143,87 +147,87 @@ class PathManager:
                 entry.description = description
                 entry.enabled = enable
                 return self._save_paths()
-        
+
         # Add new path
         self._paths.append(PathEntry(
             path=normalized_path,
             enabled=enable,
             description=description
         ))
-        
+
         logger.info(f"Added document path: {normalized_path} ({description})")
         return self._save_paths()
-    
+
     def remove_path(self, path: str) -> bool:
         """
         Remove a document path.
-        
+
         Args:
             path: The path to remove
-            
+
         Returns:
             True if path was removed, False if path was not found
         """
         # Normalize path
         normalized_path = os.path.abspath(path) if os.path.isabs(path) else path
-        
+
         # Find and remove the path
         for i, entry in enumerate(self._paths):
             if entry.path == normalized_path:
                 removed_entry = self._paths.pop(i)
                 logger.info(f"Removed document path: {removed_entry.path}")
-                return self._save_paths()
-        
+                return self._save_paths().unwrap_or(False)
+
         logger.warning(f"Path not found: {normalized_path}")
         return False
-    
+
     def enable_path(self, path: str) -> bool:
         """
         Enable a document path.
-        
+
         Args:
             path: The path to enable
-            
+
         Returns:
             True if path was enabled, False if path was not found
         """
         normalized_path = os.path.abspath(path) if os.path.isabs(path) else path
-        
+
         for entry in self._paths:
             if entry.path == normalized_path:
                 if not entry.enabled:
                     entry.enabled = True
                     logger.info(f"Enabled document path: {normalized_path}")
-                    return self._save_paths()
+                    return self._save_paths().unwrap_or(False)
                 else:
                     logger.info(f"Path already enabled: {normalized_path}")
                     return True
-        
+
         logger.warning(f"Path not found: {normalized_path}")
         return False
-    
+
     def disable_path(self, path: str) -> bool:
         """
         Disable a document path.
-        
+
         Args:
             path: The path to disable
-            
+
         Returns:
             True if path was disabled, False if path was not found
         """
         normalized_path = os.path.abspath(path) if os.path.isabs(path) else path
-        
+
         for entry in self._paths:
             if entry.path == normalized_path:
                 if entry.enabled:
                     entry.enabled = False
                     logger.info(f"Disabled document path: {normalized_path}")
-                    return self._save_paths()
+                    return self._save_paths().unwrap_or(False)
                 else:
                     logger.info(f"Path already disabled: {normalized_path}")
                     return True
-        
+
         logger.warning(f"Path not found: {normalized_path}")
         return False
     
@@ -283,7 +287,7 @@ class PathManager:
         """Clear all document paths."""
         self._paths = []
         logger.info("Cleared all document paths")
-        return self._save_paths()
+        return self._save_paths().unwrap_or(False)
     
     def reload(self) -> None:
         """Reload paths from settings file."""

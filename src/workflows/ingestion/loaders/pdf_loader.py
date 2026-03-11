@@ -21,6 +21,8 @@ from langchain_core.documents import Document
 from src.workflows.ingestion.loaders.errors import LoaderInvalidFormatError, ensure_file_exists
 from src.workflows.ingestion.preprocessor import get_preprocessor
 from src import logger
+from src.core.telemetry import emit_error
+from src.core.errors import LoaderError
 
 
 class PDFLoader:
@@ -189,6 +191,8 @@ class PDFLoader:
                     },
                 ))
             except Exception as exc:
+                err = LoaderError("pymupdf page extraction failed", cause=exc)
+                emit_error(err, component="pdf_loader", operation="_load_with_pymupdf", extra={"path": self._path, "page": page_num + 1})
                 logger.warning("pymupdf failed to extract page %d: %s", page_num + 1, exc)
         doc.close()
         logger.info(
@@ -303,6 +307,8 @@ class PDFLoader:
                         all_documents.append(doc)
 
                     except Exception as e:
+                        err = LoaderError("incremental page extraction failed", cause=e)
+                        emit_error(err, component="pdf_loader", operation="_load_incrementally", extra={"path": self._path, "page": page_num + 1})
                         logger.warning(
                             "Failed to extract page %d: %s",
                             page_num + 1,
@@ -466,6 +472,8 @@ class PDFLoader:
                     )
                 )
             except Exception as exc:
+                err = LoaderError("normal page extraction failed", cause=exc)
+                emit_error(err, component="pdf_loader", operation="_load_normally", extra={"path": self._path, "page": page_num + 1})
                 logger.warning(
                     "Failed to extract page %d during normal load: %s",
                     page_num + 1,
@@ -643,6 +651,6 @@ class PDFLoader:
             return [document]
             
         except Exception as e:
-            logger.error("Error during OCR processing for scanned PDF %s: %s", 
-                        Path(self._path).name, str(e))
+            err = LoaderError("OCR processing failed for scanned PDF", cause=e)
+            emit_error(err, component="pdf_loader", operation="_try_ocr_for_scanned_pdf", extra={"path": self._path})
             return None

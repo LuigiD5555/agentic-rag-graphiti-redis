@@ -8,6 +8,8 @@ from langchain_core.documents import Document
 
 from src.conf import settings
 from src.workflows.query.audit import get_logger
+from src.core.telemetry import emit_error
+from src.core.errors import LoaderError
 
 log = get_logger(__name__)
 
@@ -59,6 +61,8 @@ class OfficeToolClient:
                     return output_file.read_text(encoding="utf-8", errors="replace")
                 except requests.RequestException as exc:
                     last_exception = exc
+                    err = LoaderError("office conversion service unavailable", cause=exc)
+                    emit_error(err, component="office_tool_client", operation="convert_to_text", extra={"service_url": service_url, "input_path": str(input_path)})
                     log.warning("Tool-office unavailable (%s): %s", service_url, exc)
                     continue
 
@@ -128,5 +132,7 @@ class OfficeToolClient:
                 timeout=5,
             )
             return response.status_code == 200
-        except Exception:
+        except Exception as exc:
+            err = LoaderError("office tool health check failed", cause=exc)
+            emit_error(err, component="office_tool_client", operation="health_check", extra={"base_url": self.base_url})
             return False

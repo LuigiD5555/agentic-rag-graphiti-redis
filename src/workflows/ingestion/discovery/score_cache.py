@@ -24,6 +24,8 @@ from pathlib import Path
 from typing import Optional
 
 from src.workflows.query.audit import get_logger
+from src.core.telemetry import emit_error
+from src.core.errors import ScoreCacheError
 
 log = get_logger(__name__)
 
@@ -359,7 +361,8 @@ def invalidate_all_scores() -> tuple[int, int]:
             cur_d = conn.execute("DELETE FROM directory_scores")
             return cur_f.rowcount, cur_d.rowcount
     except Exception as exc:
-        log.warning("score_cache: invalidation failed: %s", exc)
+        err = ScoreCacheError(f"invalidate_all_scores failed: {exc}", cause=exc)
+        emit_error(err, component="score_cache", operation="invalidate_all_scores")
         return 0, 0
 
 

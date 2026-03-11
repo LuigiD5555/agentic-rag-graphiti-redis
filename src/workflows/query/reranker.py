@@ -13,6 +13,8 @@ from enum import Enum
 
 from src.workflows.memory.retrieval.mmr import create_mmr_reranker
 from src.workflows.query.sanitizer import get_sanitizer
+from src.core.telemetry import emit_error
+from src.core.errors import RagError
 
 logger = logging.getLogger(__name__)
 
@@ -364,8 +366,10 @@ class BoundedReranker:
             
             return reranked
             
-        except Exception as e:
-            logger.error("Cross-encoder failed: %s", e, exc_info=True)
+        except Exception as exc:
+            err = RagError(f"cross-encoder prediction failed: {exc}", cause=exc)
+            emit_error(err, component="bounded_reranker", operation="_apply_cross_encoder", extra={"candidates": len(candidates)})
+            logger.error("Cross-encoder failed: %s", exc, exc_info=True)
             return candidates
 
 

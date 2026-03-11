@@ -27,6 +27,8 @@ from src.workflows.memory.retrieval.cross_chat import (
 )
 from src.workflows.memory.retrieval.rrf_fusion import combine_kb_and_memory
 from src.workflows.memory.retrieval.mmr import create_mmr_reranker
+from src.core.telemetry import emit_error
+from src.core.errors import RagError
 
 logger = logging.getLogger(__name__)
 
@@ -158,8 +160,10 @@ class ChatMemoryManager:
                 results["used_cross_chat"] = True
 
                 logger.info(f"Cross-chat retrieval: {len(memory_results)} results")
-            except Exception as e:
-                logger.error(f"Cross-chat retrieval failed: {e}")
+            except Exception as exc:
+                err = RagError(f"cross-chat retrieval failed: {exc}", cause=exc)
+                emit_error(err, component="chat_memory_manager", operation="retrieve_with_memory", extra={"user_id": user_id})
+                logger.error("Cross-chat retrieval failed: %s", exc)
 
         # 2. RRF fusion (if enabled and we have results from both sources)
         if self.enable_rrf and kb_results and results["memory_results"]:
@@ -174,8 +178,10 @@ class ChatMemoryManager:
                 results["used_rrf"] = True
 
                 logger.info(f"RRF fusion: {len(combined)} combined results")
-            except Exception as e:
-                logger.error(f"RRF fusion failed: {e}")
+            except Exception as exc:
+                err = RagError(f"RRF fusion failed: {exc}", cause=exc)
+                emit_error(err, component="chat_memory_manager", operation="retrieve_with_memory")
+                logger.error("RRF fusion failed: %s", exc)
                 results["combined_results"] = (kb_results or [])[:top_k]
         else:
             # No fusion: just use KB results or memory results
@@ -203,8 +209,10 @@ class ChatMemoryManager:
                 results["used_mmr"] = True
 
                 logger.info(f"MMR reranking: {len(reranked)} final results")
-            except Exception as e:
-                logger.error(f"MMR reranking failed: {e}")
+            except Exception as exc:
+                err = RagError(f"MMR reranking failed: {exc}", cause=exc)
+                emit_error(err, component="chat_memory_manager", operation="retrieve_with_memory")
+                logger.error("MMR reranking failed: %s", exc)
                 results["combined_results"] = results["combined_results"][:top_k]
 
         return results

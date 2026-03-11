@@ -508,23 +508,56 @@ class RAGOrchestrator:
         if memory_context:
             context = f"{memory_context}\n\n## Relevant documents:\n{context}"
 
-        # Step 2.6: Enrich context with Neo4j graph relationships (if available)
+        # Step 2.6: Enrich context with Neo4j graph relationships (if available).
+        # Failure here is a monitored degradation: the pipeline continues with
+        # Weaviate-only results but records the failure for observability.
         used_graph_context = False
+        graph_context_degraded = False
+        graph_context_error: Optional[str] = None
         if self.neo4j_repository:
             try:
                 keywords = extract_keywords(question)
                 if keywords:
-                    graph_edges = self.neo4j_repository.get_related_context(keywords)
-                    if graph_edges:
-                        graph_context = self._build_graph_context(graph_edges)
-                        context = f"{context}\n\n## Related concepts (knowledge graph):\n{graph_context}"
-                        used_graph_context = True
-                        log.info(
-                            "Graph context: %d edges from keywords %s",
-                            len(graph_edges), keywords,
+                    graph_result = self.neo4j_repository.get_related_context(keywords)
+                    if graph_result.is_ok:
+                        graph_edges = graph_result.value
+                        if graph_edges:
+                            graph_context = self._build_graph_context(graph_edges)
+                            context = f"{context}\n\n## Related concepts (knowledge graph):\n{graph_context}"
+                            used_graph_context = True
+                            log.info(
+                                "Graph context: %d edges from keywords %s",
+                                len(graph_edges), keywords,
+                            )
+                    else:
+                        graph_context_degraded = True
+                        graph_context_error = f"{type(graph_result.error).__name__}: {graph_result.error}"
+                        log.warning("Graph context enrichment failed, using Weaviate-only results: %s", graph_result.error)
+                        emit_structured_log(
+                            log,
+                            component="rag_orchestrator",
+                            request_id=request_id,
+                            operation="graph_context_fallback",
+                            model_name="",
+                            error_type=type(graph_result.error).__name__,
+                            error_detail=str(graph_result.error),
                         )
-            except Exception as e:
-                log.warning("Graph context enrichment failed, continuing without it: %s", e)
+            except Exception as exc:
+                graph_context_degraded = True
+                graph_context_error = f"{type(exc).__name__}: {exc}"
+                log.warning("Graph context enrichment failed, using Weaviate-only results: %s", exc)
+                emit_structured_log(
+                    log,
+                    component="rag_orchestrator",
+                    request_id=request_id,
+                    operation="graph_context_fallback",
+                    model_name="",
+                    error_type=type(exc).__name__,
+                    error_detail=str(exc),
+                )
+        else:
+            graph_context_degraded = True
+            graph_context_error = "neo4j_repository not configured"
 
         # Step 3: Generate answer using LLM
         answer = self._generate_answer(
@@ -568,6 +601,8 @@ class RAGOrchestrator:
                 "used_web_search": used_web_search,
                 "used_reranking": used_reranking,
                 "used_graph_context": used_graph_context,
+                "graph_context_degraded": graph_context_degraded,
+                "graph_context_error": graph_context_error,
                 "retrieval_error": retrieval_error,
                 "thread_id": thread_id,
                 "retrieval_metadata": retrieval_metadata,

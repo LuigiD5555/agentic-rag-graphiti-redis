@@ -126,6 +126,14 @@ from .resource_governor import (
     process_with_governor,
 )
 
+from .telemetry import (
+    emit_error,
+    emit_ok,
+    set_error_reporter,
+    set_metrics_recorder,
+    ErrorReporter,
+)
+
 __all__ = [
     # Result types
     'Result',
@@ -210,4 +218,10 @@ __all__ = [
     'get_default_governor',
     'set_default_governor',
     'process_with_governor',
+    # Telemetry / observability hook
+    'emit_error',
+    'emit_ok',
+    'set_error_reporter',
+    'set_metrics_recorder',
+    'ErrorReporter',
 ]

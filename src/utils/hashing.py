@@ -9,6 +9,9 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+from src.core import Result, emit_error
+from src.core.errors import StorageError
+
 try:
     from src.workflows.query.audit import get_logger
 except Exception:  # pragma: no cover - fallback for minimal containers
@@ -18,7 +21,7 @@ except Exception:  # pragma: no cover - fallback for minimal containers
 log = get_logger(__name__)
 
 
-def compute_file_hash(file_path: str, chunk_size: int = 8192) -> Optional[str]:
+def compute_file_hash(file_path: str, chunk_size: int = 8192) -> "Result[str, StorageError]":
     """Compute SHA256 hash of file content.
 
     Args:
@@ -26,27 +29,28 @@ def compute_file_hash(file_path: str, chunk_size: int = 8192) -> Optional[str]:
         chunk_size: Size of chunks to read at a time (default 8192 bytes).
 
     Returns:
-        Hexadecimal SHA256 digest, or None if file cannot be read.
+        Result containing hexadecimal SHA256 digest, or StorageError if file cannot be read.
     """
     try:
         hasher = hashlib.sha256()
         with open(file_path, 'rb') as f:
             while chunk := f.read(chunk_size):
                 hasher.update(chunk)
-        return hasher.hexdigest()
-    except (OSError, IOError) as e:
-        log.debug("Cannot hash file %s: %s", file_path, e)
-        return None
+        return Result.ok(hasher.hexdigest())
+    except (OSError, IOError) as exc:
+        err = StorageError(f"Cannot hash file: {file_path}", cause=exc)
+        emit_error(err, component="hashing", operation="compute_file_hash", extra={"path": file_path})
+        return Result.err(err)
 
 
-def compute_directory_hash(dir_path: str) -> str:
+def compute_directory_hash(dir_path: str) -> "Result[str, StorageError]":
     """Compute hash of directory structure (file names + mtimes).
 
     Args:
         dir_path: Path to the directory to hash.
 
     Returns:
-        MD5 hash of directory structure, or empty string on error.
+        Result containing MD5 hash of directory structure, or StorageError on failure.
     """
     try:
         files = []
@@ -57,10 +61,11 @@ def compute_directory_hash(dir_path: str) -> str:
 
         files.sort()
         hash_input = "|".join(files)
-        return hashlib.md5(hash_input.encode()).hexdigest()
-    except (OSError, IOError) as e:
-        log.debug("Cannot hash directory %s: %s", dir_path, e)
-        return ""
+        return Result.ok(hashlib.md5(hash_input.encode()).hexdigest())
+    except (OSError, IOError) as exc:
+        err = StorageError(f"Cannot hash directory: {dir_path}", cause=exc)
+        emit_error(err, component="hashing", operation="compute_directory_hash", extra={"path": dir_path})
+        return Result.err(err)
 
 
 def generate_hash(text: str) -> str:

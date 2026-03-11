@@ -18,6 +18,8 @@ from src.backends.llm.factory import ProviderFactory
 from src.utils.file_operations import sort_paths_by_size_desc
 from src.workflows.query.conf import sync_settings_json
 from src.conf import settings as runtime_settings
+from src.core.telemetry import emit_error
+from src.core.errors import IngestionError, ScoreCacheError
 
 # New optimization components
 from src.workflows.ingestion.wave_planner import create_default_wave_orchestrator
@@ -150,6 +152,8 @@ class IngestionOrchestrator:
                     f_del, d_del
                 )
             except Exception as exc:
+                err = ScoreCacheError(f"--reclassify invalidation failed: {exc}", cause=exc)
+                emit_error(err, component="ingestion_orchestrator", operation="run_with_report")
                 logger.warning("--reclassify: invalidation failed: %s", exc)
 
         # Initialize coverage tracking if enabled
@@ -389,6 +393,8 @@ class IngestionOrchestrator:
                 reset,
             )
         except Exception as exc:
+            err = IngestionError("ledger/vector-store reconciliation failed", cause=exc)
+            emit_error(err, component="ingestion_orchestrator", operation="_reconcile_ledger_with_vector_store")
             logger.warning("INTEGRITY: Reconciliation check failed (non-fatal): %s", exc)
 
     def _count_weaviate_objects(self, vector_store) -> int:

@@ -11,6 +11,8 @@ from src.workflows.ingestion.loaders.errors import (
     ensure_file_exists,
 )
 from src.workflows.ingestion.loaders.office_client import OfficeToolClient
+from src.core.telemetry import emit_error
+from src.core.errors import LoaderError
 
 
 class DocxLoader:
@@ -89,7 +91,9 @@ class DocxLoader:
         try:
             with open(self._path, "rb") as handle:
                 raw = handle.read()
-        except OSError:
+        except OSError as exc:
+            err = LoaderError("plain-text fallback read failed", cause=exc)
+            emit_error(err, component="docx_loader", operation="_plain_text_fallback", extra={"path": self._path})
             return []
 
         # Try UTF-8 first, then fallback to other encodings

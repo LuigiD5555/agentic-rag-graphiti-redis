@@ -17,6 +17,8 @@ from src.workflows.memory.storage.chat_memory_schema import (
     get_chat_memory_collection,
     is_expired,
 )
+from src.core import Result
+from src.core.errors import ChatPersistenceError
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +65,7 @@ class ChatMemoryPersistence:
             logger.error(f"Exception during ChatMemory collection initialization: {e}", exc_info=True)
             self.collection = None
 
-    def save_snapshot(self, snapshot: ChatMemorySnapshot) -> bool:
+    def save_snapshot(self, snapshot: ChatMemorySnapshot) -> "Result[str, ChatPersistenceError]":
         """Save snapshot to Weaviate with embedding.
 
         Args:
@@ -73,8 +75,7 @@ class ChatMemoryPersistence:
             True if saved successfully
         """
         if self.collection is None:
-            logger.error("ChatMemory collection not available")
-            return False
+            return Result.err(ChatPersistenceError("save_snapshot: collection not available"))
 
         try:
             # Generate embedding for summary_dense
@@ -113,21 +114,20 @@ class ChatMemoryPersistence:
                 uuid = self.collection.data.insert(properties=properties)
 
             logger.info(
-                f"Saved snapshot for thread {snapshot.thread_id[:8]}... "
-                f"(uuid={str(uuid)[:8]}..., {snapshot.original_message_count} msgs)"
+                "Saved snapshot for thread %s... (uuid=%s..., %d msgs)",
+                snapshot.thread_id[:8], str(uuid)[:8], snapshot.original_message_count,
             )
-            return True
+            return Result.ok(str(uuid))
 
-        except Exception as e:
-            logger.error(f"Failed to save snapshot: {e}", exc_info=True)
-            return False
+        except Exception as exc:
+            return Result.err(ChatPersistenceError(f"save_snapshot failed: {exc}", cause=exc))
 
     def get_user_snapshots(
         self,
         user_id: str,
         include_expired: bool = False,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> "Result[List[Dict[str, Any]], ChatPersistenceError]":
         """Retrieve all snapshots for a user.
 
         Args:
@@ -139,8 +139,7 @@ class ChatMemoryPersistence:
             List of snapshot dictionaries
         """
         if self.collection is None:
-            logger.error("ChatMemory collection not available")
-            return []
+            return Result.err(ChatPersistenceError("get_user_snapshots: collection not available"))
 
         try:
             # Build filter: user_id AND (pinned OR not expired)
@@ -173,13 +172,12 @@ class ChatMemoryPersistence:
                 snapshots.append(snapshot)
 
             logger.info(
-                f"Retrieved {len(snapshots)} snapshots for user {user_id[:8]}..."
+                "Retrieved %d snapshots for user %s...", len(snapshots), user_id[:8],
             )
-            return snapshots
+            return Result.ok(snapshots)
 
-        except Exception as e:
-            logger.error(f"Failed to retrieve user snapshots: {e}", exc_info=True)
-            return []
+        except Exception as exc:
+            return Result.err(ChatPersistenceError(f"get_user_snapshots failed: {exc}", cause=exc))
 
     def search_snapshots(
         self,
@@ -187,7 +185,7 @@ class ChatMemoryPersistence:
         user_id: Optional[str] = None,
         top_k: int = 5,
         alpha: float = 0.7,
-    ) -> List[Dict[str, Any]]:
+    ) -> "Result[List[Dict[str, Any]], ChatPersistenceError]":
         """Search snapshots using hybrid search (vector + BM25).
 
         Args:
@@ -200,8 +198,7 @@ class ChatMemoryPersistence:
             List of matching snapshots with scores
         """
         if self.collection is None:
-            logger.error("ChatMemory collection not available")
-            return []
+            return Result.err(ChatPersistenceError("search_snapshots: collection not available"))
 
         try:
             # Generate query embedding if available
@@ -254,16 +251,13 @@ class ChatMemoryPersistence:
                 }
                 results.append(result)
 
-            logger.info(
-                f"Found {len(results)} snapshots for query: {query[:50]}"
-            )
-            return results
+            logger.info("Found %d snapshots for query: %s", len(results), query[:50])
+            return Result.ok(results)
 
-        except Exception as e:
-            logger.error(f"Snapshot search failed: {e}", exc_info=True)
-            return []
+        except Exception as exc:
+            return Result.err(ChatPersistenceError(f"search_snapshots failed: {exc}", cause=exc))
 
-    def cleanup_expired_snapshots(self, user_id: Optional[str] = None) -> int:
+    def cleanup_expired_snapshots(self, user_id: Optional[str] = None) -> "Result[int, ChatPersistenceError]":
         """Delete expired non-pinned snapshots.
 
         Args:
@@ -273,8 +267,7 @@ class ChatMemoryPersistence:
             Number of snapshots deleted
         """
         if self.collection is None:
-            logger.error("ChatMemory collection not available")
-            return 0
+            return Result.err(ChatPersistenceError("cleanup_expired_snapshots: collection not available"))
 
         try:
             from datetime import datetime
@@ -295,16 +288,15 @@ class ChatMemoryPersistence:
             deleted_count = result.successful if hasattr(result, 'successful') else 0
 
             logger.info(
-                f"Cleanup: deleted {deleted_count} expired snapshots"
-                + (f" for user {user_id[:8]}..." if user_id else "")
+                "Cleanup: deleted %d expired snapshots%s",
+                deleted_count, f" for user {user_id[:8]}..." if user_id else "",
             )
-            return deleted_count
+            return Result.ok(deleted_count)
 
-        except Exception as e:
-            logger.error(f"Cleanup failed: {e}", exc_info=True)
-            return 0
+        except Exception as exc:
+            return Result.err(ChatPersistenceError(f"cleanup_expired_snapshots failed: {exc}", cause=exc))
 
-    def pin_snapshot(self, snapshot_uuid: str, pinned: bool = True) -> bool:
+    def pin_snapshot(self, snapshot_uuid: str, pinned: bool = True) -> "Result[bool, ChatPersistenceError]":
         """Pin/unpin a snapshot to exempt from TTL cleanup.
 
         Args:
@@ -315,7 +307,7 @@ class ChatMemoryPersistence:
             True if updated successfully
         """
         if self.collection is None:
-            return False
+            return Result.err(ChatPersistenceError("pin_snapshot: collection not available"))
 
         try:
             self.collection.data.update(
@@ -323,14 +315,12 @@ class ChatMemoryPersistence:
                 properties={"pinned": pinned},
             )
             logger.info(
-                f"Snapshot {snapshot_uuid[:8]}... "
-                f"{'pinned' if pinned else 'unpinned'}"
+                "Snapshot %s... %s", snapshot_uuid[:8], "pinned" if pinned else "unpinned",
             )
-            return True
+            return Result.ok(True)
 
-        except Exception as e:
-            logger.error(f"Failed to pin snapshot: {e}")
-            return False
+        except Exception as exc:
+            return Result.err(ChatPersistenceError(f"pin_snapshot failed: {exc}", cause=exc))
 
 
 def create_persistence(

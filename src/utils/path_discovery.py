@@ -11,6 +11,9 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Iterable
 
+from src.core import Result, emit_error
+from src.core.errors import StorageError
+
 
 DEFAULT_EXCLUDE_FILES: tuple[str, ...] = (".ingestignore",)
 
@@ -104,24 +107,26 @@ def load_excludes_from_files(exclude_file: str | None, *, cwd: str | None = None
         if try_path in seen or not try_path.is_file():
             continue
         seen.add(try_path)
-        entries.extend(read_exclude_file(try_path))
+        entries.extend(read_exclude_file(try_path).unwrap_or([]))
 
     return entries
 
 
-def read_exclude_file(path: Path) -> list[str]:
+def read_exclude_file(path: Path) -> "Result[list[str], StorageError]":
     """Read and parse exclusion file (JSON or text).
 
     Args:
         path: Path to the exclusion file.
 
     Returns:
-        List of exclusion patterns.
+        Result containing list of exclusion patterns, or StorageError on read failure.
     """
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError:
-        return []
+    except OSError as exc:
+        err = StorageError(f"Cannot read exclude file: {path}", cause=exc)
+        emit_error(err, component="path_discovery", operation="read_exclude_file", extra={"path": str(path)})
+        return Result.err(err)
 
     if path.suffix.lower() == ".json":
         try:
@@ -129,14 +134,14 @@ def read_exclude_file(path: Path) -> list[str]:
         except json.JSONDecodeError:
             parsed = None
         if isinstance(parsed, list):
-            return [str(item).strip() for item in parsed if str(item).strip()]
+            return Result.ok([str(item).strip() for item in parsed if str(item).strip()])
         if isinstance(parsed, dict):
             collected: list[str] = []
             for key in ("directories", "patterns", "paths"):
                 items = parsed.get(key, [])
                 if isinstance(items, list):
                     collected.extend(str(item).strip() for item in items if str(item).strip())
-            return collected
+            return Result.ok(collected)
 
     lines: list[str] = []
     for line in text.splitlines():
@@ -144,7 +149,7 @@ def read_exclude_file(path: Path) -> list[str]:
         if not stripped or stripped.startswith("#"):
             continue
         lines.append(stripped)
-    return lines
+    return Result.ok(lines)
 
 
 def classify_exclude_entries(entries: Iterable[object]) -> tuple[set[str], set[str]]:

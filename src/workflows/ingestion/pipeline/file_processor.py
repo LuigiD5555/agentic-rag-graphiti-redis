@@ -23,6 +23,8 @@ from src.workflows.ingestion.loaders.helpers import should_skip_path
 from .state_helpers import register_observed_file
 from .text_processor import process_text_document
 from src.workflows.ingestion.discovery.score_cache import set_file_score
+from src.core.telemetry import emit_error
+from src.core.errors import LedgerError, CacheError, ScoreCacheError, IngestionError
 
 
 def _get_exts_hash(pipeline: Any) -> str:
@@ -36,7 +38,9 @@ def _get_exts_hash(pipeline: Any) -> str:
         h = compute_exts_hash(_settings)
         pipeline._exts_hash = h
         return h
-    except Exception:
+    except Exception as exc:
+        err = IngestionError("exts_hash computation failed", cause=exc)
+        emit_error(err, component="file_processor", operation="_get_exts_hash")
         return ""
 
 
@@ -78,6 +82,8 @@ def _update_file_cache(
                 else:
                     ledger.mark_stage_failed(active_version, Stage.UPSERT, now_ts, error_message or "unknown error")
         except Exception as exc:
+            err = LedgerError("ledger stage update failed", cause=exc)
+            emit_error(err, component="file_processor", operation="_update_file_cache", extra={"path": full_path, "status": status})
             logger.warning("Ledger update failed for %s: %s", full_path, exc)
 
     # --- Legacy cache (kept until ledger is fully validated) ---
@@ -129,6 +135,8 @@ def _update_file_cache(
             logger.error("Failed to save cache metadata for %s", full_path)
 
     except Exception as exc:
+        err = CacheError("cache metadata update failed", cause=exc)
+        emit_error(err, component="file_processor", operation="_update_file_cache", extra={"path": full_path})
         logger.error("Failed to update cache for %s: %s", full_path, exc, exc_info=True)
 
 
@@ -252,6 +260,8 @@ def process_candidate_file(
                         _get_exts_hash(pipeline)
                     )
                 except Exception as _exc:
+                    err = ScoreCacheError("score cache write failed after preprocessing failure", cause=_exc)
+                    emit_error(err, component="file_processor", operation="process_candidate_file", extra={"path": full_path})
                     logger.debug("score_cache write failed for %s: %s", full_path, _exc)
                 pipeline._current_file_info = None
                 return

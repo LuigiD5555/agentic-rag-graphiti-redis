@@ -9,6 +9,8 @@ import weaviate
 from weaviate.classes.tenants import Tenant, TenantActivityStatus
 
 from src.workflows.query.temporal.store import TemporalStore
+from src.core.telemetry import emit_error
+from src.core.errors import VectorStoreError
 
 logger = logging.getLogger(__name__)
 
@@ -126,8 +128,10 @@ class TemporalTenantManager:
             logger.info(f"Deleted temporal tenant: {tenant_name}")
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to delete temporal tenant {tenant_name}: {e}")
+        except Exception as exc:
+            err = VectorStoreError("delete_tenant", f"tenant={tenant_name}: {exc}", cause=exc)
+            emit_error(err, component="temporal_tenant_manager", operation="delete_temporal_tenant", extra={"tenant": tenant_name})
+            logger.error("Failed to delete temporal tenant %s: %s", tenant_name, exc)
             return False
 
     def list_temporal_tenants(self) -> List[str]:
@@ -151,8 +155,10 @@ class TemporalTenantManager:
             logger.debug(f"Found {len(temporal_tenants)} temporal tenants")
             return temporal_tenants
 
-        except Exception as e:
-            logger.error(f"Failed to list temporal tenants: {e}")
+        except Exception as exc:
+            err = VectorStoreError("list_tenants", f"{exc}", cause=exc)
+            emit_error(err, component="temporal_tenant_manager", operation="list_temporal_tenants")
+            logger.error("Failed to list temporal tenants: %s", exc)
             return []
 
     def cleanup_expired_tenants(self) -> int:
@@ -201,8 +207,10 @@ class TemporalTenantManager:
                 "collection": self.collection_name,
             }
 
-        except Exception as e:
-            logger.error(f"Failed to get stats for tenant {tenant_name}: {e}")
+        except Exception as exc:
+            err = VectorStoreError("get_tenant_stats", f"tenant={tenant_name}: {exc}", cause=exc)
+            emit_error(err, component="temporal_tenant_manager", operation="get_tenant_stats", extra={"tenant": tenant_name})
+            logger.error("Failed to get stats for tenant %s: %s", tenant_name, exc)
             return None
 
 

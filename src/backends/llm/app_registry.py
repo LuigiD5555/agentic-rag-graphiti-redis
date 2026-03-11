@@ -4,6 +4,8 @@ from importlib import import_module
 from importlib.metadata import entry_points
 from typing import Iterable
 
+from src.core import Result, emit_error
+from src.core.errors import ConfigError
 from src.workflows.query.apps import AppConfig
 from src.backends.llm.builtins import ensure_builtin_providers_loaded
 
