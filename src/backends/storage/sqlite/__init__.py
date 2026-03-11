@@ -200,6 +200,7 @@ class SQLiteControlPlane:
             (5, self._migration_005_add_memory_checkpoints),
             (6, self._migration_006_add_ingest_queue_and_file_tracking),
             (7, self._migration_007_add_cache_tables),
+            (8, self._migration_008_add_blackboard_tables),
         ]
         
         for version, migration_func in migrations:
@@ -562,7 +563,34 @@ class SQLiteControlPlane:
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_embedding_cache_expires ON embedding_cache(expires_at)")
-    
+
+    def _migration_008_add_blackboard_tables(self, conn: sqlite3.Connection):
+        """Add tables for swarm blackboard shared state persistence."""
+        conn.execute("""
+            CREATE TABLE blackboard_sessions (
+                session_id TEXT PRIMARY KEY,
+                user_query TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_blackboard_sessions_status ON blackboard_sessions(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_blackboard_sessions_expires ON blackboard_sessions(expires_at)")
+
+        conn.execute("""
+            CREATE TABLE blackboard_slots (
+                session_id TEXT NOT NULL,
+                slot_name TEXT NOT NULL,
+                value_json TEXT NOT NULL,
+                written_by TEXT NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY (session_id, slot_name),
+                FOREIGN KEY(session_id) REFERENCES blackboard_sessions(session_id) ON DELETE CASCADE
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_blackboard_slots_session ON blackboard_slots(session_id)")
+
     def get_connection(self) -> sqlite3.Connection:
         """Get a database connection."""
         if self.is_memory_db:
