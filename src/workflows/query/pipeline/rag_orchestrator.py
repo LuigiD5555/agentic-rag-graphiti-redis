@@ -555,9 +555,8 @@ class RAGOrchestrator:
                     error_type=type(exc).__name__,
                     error_detail=str(exc),
                 )
-        else:
-            graph_context_degraded = True
-            graph_context_error = "neo4j_repository not configured"
+        # graph_context_degraded stays False when Neo4j was never configured —
+        # that is the normal Weaviate-only mode, not an error state.
 
         # Step 3: Generate answer using LLM
         answer = self._generate_answer(

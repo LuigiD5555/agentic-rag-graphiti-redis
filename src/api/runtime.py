@@ -100,17 +100,26 @@ class RuntimeFactory:
         chat_service = provider.chat()
 
         # Neo4j initialized early so it can be injected into the orchestrator.
+        # If NEO4J_ENABLED is true but the container is not reachable, the
+        # pipeline continues with Weaviate-only results (no exception raised).
         neo4j_repository = None
         if getattr(cfg, "NEO4J_ENABLED", False):
             try:
                 from src.backends.storage.graph.neo4j_repository import Neo4jRepository
                 from src.backends.storage.graph.neo4j_schema import ensure_schema
 
-                neo4j_repository = Neo4jRepository(cfg)
-                ensure_schema(neo4j_repository.driver)
+                candidate = Neo4jRepository(cfg)
+                # Verify the container is actually reachable before committing.
+                # A short connection timeout avoids a long Bolt handshake stall
+                # when the container profile is not active.
+                candidate.driver.verify_connectivity()
+                ensure_schema(candidate.driver)
+                neo4j_repository = candidate
                 log.info("Neo4j repository initialized and schema bootstrapped")
-            except Exception as exc:  # pragma: no cover - optional
-                log.error("Failed to initialize Neo4j repository: %s", exc)
+            except Exception as exc:  # pragma: no cover - optional container
+                log.warning(
+                    "Neo4j container not reachable — running without graph enrichment: %s", exc
+                )
 
         rag_kwargs = dict(self._rag_overrides)
         rag_orchestrator = RAGOrchestrator(

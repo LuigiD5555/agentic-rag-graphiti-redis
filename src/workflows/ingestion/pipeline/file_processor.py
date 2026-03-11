@@ -98,7 +98,8 @@ def _update_file_cache(
 
     try:
         logger.debug("Computing file hash for %s", full_path)
-        content_hash = cache_manager.compute_file_hash(full_path)
+        _hash_result = cache_manager.compute_file_hash(full_path)
+        content_hash = _hash_result.unwrap_or(None) if hasattr(_hash_result, "unwrap_or") else _hash_result
         if not content_hash:
             logger.error("Failed to compute file hash for %s, cannot cache", full_path)
             return
@@ -181,7 +182,9 @@ def process_candidate_file(
             return
     elif (cache_manager := getattr(pipeline, "cache_manager", None)) and cache_manager.enabled:
         # Fallback: legacy cache path (kept until LedgerRepository is fully validated)
-        if cache_manager.is_file_unchanged(full_path):
+        _unchanged_result = cache_manager.is_file_unchanged(full_path)
+        _is_unchanged = _unchanged_result.unwrap_or(False) if hasattr(_unchanged_result, "unwrap_or") else bool(_unchanged_result)
+        if _is_unchanged:
             cached_meta = cache_manager.get_file_metadata(full_path)
             if cached_meta and cached_meta.status == "processed":
                 import datetime
@@ -200,10 +203,12 @@ def process_candidate_file(
 
         include_patterns = getattr(getattr(pipeline, "options", None), "include_duplicates_patterns", ())
         preserve_dupes = should_preserve_duplicates(full_path, include_patterns)
-        content_hash = None if preserve_dupes else cache_manager.compute_file_hash(full_path)
+        _hash_result = None if preserve_dupes else cache_manager.compute_file_hash(full_path)
+        content_hash = (_hash_result.unwrap_or(None) if hasattr(_hash_result, "unwrap_or") else _hash_result) if _hash_result is not None else None
 
         if content_hash:
-            duplicate_meta = cache_manager.find_processed_file_by_hash(content_hash)
+            _dup_result = cache_manager.find_processed_file_by_hash(content_hash)
+            duplicate_meta = _dup_result.unwrap_or(None) if hasattr(_dup_result, "unwrap_or") else _dup_result
             if duplicate_meta and duplicate_meta.file_path != full_path:
                 import datetime
                 from src.backends.storage.cache.ingestion import FileMetadata
