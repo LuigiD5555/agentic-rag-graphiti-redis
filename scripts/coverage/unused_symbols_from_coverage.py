@@ -13,10 +13,6 @@ Output formats:
 - Markdown report (default)
 - CSV report with detailed information including code snippets
 """
-
-from __future__ import annotations  # NOT USED per user preference (kept out intentionally)
-
-
 import argparse
 import ast
 import csv

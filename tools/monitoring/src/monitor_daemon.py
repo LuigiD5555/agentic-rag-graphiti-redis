@@ -545,7 +545,7 @@ class MonitoringDaemon:
         report_dir.mkdir(parents=True, exist_ok=True)
         report_file = report_dir / f"vulture_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
 
-        whitelist = "/workspace/vulture_whitelist.py"
+        whitelist = "/workspace/scripts/quality/vulture_whitelist.py"
         cmd = ["vulture", *self.vulture_targets, whitelist,
                "--min-confidence", str(self.vulture_min_confidence)]
         if self.vulture_exclude:

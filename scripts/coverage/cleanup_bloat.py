@@ -11,8 +11,8 @@ import argparse
 from pathlib import Path
 from typing import List, Dict, Set
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_ORPHANED_JSON = SCRIPT_DIR / "coverage_reports" / "orphaned_code.json"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_ORPHANED_JSON = REPO_ROOT / "tools" / "debug" / "coverage" / "coverage_reports" / "orphaned_code.json"
 
 def load_orphaned_files(orphaned_json_path: str) -> Dict[str, List[str]]:
     """Carga el archivo JSON con archivos huérfanos."""
@@ -41,7 +41,7 @@ def analyze_files_by_category(orphaned_files: List[str]) -> Dict[str, List[str]]
     }
     
     for file_path in orphaned_files:
-        rel_path = file_path.replace('/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RAG Project/rag-agentic-graphiti/', '')
+        rel_path = Path(file_path).resolve().relative_to(REPO_ROOT).as_posix()
         
         # Categorizar
         if 'loaders' in rel_path:
@@ -83,7 +83,7 @@ def create_backup(files: List[str], backup_dir: str) -> None:
     
     for file_path in files:
         if os.path.exists(file_path):
-            rel_path = file_path.replace('/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RAG Project/rag-agentic-graphiti/', '')
+            rel_path = Path(file_path).resolve().relative_to(REPO_ROOT).as_posix()
             backup_path = os.path.join(backup_dir, rel_path)
             os.makedirs(os.path.dirname(backup_path), exist_ok=True)
             shutil.copy2(file_path, backup_path)

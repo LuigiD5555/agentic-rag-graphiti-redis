@@ -7,15 +7,15 @@ import sys
 import argparse
 from pathlib import Path
 
-# Add src to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_COVERAGE_DIR = REPO_ROOT / "tools" / "debug" / "coverage" / "coverage_reports"
+DEFAULT_COVERAGE_DIR_STR = str(DEFAULT_COVERAGE_DIR)
+
+sys.path.insert(0, str(REPO_ROOT))
 
 from src.workflows.ingestion.orchestrator import IngestionOrchestrator
 from src.workflows.ingestion.options import IngestionOptions
 from src.conf import settings
-
-DEFAULT_COVERAGE_DIR = Path(__file__).resolve().parent / "coverage_reports"
-DEFAULT_COVERAGE_DIR_STR = str(DEFAULT_COVERAGE_DIR)
 
 
 def enable_coverage_tracking():

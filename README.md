@@ -207,18 +207,18 @@ python tools/debug/scripts/filter_podman_errors.py --container rag-graphiti-agen
 - `LLMService` fallback is now conservative by default: it only retries the selected chat model unless you configure fallback targets with `LMSTUDIO_CHAT_FALLBACK_MODELS=modelA,modelB`. Automatic fallback over all discovered models is opt-in with `LMSTUDIO_CHAT_AUTO_FALLBACK=true`. Bounded depth is controlled by `LMSTUDIO_CHAT_MODEL_FALLBACKS` (default `3`).
 - Retry/backoff schedule for model-load errors is configurable with `LMSTUDIO_CHAT_MODEL_LOAD_RETRY_DELAYS` (comma-separated seconds, default `0,0.6,1.2`).
 - Embedding model selection supports context-specific overrides: `EMBEDDING_MODEL_INGEST` and `EMBEDDING_MODEL_QUERY` (fallback chain: context override → `EMBEDDING_MODEL` → `LMSTUDIO_EMBED_MODEL`).
-- If you need to verify contention, run `scripts/debug/run_lmstudio_concurrency_probe.py` with both a chat model and an embed model; the gate should stabilize the throughput but may extend individual request latency slightly.
+- If you need to verify contention, run `scripts/diagnostics/run_lmstudio_concurrency_probe.py` with both a chat model and an embed model; the gate should stabilize the throughput but may extend individual request latency slightly.
 
 ### 6) Runtime probes (concurrency and LM Studio behavior)
 
 ```bash
 # App-level overlap probe: ingestion + staggered queries
-python scripts/debug/run_app_concurrency_probe.py \
+python scripts/diagnostics/run_app_concurrency_probe.py \
   --base-url http://127.0.0.1:8000 \
   --ingest-path /path/to/docs
 
 # Direct LM Studio probe: embed/chat mixed scenarios
-python scripts/debug/run_lmstudio_concurrency_probe.py \
+python scripts/diagnostics/run_lmstudio_concurrency_probe.py \
   --base-url http://127.0.0.1:1234/v1 \
   --chat-model your-chat-model \
   --embed-model your-embedding-model
@@ -618,7 +618,7 @@ python -m tools.monitoring.src.monitor_daemon
 A dedicated script is available to remove legacy integration artifacts:
 
 ```bash
-./legacy-cleanup.sh
+./scripts/maintenance/legacy-cleanup.sh
 ```
 
 This interactive script will:
