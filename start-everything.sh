@@ -7,7 +7,7 @@
 # 2. Build tool images (if missing)
 # 3. Install and enable systemd sockets
 # 4. Check and prepare volumes
-# 5. Build and start all services (Weaviate, Neo4j, App, Open WebUI, Monitoring, RabbitMQ)
+# 5. Build and start all services (Weaviate, Neo4j, App, Monitoring - Open WebUI managed by systemd)
 # 6. Verify everything is running and run pre-flight checks
 # 7. Display summary and next steps
 # ============================================================================
@@ -22,7 +22,7 @@ PYTHON_CMD="${PYTHON_CMD:-python3}"
 export COMPOSE_BAKE=false
 
 # Wait time for services to respond (seconds)
-SERVICE_WAIT_SECONDS=${SERVICE_WAIT_SECONDS:-50}
+SERVICE_WAIT_SECONDS=${SERVICE_WAIT_SECONDS:-120}
 SERVICE_WAIT_INTERVAL=${SERVICE_WAIT_INTERVAL:-2}
 
 # Colors
@@ -304,7 +304,7 @@ if podman ps | grep -q "weaviate\|neo4j\|app\|open-webui\|monitoring"; then
             print_info "open-webui service not available (profile not enabled)"
         fi
 
-    print_step "Starting all services (excluding Open WebUI - managed by systemd)..."
+    print_step "Starting all services (Weaviate, Neo4j, App, Monitoring - Open WebUI managed by systemd)..."
     podman-compose up -d
 
         print_step "Waiting for services to initialize..."
@@ -332,7 +332,7 @@ else
         print_info "open-webui service not available (profile not enabled)"
     fi
 
-    print_step "Starting all services (Weaviate, Neo4j, App, Monitoring, RabbitMQ - Open WebUI managed by systemd)..."
+    print_step "Starting all services (Weaviate, Neo4j, App, Monitoring - Open WebUI managed by systemd)..."
     podman-compose up -d
 
     print_step "Waiting for services to initialize..."

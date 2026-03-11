@@ -1,7 +1,7 @@
 ########################
-# Base (dependencies) - Alpine, NO LibreOffice
+# Base (dependencies) - Debian slim, NO LibreOffice
 ########################
-FROM python:3.12-alpine AS base
+FROM python:3.12-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -9,15 +9,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_ROOT_USER_ACTION=ignore
 
 # Minimal build dependencies for Python packages
-RUN apk add --no-cache \
-    gcc \
-    g++ \
-    musl-dev \
-    linux-headers \
-    curl \
-    git \
-    libffi-dev \
-    openssl-dev
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        curl \
+        git \
+        libffi-dev \
+        libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

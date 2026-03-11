@@ -339,7 +339,7 @@ services:
       driver: journald
     depends_on:
       app:
-        condition: service_healthy
+        condition: service_started
       weaviate:
         condition: service_healthy
     env_file: 

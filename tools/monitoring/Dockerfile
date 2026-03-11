@@ -26,6 +26,7 @@ COPY tools/monitoring/src/ ./src/
 COPY tools/monitoring/config/ ./config/
 
 # Copy shared utilities from main project
+COPY src/core/ ./src/core/
 COPY src/utils/ ./src/utils/
 COPY src/settings.py ./src/settings.py
 COPY src/__init__.py ./src/__init__.py
