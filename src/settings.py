@@ -250,6 +250,9 @@ AUTO_SCAN_INITIAL = True  # Whether to run initial scan on startup
 AUTO_SCAN_INITIAL_WAIT = 30  # Seconds to wait before initial scan
 AUTO_SCAN_MAX_FILES = 0  # Max files per scan (0 = unlimited)
 
+# ===== Swarm RAG (experimental multi-agent pipeline) =====
+SWARM_ENABLED = os.getenv("SWARM_ENABLED", "false").strip().lower() == "true"
+
 # ===== Neo4j Graph Store =====
 NEO4J_ENABLED = os.getenv("NEO4J_ENABLED", "false").strip().lower() == "true"
 NEO4J_URI = "bolt://neo4j:7687"

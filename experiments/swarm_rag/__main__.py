@@ -34,7 +34,9 @@ def _build_pipeline():
     from experiments.swarm_rag.core.pipeline import SwarmPipeline
 
     config = AppConfig()
-    chat = ProviderFactory(config).chat()
+    provider_factory = ProviderFactory(config)
+    chat = provider_factory.chat()
+    embedding_service = provider_factory.embeddings()
 
     # Try to connect Weaviate
     weaviate_retriever = None
@@ -49,6 +51,7 @@ def _build_pipeline():
         weaviate_retriever = WeaviateRetriever(
             client=client,
             collection_name=getattr(settings, "WEAVIATE_CLASS", "Document"),
+            embedding_service=embedding_service,
             top_k=10,
         )
         logging.getLogger(__name__).info("Weaviate connected")
@@ -119,7 +122,15 @@ def main() -> None:
     pipeline = _build_pipeline()
 
     print(f"Processing: {args.query[:80]}", file=sys.stderr)
-    state = asyncio.run(pipeline.run(args.query))
+
+    async def _run_with_blackboard() -> object:
+        from experiments.swarm_rag.core.blackboard import Blackboard
+        async with Blackboard.session(args.query) as (state, board):
+            state = await pipeline.run(args.query, session_id=state.session_id)
+            board.persist_state(state, written_by="cli")
+        return state
+
+    state = asyncio.run(_run_with_blackboard())
 
     if args.json:
         out = {

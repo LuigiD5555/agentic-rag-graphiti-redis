@@ -170,10 +170,13 @@ logger.info("Stats router (/api/stats) included")
 app.include_router(system_router)
 logger.info("System router (/api/system) included")
 
-# Include SWARM RAG router
-from src.api.routes.swarm import router as swarm_router
-app.include_router(swarm_router)
-logger.info("SWARM router (/swarm) included")
+# Include SWARM RAG router (optional — activated by SWARM_ENABLED=true)
+if rag_config.SWARM_ENABLED:
+    from src.api.routes.swarm import router as swarm_router
+    app.include_router(swarm_router)
+    logger.info("SWARM router (/swarm) included")
+else:
+    logger.info("SWARM router disabled (SWARM_ENABLED=false)")
 
 
 # Exception handlers
