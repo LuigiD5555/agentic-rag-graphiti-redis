@@ -276,6 +276,18 @@ else
     print_info "Production mode - monitoring features disabled by default"
 fi
 
+# Ask about Swarm RAG plugin
+read -p "Enable Swarm RAG plugin (experimental multi-agent pipeline on port 8001)? (y/N): " enable_swarm
+SWARM_PROFILES=""
+if [[ "$enable_swarm" =~ ^[Yy]$ ]]; then
+    SWARM_PROFILES="--profile swarm"
+    export SWARM_ENABLED=true
+    print_info "Swarm RAG plugin enabled (port ${HOST_SWARM_API_PORT:-8001})"
+else
+    export SWARM_ENABLED=false
+    print_info "Swarm RAG plugin disabled (use --profile swarm to enable later)"
+fi
+
 print_step "Checking if services are already running..."
 
 if podman ps | grep -q "weaviate\|neo4j\|app\|open-webui\|monitoring"; then
@@ -283,7 +295,7 @@ if podman ps | grep -q "weaviate\|neo4j\|app\|open-webui\|monitoring"; then
     read -p "Rebuild and restart all services? (y/N): " restart
     if [[ "$restart" =~ ^[yY]$ ]]; then
         print_step "Stopping all services..."
-        podman-compose down
+        podman-compose $SWARM_PROFILES down
 
         print_step "Building custom images..."
 
@@ -304,8 +316,19 @@ if podman ps | grep -q "weaviate\|neo4j\|app\|open-webui\|monitoring"; then
             print_info "open-webui service not available (profile not enabled)"
         fi
 
+        # Build swarm image if enabled
+        if [[ "$enable_swarm" =~ ^[Yy]$ ]]; then
+            print_step "Building swarm image..."
+            if ! podman-compose --profile swarm build swarm; then
+                print_warning "Failed to build swarm image (continuing without it)"
+                SWARM_PROFILES=""
+            else
+                print_success "Swarm image built"
+            fi
+        fi
+
     print_step "Starting all services (Weaviate, Neo4j, App, Monitoring - Open WebUI managed by systemd)..."
-    podman-compose up -d
+    podman-compose $SWARM_PROFILES up -d
 
         print_step "Waiting for services to initialize..."
         sleep 10
@@ -332,8 +355,19 @@ else
         print_info "open-webui service not available (profile not enabled)"
     fi
 
+    # Build swarm image if enabled
+    if [[ "$enable_swarm" =~ ^[Yy]$ ]]; then
+        print_step "Building swarm image..."
+        if ! podman-compose --profile swarm build swarm; then
+            print_warning "Failed to build swarm image (continuing without it)"
+            SWARM_PROFILES=""
+        else
+            print_success "Swarm image built"
+        fi
+    fi
+
     print_step "Starting all services (Weaviate, Neo4j, App, Monitoring - Open WebUI managed by systemd)..."
-    podman-compose up -d
+    podman-compose $SWARM_PROFILES up -d
 
     print_step "Waiting for services to initialize..."
     sleep 10
@@ -445,6 +479,11 @@ check_service "Weaviate  " "8080"
 check_service "Neo4j     " "7474"
 check_service "RAG API   " "8000"
 
+if [[ "$enable_swarm" =~ ^[Yy]$ ]]; then
+    swarm_port="${HOST_SWARM_API_PORT:-8001}"
+    check_service "Swarm API " "$swarm_port" "no"
+fi
+
 if curl -s -f -m 2 "http://localhost:5555/health" >/dev/null 2>&1; then
     print_success "Open WebUI responding on port 5555"
 else
@@ -479,8 +518,9 @@ test_tool_endpoint() {
     fi
 }
 
-test_tool_endpoint "tool-extractor (extractor)" "9101"
-test_tool_endpoint "tool-docproc" "9106"
+test_tool_endpoint "tool-extractor" "9101"
+test_tool_endpoint "tool-document-processor" "9106"
+test_tool_endpoint "tool-websearch" "9105"
 
 # Run comprehensive pre-flight checks now that containers are running
 print_step "Running comprehensive pre-flight checks..."
@@ -514,6 +554,13 @@ echo "    ├─ Docs:      http://localhost:8000/docs"
 echo "    ├─ Health:    http://localhost:8000/health"
 echo "    └─ Ollama-compatible endpoints at /api/*"
 echo ""
+if [[ "$enable_swarm" =~ ^[Yy]$ ]]; then
+    swarm_port="${HOST_SWARM_API_PORT:-8001}"
+    echo -e "  ${CYAN}[Heavy Round-Tipped Rightwards Arrow] Swarm API:${NC}   http://localhost:${swarm_port}"
+    echo "    ├─ Query:     POST http://localhost:${swarm_port}/swarm/query"
+    echo "    └─ Health:    http://localhost:${swarm_port}/swarm/health"
+    echo ""
+fi
 echo -e "  ${CYAN}[Heavy Round-Tipped Rightwards Arrow] Open WebUI:${NC}  http://localhost:5555"
 echo ""
 echo -e "${BOLD}Database Services:${NC}"
@@ -522,8 +569,12 @@ echo "  - Neo4j:       http://localhost:7474 (Graph DB, user: neo4j)"
 echo "  - SQLite:      ./data/control_plane.db (Control Plane)"
 echo ""
 echo -e "${BOLD}Preprocessing Tools (Socket-Activated):${NC}"
-echo "  - tool-extractor (extractor): http://127.0.0.1:9101 (ZIP/7z/tar extraction)"
-echo "  - tool-docproc: http://127.0.0.1:9106 (OCR + Office unified)"
+echo "  - tool-extractor:          http://127.0.0.1:9101 (ZIP/7z/tar extraction)"
+echo "  - tool-document-processor: http://127.0.0.1:9106 (OCR + Office unified)"
+echo "  - tool-websearch:          http://127.0.0.1:9105 (SearXNG web search)"
+echo ""
+echo -e "${BOLD}Alt: start tools via compose profile (no systemd required):${NC}"
+echo "  podman-compose --profile tools up -d"
 echo ""
 echo "==================================================================="
 echo ""
@@ -540,6 +591,7 @@ echo "   ${YELLOW}→ DOCX, ZIP, etc. will be processed automatically${NC}"
 echo ""
 echo -e "${CYAN}[Heavy Round-Tipped Rightwards Arrow] Run a query (Terminal):${NC}"
 echo "   python -m src.query.cli \"your question here\""
+echo "   python -m src.query.cli --engine swarm \"your question here\"   # Swarm pipeline"
 echo ""
 echo "==================================================================="
 echo ""

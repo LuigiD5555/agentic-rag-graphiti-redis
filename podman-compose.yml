@@ -278,6 +278,72 @@ services:
           cpus: "${APP_CPUS:-2.0}"
           memory: "${APP_MEMORY:-3g}"
 
+  # ---------------------------------------------------------------------------
+  # Swarm RAG plugin — only started with: podman-compose --profile swarm up
+  # Runs the same app image but with SWARM_ENABLED=true, which registers the
+  # /swarm/query and /swarm/health endpoints on a separate port so it doesn't
+  # conflict with the standard app service.
+  # ---------------------------------------------------------------------------
+  swarm:
+    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_swarm_1"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    restart: "unless-stopped"
+    logging:
+      driver: journald
+    profiles:
+      - swarm
+    depends_on:
+      weaviate:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+    env_file: .env
+    network_mode: "host"
+    environment:
+      SWARM_ENABLED: "true"
+      VECTOR_BACKEND: "${VECTOR_BACKEND:-weaviate}"
+      WEAVIATE_URL: "http://127.0.0.1:${HOST_WEAVIATE_HTTP_PORT:-8080}"
+      WEAVIATE_GRPC_PORT: "${HOST_WEAVIATE_GRPC_PORT:-50051}"
+      WEAVIATE_CLASS: "${WEAVIATE_CLASS:-RAGDocument}"
+      WEAVIATE_MULTI_TENANCY: "${WEAVIATE_MULTI_TENANCY:-true}"
+      WEAVIATE_DEFAULT_TENANT: "${WEAVIATE_DEFAULT_TENANT:-tenant-default}"
+      WEAVIATE_SKIP_INIT_CHECKS: "${WEAVIATE_SKIP_INIT_CHECKS:-true}"
+      CONTROL_PLANE_DB_PATH: "${CONTROL_PLANE_DB_PATH:-/app/data/control_plane.db}"
+      NEO4J_URI: "bolt://127.0.0.1:${HOST_NEO4J_BOLT_PORT:-7687}"
+      NEO4J_USER: "${NEO4J_USER:-neo4j}"
+      NEO4J_PASSWORD: "${NEO4J_PASSWORD:-neo4j123}"
+      OPENAI_API_BASE: "http://127.0.0.1:${HOST_LMSTUDIO_HTTP_PORT:-1234}/v1"
+      LMSTUDIO_HOST: "127.0.0.1"
+      LMSTUDIO_CHAT_MODEL: "${LMSTUDIO_CHAT_MODEL:-liquid/lfm2-1.2b}"
+      LMSTUDIO_EMBED_MODEL: "${LMSTUDIO_EMBED_MODEL:-text-embedding-nomic-embed-text-v2-moe}"
+      EMBEDDING_MODEL: "${EMBEDDING_MODEL:-text-embedding-nomic-embed-text-v2-moe}"
+      API_PORT: "${HOST_SWARM_API_PORT:-8001}"
+      API_MODE: "${API_MODE:-ollama}"
+    volumes:
+      - ${HOST_DOCUMENTS_DIR:-./data/documents-fallback}:/mnt/Documents/Documents:Z
+      - ${ACTIVE_LIBROS_DIR:-./data/libros-fallback}:/mnt/resources/Libros:Z
+      - ${HOST_DATA_DIR:-./data}:/app/data:Z
+      - ./.ingestignore:/app/.ingestignore:Z
+      - ./src:/app/src:ro,Z
+      - ./experiments:/app/experiments:ro,Z
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, requests; requests.get(f'http://127.0.0.1:{os.getenv(\"API_PORT\", \"8001\")}/health')"]
+      interval: 45s
+      timeout: 20s
+      retries: 5
+      start_period: 90s
+    stop_grace_period: 30s
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+    deploy:
+      resources:
+        limits:
+          cpus: "${SWARM_CPUS:-2.0}"
+          memory: "${SWARM_MEMORY:-3g}"
+
   autoscan:
     container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_autoscan_1"
     build:
@@ -409,6 +475,109 @@ services:
         limits:
           cpus: "${MONITORING_CPUS:-0.5}"
           memory: "${MONITORING_MEMORY:-512m}"
+
+  # ---------------------------------------------------------------------------
+  # Processing tools — only started with: podman-compose --profile tools up
+  # Without this profile (plain podman-compose up) these are not started.
+  # In production the same containers are managed by systemd socket activation
+  # (on-demand, auto-shutdown after idle). The profile is for dev / CI / setups
+  # where systemd user units are not available.
+  # ---------------------------------------------------------------------------
+
+  tool-document-processor:
+    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_tool-document-processor_1"
+    image: "localhost/rag-tool-document-processor:latest"
+    restart: "unless-stopped"
+    logging:
+      driver: journald
+    profiles:
+      - tools
+    network_mode: "host"
+    environment:
+      HOME: /tmp
+    volumes:
+      - ${HOST_TOOL_DOCPROC_CACHE:-~/.cache/rag-tools/document-processor}:/work:Z
+      - /mnt:/mnt:ro
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${HOST_TOOL_DOCPROC_PORT:-9106}/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    stop_grace_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: "${TOOL_DOCPROC_MEMORY:-500m}"
+
+  tool-extractor:
+    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_tool-extractor_1"
+    image: "localhost/rag-tool-extractor:latest"
+    restart: "unless-stopped"
+    logging:
+      driver: journald
+    profiles:
+      - tools
+    network_mode: "host"
+    volumes:
+      - ${HOST_TOOL_EXTRACTOR_CACHE:-~/.cache/rag-tools/extractor}:/work:Z
+      - /mnt:/mnt:ro
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${HOST_TOOL_EXTRACTOR_PORT:-9101}/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "${TOOL_EXTRACTOR_CPUS:-0.25}"
+          memory: "${TOOL_EXTRACTOR_MEMORY:-512m}"
+
+  tool-websearch:
+    container_name: "${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}_tool-websearch_1"
+    image: "localhost/rag-tool-websearch:latest"
+    restart: "unless-stopped"
+    logging:
+      driver: journald
+    profiles:
+      - tools
+    network_mode: "host"
+    environment:
+      SEARXNG_SECRET: "${SEARXNG_SECRET:-change-this-in-production}"
+    volumes:
+      - ${HOST_TOOL_WEBSEARCH_CACHE:-~/.cache/rag-tools/websearch}:/var/cache/searxng:Z
+      - ${HOST_SEARXNG_CONFIG:-./config/searxng}:/etc/searxng:ro,Z
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/log/uwsgi
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${HOST_TOOL_WEBSEARCH_PORT:-9105}/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 15s
 
 volumes:
   neo4j_data: {}
