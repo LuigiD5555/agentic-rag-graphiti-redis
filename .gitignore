@@ -1,0 +1,147 @@
+# -----------------------------
+# Python
+# -----------------------------
+**/__pycache__/**
+**/*.pyc
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.Python
+.pytest_cache/
+.venv/
+vendor/open-webui/
+.coverage
+coverage.xml
+htmlcov/
+
+
+# -----------------------------
+# Virtual environments
+# -----------------------------
+env/
+**/.venv/**
+**/venv/**
+ENV/
+env.bak/
+venv.bak/
+.mypy_cache/
+.venv
+
+# -----------------------------
+# Environment files (do not commit secrets)
+# -----------------------------
+.env
+.env.local
+.env.*.local
+
+# -----------------------------
+# OS generated files
+# -----------------------------
+**/.DS_Store
+**/Thumbs.db
+
+# -----------------------------
+# Editors & IDEs
+# -----------------------------
+.idea
+.vscode
+*.sublime-workspace
+*.sublime-project
+.cspell/
+.lh/
+.claude
+
+# -----------------------------
+# Logs & temp files
+# -----------------------------
+**/logs/
+tools/debug/scripts/reorganize.py
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# -----------------------------
+# Data storage (local volumes)
+# -----------------------------
+qdrant_data/
+redis_data/
+neo4j_data/
+
+# -----------------------------
+# Documents ingestion path
+# -----------------------------
+/mnt/Documents/Documents/
+/mnt/Documents/**
+
+# -----------------------------
+# Docker & Podman
+# -----------------------------
+*.pid
+*.seed
+*.pid.lock
+docker-compose.override.yml
+podman-compose.override.yml
+
+# -----------------------------
+# Generated artifacts
+# -----------------------------
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# -----------------------------
+# Notebook checkpoints
+# -----------------------------
+.ipynb_checkpoints/
+
+# -----------------------------
+# Ingestion configuration (optional: user-specific)
+# -----------------------------
+# Uncomment this if you want to keep ingestion configs private:
+# .ingestignore
+
+# -----------------------------
+# Other
+# -----------------------------
+~$*
+tools/generate_try_except_report.py
+tools/generate_if_report.py
+# experiment artifacts
+.file_discovery_cache.json
+config/problematic_files.json
+ejemplo_final.csv
+tools/debug/coverage/
+tools/debug/coverage_reports/
+tools/debug/=*
+# -----------------------------
+# Node / Frontend
+# -----------------------------
+**/node_modules/**
+**/dist/**
+**/build/**
+
+# -----------------------------
+# Version control
+# -----------------------------
+**/.git/**
+**/.hg/**
+**/.svn/**
+
+# -----------------------------
+# RAG
+# -----------------------------
+data
+tests/logs
+tests/scripts
+tests/systemd
+docs
+.volumes
+final_test.db
+test.db
+CLAUDE.md
+AGENTS.md
+.agents

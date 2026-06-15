@@ -1,0 +1,88 @@
+{
+  "/tmp/tmp3bkhhawj/test_project": {
+    "mtime": 1769915640.9766865,
+    "file_count": 3,
+    "files": [
+      "/tmp/tmp3bkhhawj/test_project/file3.txt",
+      "/tmp/tmp3bkhhawj/test_project/file2.md",
+      "/tmp/tmp3bkhhawj/test_project/file1.py"
+    ],
+    "subdirs_hash": "fe7da82db30a1e1c131f2cd089970376",
+    "scan_time": 1769915641.0894356,
+    "options_hash": "01033f15f257beeb44718e1554191250"
+  },
+  "/tmp/tmp3bkhhawj/test_project/subdir": {
+    "mtime": 1769915640.9766865,
+    "file_count": 1,
+    "files": [
+      "/tmp/tmp3bkhhawj/test_project/subdir/file4.py"
+    ],
+    "subdirs_hash": "be85e3010e0a95818564e8961b091a92",
+    "scan_time": 1769915641.1873267,
+    "options_hash": "01033f15f257beeb44718e1554191250"
+  },
+  "/tmp/tmpk9jvdz1p/test_project": {
+    "mtime": 1769915961.8007631,
+    "file_count": 3,
+    "files": [
+      "/tmp/tmpk9jvdz1p/test_project/file3.txt",
+      "/tmp/tmpk9jvdz1p/test_project/file2.md",
+      "/tmp/tmpk9jvdz1p/test_project/file1.py"
+    ],
+    "subdirs_hash": "974adfcf0ea3fd8c4222c02c2031216e",
+    "scan_time": 1769915961.8125448,
+    "options_hash": "01033f15f257beeb44718e1554191250"
+  },
+  "/tmp/tmpk9jvdz1p/test_project/subdir": {
+    "mtime": 1769915961.8007631,
+    "file_count": 1,
+    "files": [
+      "/tmp/tmpk9jvdz1p/test_project/subdir/file4.py"
+    ],
+    "subdirs_hash": "d0de80f1ba6e2eb3f8ff095055d79944",
+    "scan_time": 1769915961.9507313,
+    "options_hash": "01033f15f257beeb44718e1554191250"
+  },
+  "/tmp/tmp01ccna03/test_project": {
+    "mtime": 1769916076.0240104,
+    "file_count": 4,
+    "files": [
+      "/tmp/tmp01ccna03/test_project/file5.py",
+      "/tmp/tmp01ccna03/test_project/file3.txt",
+      "/tmp/tmp01ccna03/test_project/file2.md",
+      "/tmp/tmp01ccna03/test_project/file1.py"
+    ],
+    "subdirs_hash": "675f7b26e79906de49524a24c2a2e580",
+    "scan_time": 1769916076.1257236,
+    "options_hash": "01033f15f257beeb44718e1554191250"
+  },
+  "/tmp/tmp01ccna03/test_project/subdir": {
+    "mtime": 1769916075.6442113,
+    "file_count": 1,
+    "files": [
+      "/tmp/tmp01ccna03/test_project/subdir/file4.py"
+    ],
+    "subdirs_hash": "dce5afbeb8741f1fc0654425817161b2",
+    "scan_time": 1769916075.700571,
+    "options_hash": "01033f15f257beeb44718e1554191250"
+  },
+  "/tmp/tmpzm8lp4g4/resumable_test": {
+    "mtime": 1769916076.3304622,
+    "file_count": 10,
+    "files": [
+      "/tmp/tmpzm8lp4g4/resumable_test/file9.txt",
+      "/tmp/tmpzm8lp4g4/resumable_test/file8.txt",
+      "/tmp/tmpzm8lp4g4/resumable_test/file7.txt",
+      "/tmp/tmpzm8lp4g4/resumable_test/file6.txt",
+      "/tmp/tmpzm8lp4g4/resumable_test/file5.txt",
+      "/tmp/tmpzm8lp4g4/resumable_test/file4.txt",
+      "/tmp/tmpzm8lp4g4/resumable_test/file3.txt",
+      "/tmp/tmpzm8lp4g4/resumable_test/file2.txt",
+      "/tmp/tmpzm8lp4g4/resumable_test/file1.txt",
+      "/tmp/tmpzm8lp4g4/resumable_test/file0.txt"
+    ],
+    "subdirs_hash": "4ae40e4e0fab28de73f33dc1869bc45d",
+    "scan_time": 1769916076.7062516,
+    "options_hash": "6dbd69e197b9c4447a5f6909aa1bd98f"
+  }
+}

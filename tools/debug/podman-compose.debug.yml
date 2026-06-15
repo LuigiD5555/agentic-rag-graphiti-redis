@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # Debugging Tools Container
+  # ============================================
+  # On-demand container with diagnostic utilities
+  # Usage: podman-compose -f tools/debug/podman-compose.debug.yml up -d
+
+  rag-debug:
+    build:
+      context: .
+      dockerfile: Containerfile
+    container_name: rag-debug
+
+    # Use host network to access services (same as main services)
+    network_mode: "host"
+
+    # Mount logs directory for journal_dump.sh
+    volumes:
+      - ../../logs:/logs:rw
+      - /run/user/1000/podman/podman.sock:/run/podman/podman.sock:ro  # Access to podman for monitoring
+
+    # Environment variables
+    environment:
+      - COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-rag-graphiti-agentic}
+      - ENABLE_LOG_EXPORT=${ENABLE_LOG_EXPORT:-1}
+      - DEBOUNCE_SECONDS=${DEBOUNCE_SECONDS:-3}
+      - DEFAULT_SINCE=${DEFAULT_SINCE:-24 hours ago}
+      - MEMORY_THRESHOLD=${MEMORY_THRESHOLD:-85}
+
+      # Access to RAG services via localhost (host network)
+      - WEAVIATE_URL=http://127.0.0.1:8080
+      - API_URL=http://127.0.0.1:8000
+
+    # Keep container running for exec commands
+    command: tail -f /dev/null
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Resource limits (minimal)
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M

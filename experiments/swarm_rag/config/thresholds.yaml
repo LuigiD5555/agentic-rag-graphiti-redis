@@ -1,0 +1,39 @@
+# Thresholds and tunable parameters for SWARM RAG
+
+reasoning:
+  # Below this confidence the pipeline escalates to LLM API
+  escalation_threshold: 0.6
+  # More than this many unresolved version conflicts also triggers escalation
+  max_unresolved_conflicts: 2
+
+retrieval:
+  # Minimum hybrid search score to keep a hit
+  min_score: 0.3
+  # Max hits passed to the reasoning layer after compression
+  max_hits: 10
+  # Weaviate hybrid alpha (1.0 = vector only, 0.0 = BM25 only)
+  weaviate_alpha: 0.7
+
+generator:
+  # SLM inference parameters (low temp — only verbalize, don't invent)
+  temperature: 0.3
+  top_p: 0.9
+  top_k: 40
+  repeat_penalty: 1.1
+  max_tokens: 1024
+
+complexity:
+  # Word count thresholds for the F1 heuristic complexity estimator
+  high_word_count: 30
+  medium_word_count: 12
+
+perception:
+  # Set to true to use HuggingFace models (requires torch + transformers installed)
+  # Equivalent to env var SWARM_HF_PERCEPTION=1
+  hf_perception: false
+  # Minimum zero-shot confidence to trust HF classifier (below → regex fallback)
+  hf_min_confidence: 0.4
+  # Max keywords to extract per query
+  max_keywords: 10
+  # Max entities from NER per query
+  max_entities: 20

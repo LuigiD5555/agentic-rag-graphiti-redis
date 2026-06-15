@@ -1,0 +1,564 @@
+import os
+from pathlib import Path
+from typing import Any
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Base path for resolving project-relative files (.env, data/settings.json, etc.).
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Paths for environment file and user-editable settings (JSON).
+ENV_FILE = BASE_DIR / ".env"
+USER_SETTINGS_FILE = BASE_DIR / "data/settings.json"
+
+# Vector store registry (aliases -> connection/config dict).
+VECTOR_STORES = {
+    "default": {
+        "ENGINE": "weaviate",
+        "NAME": "RAGDocument",
+        "USER": "",
+        "PASSWORD": "",
+        "HOST": "localhost",
+        "PORT": 8080,
+        "SCHEME": "http",
+        "PATH": "",
+        "API_KEY": "",
+        "AUTOCOMMIT": True,
+        "ATOMIC_REQUESTS": False,
+        "CONN_MAX_AGE": 0,
+        "CONN_HEALTH_CHECKS": False,
+        "TIME_ZONE": None,
+        "OPTIONS": {
+            "GRPC_PORT": 50051,
+            "CONNECT_RETRIES": 5,
+            "CONNECT_BACKOFF": 2.0,
+            "MULTI_TENANCY": True,
+            "DEFAULT_TENANT": "tenant-default",
+        },
+        "TEST": {},
+    }
+}
+
+# Graph store registry (aliases -> connection/config dict).
+GRAPH_STORES = {
+    "default": {
+        "ENGINE": "neo4j",
+        "NAME": "neo4j",
+        "USER": "neo4j",
+        "PASSWORD": "",
+        "HOST": "neo4j",
+        "PORT": 7687,
+        "SCHEME": "bolt",
+        "AUTOCOMMIT": True,
+        "ATOMIC_REQUESTS": False,
+        "CONN_MAX_AGE": 0,
+        "CONN_HEALTH_CHECKS": False,
+        "TIME_ZONE": None,
+        "OPTIONS": {},
+        "TEST": {},
+    }
+}
+
+# Cache backend registry (aliases -> cache backend config dict).
+# Note: external cache is being removed in favor of SQLite control plane.
+# This is kept for backward compatibility during migration.
+CACHES: dict[str, dict[str, Any]] = {
+    "default": {
+        "BACKEND": "null",  # Using SQLite control plane instead
+        "LOCATION": "",
+        "TIMEOUT": None,
+        "KEY_PREFIX": "",
+        "VERSION": 1,
+        "OPTIONS": {},
+    }
+}
+
+# SQLite control plane configuration
+CONTROL_PLANE_DB_PATH: str = os.getenv("CONTROL_PLANE_DB_PATH", "./data/control_plane.db")
+CONVERSATION_PERSISTENCE_ENABLED: bool = os.getenv("CONVERSATION_PERSISTENCE_ENABLED", "false").strip().lower() == "true"
+
+# Privacy and sanitizer configuration
+SANITIZER_ENABLED: bool = os.getenv("SANITIZER_ENABLED", "true").strip().lower() == "true"
+SECRETS_STRIP_ALWAYS: bool = os.getenv("SECRETS_STRIP_ALWAYS", "true").strip().lower() == "true"
+PII_MASKING_DEFAULT: str = os.getenv("PII_MASKING_DEFAULT", "OFF")  # ON|OFF
+
+# Rerank configuration
+RERANK_ENABLED: bool = os.getenv("RERANK_ENABLED", "false").strip().lower() == "true"
+RERANK_MAX_CANDIDATES: int = int(os.getenv("RERANK_MAX_CANDIDATES", "20"))
+RERANK_TOP_N: int = int(os.getenv("RERANK_TOP_N", "8"))
+# none|mmr|cross_encoder|mmr_then_cross_encoder
+RERANK_MODE: str = os.getenv("RERANK_MODE", "mmr")
+RETRIEVE_TOP_K_CANDIDATES: int = int(os.getenv("RETRIEVE_TOP_K_CANDIDATES", "30"))
+
+# Contextual Retrieval enrichment (RAG 2.0 — adds LLM-generated context prefix to each chunk).
+# Keep disabled by default; enable per collection after testing.
+# WARNING: adds 1 LM Studio chat call per chunk during ingestion — keep RAG_PARALLEL_WORKERS=1.
+CONTEXT_ENRICHMENT_ENABLED: bool = os.getenv("CONTEXT_ENRICHMENT_ENABLED", "false").strip().lower() == "true"
+CONTEXT_ENRICHMENT_MODEL: str = os.getenv("CONTEXT_ENRICHMENT_MODEL", "")  # empty = use default chat model
+CONTEXT_ENRICHMENT_MAX_TOKENS: int = int(os.getenv("CONTEXT_ENRICHMENT_MAX_TOKENS", "200"))
+CONTEXT_ENRICHMENT_DOC_CHARS: int = int(os.getenv("CONTEXT_ENRICHMENT_DOC_CHARS", "3000"))
+
+# Provider adapters registry (aliases -> provider config dict).
+PROVIDERS = {
+    "default": {
+        # Adapter name registered in the provider registry (not an import path).
+        "ENGINE": "lmstudio",
+        "HOST": "host.containers.internal",
+        "PORT": 1234,
+        "EXTRA_HOSTS": [],
+        "CHAT_MODEL": "",
+        "REQUIRE_SERVER": False,
+        "OPTIONS": {},
+    },
+    "anythingllm": {
+        "ENGINE": "anythingllm",
+        "URL": "",
+        "API_KEY": "",
+        "OPTIONS": {},
+    },
+    "ollama": {
+        "ENGINE": "ollama",
+        "HOST": "localhost",
+        "PORT": 11434,
+        "OPTIONS": {},
+    },
+    "huggingface": {
+        "ENGINE": "huggingface",
+        "API_KEY": "",
+        "MODEL": "",
+        "OPTIONS": {},
+    },
+    "litellm": {
+        "ENGINE": "litellm",
+        "TARGET_PROVIDER": "lmstudio",
+        "OPTIONS": {},
+    },
+}
+
+# App registry (providers are registered by these AppConfig entries).
+INSTALLED_APPS = [
+    "src.backends.llm.lmstudio.apps.LMStudioProviderAppConfig",
+    "src.backends.llm.openai.apps.OpenAIProviderAppConfig",
+    "src.backends.llm.huggingface.apps.HuggingFaceProviderAppConfig",
+    "src.backends.llm.anythingllm.apps.AnythingLLMProviderAppConfig",
+    "src.backends.llm.litellm_gateway.apps.LiteLLMGatewayAppConfig",
+]
+AUTOLOAD_APP_ENTRYPOINTS = False
+APP_ENTRYPOINT_GROUP = "rag_agentic_graphiti.apps"
+
+# Embeddings settings (used by ingestion/pipeline token limits and embedding size).
+EMBEDDING_DIM = 768
+EMBEDDING_MAX_TOKENS = int(os.getenv("EMBEDDING_MAX_TOKENS", "512"))
+
+# ChatMemory settings (conversation snapshot persistence).
+CHATMEMORY_TTL_DAYS = 30  # Default TTL for conversation snapshots
+CHATMEMORY_VECTORIZER = "none"  # External embeddings (not Weaviate's built-in vectorizer)
+SNAPSHOT_TTL_DAYS = 30  # Alias for backward compatibility
+SNAPSHOT_ENABLED = False  # Enable automatic snapshot scheduler
+SNAPSHOT_INTERVAL_HOURS = 24  # Snapshot creation interval
+CLEANUP_ENABLED = False  # Enable automatic cleanup scheduler
+CLEANUP_INTERVAL_HOURS = 24  # Cleanup interval for expired snapshots
+TEMPORAL_CLEANUP_ENABLED = False  # Enable temporal document cleanup
+TEMPORAL_CLEANUP_INTERVAL_HOURS = 24  # Temporal cleanup interval
+
+# LiteLLM gateway setting (used by the LiteLLM adapter).
+LITELLM_TARGET_PROVIDER = "lmstudio"
+
+# Ingestion settings (discovery + splitting).
+# DOCS_PATHS define the BASE paths to scan.
+DOCS_PATHS = [
+    "/mnt/Documents/Documents",  # Main documents directory
+    "/mnt/resources/Libros/Aprendizaje",  # Books directory
+]
+CHUNK_SIZE = 900
+CHUNK_OVERLAP = 180
+INGEST_STREAMING = True
+DOCS_ENABLED_PATHS = ()
+DUPLICATES_DOC_EXCEPTIONS = ("__init__.py",)  # Paths that should NOT be deduplicated
+DOCS_EXCLUDE_FILE = ""
+DOCS_EXCLUDE_DIRS = ()
+# Exclude specific subdirectories that contain code/projects (not knowledge)
+DOCS_EXCLUDE_GLOBS = (
+    # Exclude all programming projects and code
+    "*/Programacion/Aprendiendo_Programacion/*",
+    "*/Programacion/Proyectos_Programacion/*",
+    "*/Programacion/Deprecated*",
+
+    # Exclude specific heavy folders
+    "*/Certificates/*",
+    "*/Odoo/*",
+    "*/fact_checker*",
+
+    # Keep only /mnt/resources/Libros/Aprendizaje (books)
+    # Everything else in /mnt/Documents/Documents will be excluded
+)
+DOCS_FILE_EXTS = (
+    ".pdf",
+    ".docx",
+    ".doc",
+    ".docm",
+    ".rtf",
+    ".txt",
+    ".md",
+    ".csv",
+    ".xlsx",
+    ".xls",
+    ".xlsm",
+    ".xlsb",
+    ".xlt",
+    ".ppt",
+    ".pptx",
+    ".pptm",
+    ".pps",
+    ".ppsx",
+    ".odt",
+    ".ods",
+    ".odp",
+    ".eml",
+    ".msg",
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".java",
+    ".go",
+    ".rb",
+    ".cs",
+    ".php",
+    ".c",
+    ".cpp",
+)
+
+INGESTION_STRATEGY = os.getenv("INGESTION_STRATEGY", "auto")
+PHASED_INGESTION_ENABLED = os.getenv("PHASED_INGESTION_ENABLED", "true").strip().lower() == "true"
+INGESTION_PHASE_TTL_SECONDS = int(os.getenv("INGESTION_PHASE_TTL_SECONDS", "86400"))
+INGESTION_PREPROCESS_WORKERS = int(os.getenv("INGESTION_PREPROCESS_WORKERS", "3"))
+INGESTION_LOW_MEMORY_BATCH_SIZE = int(os.getenv("INGESTION_LOW_MEMORY_BATCH_SIZE", "1"))
+MAX_RAM_USAGE_PERCENT = int(os.getenv("MAX_RAM_USAGE_PERCENT", "80"))
+INGESTION_RESUMABLE_ENABLED = True
+INGESTION_CLEANUP_PREPROCESSED = os.getenv("INGESTION_CLEANUP_PREPROCESSED", "true").strip().lower() == "true"
+INGESTION_PREPROCESS_RETRY_FAILED = os.getenv("INGESTION_PREPROCESS_RETRY_FAILED", "true").strip().lower() == "true"
+
+# Default cache TTL for application-level caching (seconds).
+CACHE_TTL = 3600
+
+# Auto-scan scheduler settings (for periodic ingestion).
+AUTO_SCAN_INTERVAL = 300  # Seconds between scans (default: 5 minutes)
+AUTO_SCAN_INITIAL = True  # Whether to run initial scan on startup
+AUTO_SCAN_INITIAL_WAIT = 30  # Seconds to wait before initial scan
+AUTO_SCAN_MAX_FILES = 0  # Max files per scan (0 = unlimited)
+
+# ===== Swarm RAG (experimental multi-agent pipeline) =====
+SWARM_ENABLED = os.getenv("SWARM_ENABLED", "false").strip().lower() == "true"
+
+# ===== Neo4j Graph Store =====
+NEO4J_ENABLED = os.getenv("NEO4J_ENABLED", "false").strip().lower() == "true"
+NEO4J_URI = "bolt://neo4j:7687"
+NEO4J_USER = "neo4j"
+NEO4J_PASSWORD = ""
+
+# ===== API Configuration =====
+API_MODE = "openai"  # "openai" or "ollama"
+RAG_AUTOSTART = os.getenv("RAG_AUTOSTART", "false").strip().lower() == "true"
+API_PORT = 8001  # Port for API server
+SOCKET_PORT = 5555  # Port for RAG socket server
+OPENAI_API_BASE = f"http://{os.getenv('LMSTUDIO_HOST', 'host.containers.internal')}:{os.getenv('HOST_LMSTUDIO_HTTP_PORT', '1234')}/v1"
+OPENAI_API_KEY = "lm-studio"
+
+# ===== Provider (LM Studio) =====
+PROVIDER = "lmstudio"
+LMSTUDIO_HOST = "host.containers.internal"
+LMSTUDIO_PORT = 1234
+LMSTUDIO_EXTRA_HOSTS = []
+LMSTUDIO_CHAT_MODEL = os.getenv("LMSTUDIO_CHAT_MODEL", "")
+LMSTUDIO_EMBED_MODEL = os.getenv("LMSTUDIO_EMBED_MODEL", "")
+LMSTUDIO_REQUIRE_SERVER = False
+LMSTUDIO_KEEPALIVE_CHAT = 60
+LMSTUDIO_KEEPALIVE_EMBED = 30
+LMSTUDIO_KEEPALIVE_RERANK = 30
+LMSTUDIO_API_ROOTS = []
+
+# ===== Provider (Ollama) =====
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "localhost")
+OLLAMA_PORT = int(os.getenv("OLLAMA_PORT", "11434"))
+OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "llama3.2")
+OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+OLLAMA_REQUIRE_SERVER = os.getenv("OLLAMA_REQUIRE_SERVER", "false").lower() in ("true", "1")
+OLLAMA_REQUEST_TIMEOUT = int(os.getenv("OLLAMA_REQUEST_TIMEOUT", "120"))
+OLLAMA_AUTO_PROVISION = os.getenv("OLLAMA_AUTO_PROVISION", "false").lower() in ("true", "1")
+
+# ===== Embeddings =====
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", LMSTUDIO_EMBED_MODEL).strip()
+EMBEDDING_MODEL_QUERY = os.getenv("EMBEDDING_MODEL_QUERY", "").strip()
+EMBEDDING_MODEL_INGEST = os.getenv("EMBEDDING_MODEL_INGEST", "").strip()
+
+# ===== RAG Configuration =====
+ENABLE_RAG_GATING = True
+MIN_RELEVANCE_SCORE = 0.5
+ENABLE_RERANKER = False
+
+# RAG Generation Parameters
+RAG_DEFAULT_TEMPERATURE = 0.2
+RAG_DEFAULT_MAX_TOKENS = 2048
+RAG_DEFAULT_TOP_P = 0.9
+RAG_DEFAULT_FREQUENCY_PENALTY = 0.0
+RAG_DEFAULT_PRESENCE_PENALTY = 0.0
+
+# RAG Retrieval Parameters
+RAG_DEFAULT_TOP_K = 10  # Number of chunks to retrieve (reduced from 40 for small-model grounding)
+
+# RAG Profile System
+RAG_PROFILE = "auto"
+RAG_PERFORMANCE_PROFILE = "performance"
+RESOURCE_MODE = "performance"
+
+# RAG Performance Optimizations
+RAG_EMBED_BATCH_SIZE = int(os.getenv("RAG_EMBED_BATCH_SIZE", "4"))  # Reduced for saver mode
+RAG_EMBED_LOG_EVERY_N_CHUNKS = 20
+RAG_PARALLEL_WORKERS = int(os.getenv("RAG_PARALLEL_WORKERS", "1"))  # Reduced for saver mode
+RAG_PIPELINE_WORKERS = int(os.getenv("RAG_PIPELINE_WORKERS", "1"))  # Reduced for saver mode
+
+# Adaptive worker scaling (adjusts thread count based on live RAM/CPU)
+RAG_ADAPTIVE_WORKERS = os.getenv("RAG_ADAPTIVE_WORKERS", "true").lower() not in ("false", "0", "no")
+RAG_ADAPTIVE_BATCH_SIZE = int(os.getenv("RAG_ADAPTIVE_BATCH_SIZE", "10"))
+RAG_ADAPTIVE_RAM_HIGH = float(os.getenv("RAG_ADAPTIVE_RAM_HIGH", "75"))   # % RAM to trigger scale-down
+RAG_ADAPTIVE_RAM_LOW = float(os.getenv("RAG_ADAPTIVE_RAM_LOW", "60"))    # % RAM to allow scale-up
+RAG_ADAPTIVE_CPU_HIGH = float(os.getenv("RAG_ADAPTIVE_CPU_HIGH", "2.5")) # load/cpu to trigger scale-down
+RAG_ADAPTIVE_CPU_LOW = float(os.getenv("RAG_ADAPTIVE_CPU_LOW", "1.5"))   # load/cpu to allow scale-up
+
+# RAG Document Splitting Optimizations
+RAG_SPLIT_BATCH_SIZE = 128  # Batch size for document splitting
+RAG_SPLIT_LOG_EVERY_SECONDS = 15  # Log splitting progress every N seconds
+RAG_MAX_DOCS_PER_FILE = 200000  # Maximum documents per file (prevents pathological loaders)
+
+# RAG Caching
+RAG_EMBED_CACHE_ENABLED = True
+RAG_EMBED_CACHE_TTL = 7200
+RAG_EMBED_CACHE_PREFIX = "embed:"
+RAG_EMBED_CACHE_DB = 0
+RAG_PDF_CACHE_ENABLED = True
+RAG_PDF_CACHE_TTL = 2592000
+
+# ===== Memory System =====
+MEMORY_TTL = 172800  # 48 hours
+MEMORY_WINDOW_SIZE = 10
+CHECKPOINT_NS = "memory"
+COMPRESSION_MODEL_ENDPOINT = f"http://{os.getenv('LMSTUDIO_HOST', 'host.containers.internal')}:{os.getenv('HOST_LMSTUDIO_HTTP_PORT', '1234')}/v1/chat/completions"
+COMPRESSION_MODEL_NAME = "liquid/lfm2-1.2b"
+COMPRESSION_MAX_TOKENS = 500
+MAX_STATE_SIZE_KB = 100
+COMPRESSION_THRESHOLD = 0.8
+ARTIFACTS_BASE_DIR = "/tmp/artifacts"
+ARTIFACTS_TTL_HOURS = 48
+THREAD_SECRET = "change-this-secret-in-production-use-openssl-rand"
+
+# ===== Temporal RAG =====
+TEMPORAL_RAG_ENABLED = True
+TEMPORAL_TENANT_TTL = 86400  # 24 hours
+TEMPORAL_FILE_MAX_SIZE_MB = 50
+TEMPORAL_PROMOTION_THRESHOLD = 3
+TEMPORAL_PARETO_MIN_QUERIES = 5
+TEMPORAL_PARETO_TOP_PERCENT = 20
+TEMPORAL_CLEANUP_INTERVAL = 3600
+
+# ===== Web Search (SearXNG) =====
+ENABLE_RAG_WEB_SEARCH = False
+RAG_WEB_SEARCH_ENGINE = "searxng"
+SEARXNG_QUERY_URL = "http://127.0.0.1:19105/search?q=<query>"
+SEARXNG_URL = "http://127.0.0.1:19105"
+ENABLE_WEB_FALLBACK = False
+SEARXNG_TIMEOUT = 10.0
+SEARXNG_MAX_RESULTS = 5
+SEARXNG_LANGUAGE = "es"
+
+# ===== Processing Tools =====
+ENABLE_OFFICE_CONVERSION = True
+ENABLE_EXTRACTOR_EXTRACTION = True
+ENABLE_OCR = True
+ENABLE_GPU_ACCELERATION = False
+TOOL_OFFICE_URL = "http://host.containers.internal:9106"
+TOOL_FILEEXTRACTOR_URL = "http://host.containers.internal:9101"
+TOOL_OCR_URL = "http://host.containers.internal:9106"
+TOOL_GPU_URL = "http://host.containers.internal:9104"
+TOOL_REQUEST_TIMEOUT = 120
+TOOL_OFFICE_TIMEOUT = 60
+TOOL_EXTRACTOR_TIMEOUT = 180
+TOOL_OCR_TIMEOUT = 120
+TOOL_GPU_TIMEOUT = 60
+TOOL_IDLE_TIMEOUT_OFFICE = 600
+TOOL_IDLE_TIMEOUT_EXTRACTOR = 600
+TOOL_IDLE_TIMEOUT_OCR = 600
+TOOL_IDLE_TIMEOUT_GPU = 600
+TOOL_CONNECT_RETRIES = 10
+TOOL_CONNECT_RETRY_DELAY = 0.5
+OCR_DEFAULT_LANGUAGE = "eng"
+OCR_DEFAULT_PSM = 3
+ARCHIVE_MAX_SIZE_MB = 500
+ARCHIVE_MAX_FILES = 10000
+OFFICE_DEFAULT_OUTPUT_FORMAT = "txt"
+PREPROCESSING_WORK_DIR = "/tmp/rag-preprocessing"
+EXTERNAL_VOLUMES = []
+
+# ===== Weaviate Vector Store =====
+VECTOR_BACKEND = "weaviate"
+WEAVIATE_URL = "http://localhost:8080"
+WEAVIATE_API_KEY = ""
+WEAVIATE_CLASS = os.getenv("WEAVIATE_CLASS", "RAGDocument")
+WEAVIATE_TIMEOUT = 30
+WEAVIATE_GRPC_PORT = 50051
+WEAVIATE_CONNECT_RETRIES = 5
+WEAVIATE_CONNECT_BACKOFF = 2.0
+WEAVIATE_MULTI_TENANCY = True
+WEAVIATE_DEFAULT_TENANT = "tenant-default"
+WEAVIATE_SKIP_INIT_CHECKS = False
+
+# Weaviate HNSW Index Configuration (Memory Optimization)
+# Lower values reduce memory usage at the cost of slight accuracy/speed trade-offs
+WEAVIATE_HNSW_EF_CONSTRUCTION = int(os.getenv("WEAVIATE_HNSW_EF_CONSTRUCTION", "128"))
+WEAVIATE_HNSW_MAX_CONNECTIONS = int(os.getenv("WEAVIATE_HNSW_MAX_CONNECTIONS", "32"))
+WEAVIATE_HNSW_DISTANCE_METRIC = os.getenv("WEAVIATE_HNSW_DISTANCE_METRIC", "cosine")
+
+# ===== Coverage Tracking Configuration =====
+# Enable dynamic code coverage tracking during ingestion
+INGESTION_COVERAGE_ENABLED = os.getenv("INGESTION_COVERAGE_ENABLED", "false").strip().lower() == "true"
+
+# Source directories to track coverage for (comma-separated)
+INGESTION_COVERAGE_SOURCE_DIRS = os.getenv("INGESTION_COVERAGE_SOURCE_DIRS", "src").split(",")
+
+# Output directory for coverage reports
+INGESTION_COVERAGE_OUTPUT_DIR = os.getenv("INGESTION_COVERAGE_OUTPUT_DIR", "tools/debug/coverage/coverage_reports")
+
+# Enable branch coverage (more detailed but slower)
+INGESTION_COVERAGE_BRANCH = os.getenv("INGESTION_COVERAGE_BRANCH", "true").strip().lower() == "true"
+
+# ===== Observability and Monitoring =====
+# Disable progress bars in container mode to reduce log noise
+DISABLE_PROGRESS_BARS = os.getenv("DISABLE_PROGRESS_BARS", "false").strip().lower() == "true"
+
+# Heartbeat tracking for container health monitoring
+HEARTBEAT_ENABLED = os.getenv("HEARTBEAT_ENABLED", "true").strip().lower() == "true"
+HEARTBEAT_INTERVAL = int(os.getenv("HEARTBEAT_INTERVAL", "30"))  # seconds
+HEARTBEAT_KEY_PREFIX = "heartbeat:"
+
+# Metrics collection
+ENABLE_METRICS = os.getenv("ENABLE_METRICS", "true").strip().lower() == "true"
+METRICS_PREFIX = "rag:metrics:"
+
+# Logging configuration for containers
+CONTAINER_LOG_LEVEL = os.getenv("CONTAINER_LOG_LEVEL", "INFO")
+JSON_LOGGING = os.getenv("JSON_LOGGING", "false").strip().lower() == "true"
+
+# If provided (via user settings JSON), this list REPLACES _DEFAULT_EXCLUDED_FILES.
+# GUI can manage this list to fully control fast-prune directory basenames.
+DOCS_EXCLUDE_DIRS_BUILTINS_OVERRIDE = None
+
+# Default excluded basenames for discovery (fast-prune + common junk folders).
+_DEFAULT_EXCLUDED_FILES = {
+    # VCS / editor / tooling
+    ".git",
+    ".hg",
+    ".svn",
+    ".idea",
+    ".vscode",
+    ".vs",
+
+    # Python / type-checker / test caches
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".tox",
+    ".nox",
+    ".hypothesis",
+    ".ipynb_checkpoints",
+
+    # Virtual environments / package dirs
+    "venv",
+    "env",
+    "__pypackages__",
+    "site-packages",
+
+    # Node / web build artifacts
+    "node_modules",
+    ".next",
+    ".nuxt",
+    ".svelte-kit",
+    ".parcel-cache",
+
+    # Generic build outputs
+    "build",
+    "dist",
+    "target",
+    "out",
+    "coverage",
+
+    # Misc common caches
+    ".cache",
+    ".gradle",
+    ".terraform",
+
+    # Metadata/bundles (may be files or directories)
+    ".DS_Store",
+    "*.egg-info",
+    ".eggs",
+    ".coverage",
+
+    # Compressed archives
+    "__MACOSX",
+    "*.zip",
+    "*.tar",
+    "*.tar.gz",
+    "*.rar",
+    "*.7z",
+    "*.gz",
+    "*.tar.xz",
+
+    # Office temporary files
+    "~$*",       # Word/Excel temporary files (e.g., ~$document.docx)
+    "*~",        # Backup/temporary files (e.g., document.docx~) - CHANGED from ".*~" to "*~"
+    ".~*",       # PowerPoint temporary files (e.g., .~presentation.pptx)
+    "*.tmp",     # General temporary files
+    "*.temp",    # General temporary files
+    "*.bak",     # Backup files
+    "*.backup",  # Backup files
+    "Thumbs.db",  # Windows thumbnail cache
+    "desktop.ini"  # Windows desktop configuration
+}
+
+# Keys that can be persisted/overridden via the user settings JSON file.
+_USER_SETTING_FIELDS = (
+    "DOCS_PATHS",
+    "DOCS_ENABLED_PATHS",
+    "DUPLICATES_DOC_EXCEPTIONS",
+    "DOCS_EXCLUDE_FILE",
+    "DOCS_EXCLUDE_DIRS",
+    "DOCS_EXCLUDE_GLOBS",
+    "DOCS_EXCLUDE_DIRS_BUILTINS_OVERRIDE",
+    "DOCS_FILE_EXTS",
+    "VECTOR_STORES",
+    "CACHES",
+    "GRAPH_STORES",
+    "PROVIDERS",
+    "INSTALLED_APPS",
+    "AUTOLOAD_APP_ENTRYPOINTS",
+    "CHUNK_SIZE",
+    "CHUNK_OVERLAP",
+    "EMBEDDING_MAX_TOKENS",
+    "RAG_DEFAULT_TOP_K",
+    "RAG_DEFAULT_TEMPERATURE",
+    "RAG_DEFAULT_MAX_TOKENS",
+    "CHATMEMORY_TTL_DAYS",
+    "CHATMEMORY_VECTORIZER",
+    "SNAPSHOT_TTL_DAYS",
+    "SNAPSHOT_ENABLED",
+    "SNAPSHOT_INTERVAL_HOURS",
+    "CLEANUP_ENABLED",
+    "CLEANUP_INTERVAL_HOURS",
+    "TEMPORAL_CLEANUP_ENABLED",
+    "TEMPORAL_CLEANUP_INTERVAL_HOURS",
+    "WEAVIATE_HNSW_EF_CONSTRUCTION",
+    "WEAVIATE_HNSW_MAX_CONNECTIONS",
+    "WEAVIATE_HNSW_DISTANCE_METRIC",
+)

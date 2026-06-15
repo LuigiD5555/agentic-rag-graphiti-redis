@@ -1,0 +1,22 @@
+{
+  "name": "evidence_merger",
+  "version": "1.0.0",
+  "capabilities": [
+    "evidence_fusion",
+    "context_preparation"
+  ],
+  "inputs": [
+    "retrieval",
+    "math_context",
+    "code_context",
+    "version_conflicts"
+  ],
+  "outputs": [
+    "evidence_summary"
+  ],
+  "dependencies": [
+    "context_compressor"
+  ],
+  "level": "core_plugin",
+  "enabled": true
+}

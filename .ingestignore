@@ -1,0 +1,88 @@
+# Patterns, relative paths, or absolute paths to exclude from ingestion.
+#
+# Examples:
+#   node_modules/
+#   **/__pycache__/**
+#   data/private/**
+#   /absolute/path/to/secrets.txt
+
+**/.claude/**
+**/pycache/**
+/mnt/Documents/Documents/Credisol
+/mnt/Documents/Documents/Processing
+/mnt/Documents/Documents/Plantillas personalizadas de Office
+/mnt/Documents/Documents/Visual Studio 2017
+/mnt/Documents/Documents/Visual Studio 2022
+/mnt/Documents/Documents/Zoom
+/mnt/Documents/Documents/Personales
+/mnt/Documents/Documents/Mis Mapas
+/mnt/Documents/Documents/Mis Formas
+/mnt/Documents/Documents/Bluetooth
+/mnt/Documents/Documents/Archivos de Outlook
+/mnt/Documents/Documents/Blocs de notas de OneNote
+/mnt/Documents/Documents/Documents
+/mnt/Documents/Documents/prueba
+/mnt/Documents/Documents/PycharmProjects
+/mnt/Documents/Documents/SQL Server Management Studio
+/mnt/Documents/Documents/System Volume Information
+/mnt/Documents/Documents/My Tableau Repository
+/mnt/Documents/Documents/My Maps
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/Certificates/Certificates_Downloader/donwloaded_files/
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/Racek/CLAVES/
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/Racek/Por Verificar
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RacekAPP_Hilda/Development v.9.1.0/media
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RacekAPP_Hilda/Development v.9.1.1/media
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RacekAPP_Hilda/Development/media
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RacekAPP_Hilda/Application/media
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RacekAPP_Hilda/Dev_Refactored/media
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RacekAPP_Hilda/docker-django-nginx-gunicorn-HILDA/Hilda_App/media
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RacekAPP_Hilda/Production/media
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RacekAPP_Hilda/synology version app
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RacekAPP_Hilda/Temporal Branches
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RacekAPP_Hilda/temporal
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RacekAPP_Hilda/codigos-postales-de-mexico.xlsx
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RacekAPP_Hilda/LISTADO EMPRESAS.xlsx
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RacekAPP_Hilda/DC-3 Version LIBREOFFICE.pdf
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RacekAPP_Hilda/DC-3 Version WORD.pdf
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RacekAPP_Hilda/Proyecto_Racek_APP_HILDA.pdf
+/mnt/Documents/Documents/Programacion/Proyectos_Programacion/Racek/files
+/mnt/Documents/Documents/Programacion/temp files
+/mnt/Documents/Documents/MEGA-CLAVEDERECUPERACION (ingjlllopezp).txt
+/mnt/Documents/Documents/MEGA-CLAVEDERECUPERACION_Original.txt
+/mnt/Documents/Documents/MEGA-CLAVEDERECUPERACION (yahoo).txt
+/mnt/Documents/Documents/Limpiezas Estadio.xlsx
+/mnt/Documents/Documents/Precios Juan.xlsx
+/mnt/Documents/Documents/Tía Yoya.xlsx
+/mnt/Documents/Documents/Traducción César.docx
+/mnt/Documents/Documents/Una parte de lo que gano es mío.docx
+/mnt/Documents/Documents/MERCANCIA EN CONSIGNACION 04_07_2024.xlsx
+/mnt/Documents/Documents/MERCANCIA EN CONSIGNACION 04_07_2024(2).xlsx
+/mnt/Documents/Documents/MERCANCIA EN CONSIGNACION modif.xlsm
+/mnt/Documents/Documents/MERCANCIA EN CONSIGNACION modif.xlsx
+/mnt/Documents/Documents/pruebas_database.csv
+/mnt/Documents/Documents/Machote.xlsx
+/mnt/Documents/Documents/Contraseñas de Chrome.csv
+/mnt/Documents/Documents/Contraseñas de Microsoft Edge.csv
+/mnt/Documents/Documents/CONTRATO ARR.pdf
+/mnt/Documents/Documents/Copia de Formato de reclamo DHL Express V2.xls
+/mnt/Documents/Documents/Cuenta.xlsx
+/mnt/Documents/Documents/Extras.xlsm
+/mnt/Documents/Documents/export_items.csv
+/mnt/Documents/Documents/JUCHITAN A SALINAS CRUZ   CUADRO TARIFAS POWER POINT AGOSTO.pptx
+/mnt/Documents/Documents/655 Carta finiquito.pdf
+/mnt/Documents/Documents/ReclamoDHL.pdf
+/mnt/Documents/Documents/purificador-osmosis-manual.pdf
+/mnt/Documents/Documents/Presentation1.pptx
+/mnt/Documents/Documents/gImageReader_crash-save.html
+/mnt/Documents/Documents/fce58914-01cb-20339.pdf
+/mnt/Documents/Documents/AutoCAD.pdf
+/mnt/Documents/Documents/f2553fed-2f70-4ac9-b5d0-62941382f825.pdf
+/mnt/Documents/Documents/Acuse Aurora Prieto Castellnos.pdf
+/mnt/Documents/Documents/DHL.pdf
+/mnt/Documents/Documents/Cline/
+/mnt/Documents/Documents/Programacion/Aprendiendo_Programacion/01_Python/01-03_Machine_Learning/01-01-01_Apuntes_Data_Science_Udemy/Redes_Neuronales_Convolucionales/Convolutional_Neural_Networks/dataset/training_set
+/mnt/Documents/Documents/Vaults/Luigi's Database/.obsidian/
+/mnt/Documents/Documents/Vaults/Luigi's Database/.smtcmp_json_db/
+/mnt/Documents/Documents/Vaults/Luigi's Database/.space/
+/mnt/Documents/Documents/Vaults/Luigi's Database/.sync/
+/mnt/Documents/Documents/Vaults/Luigi's Database/.trash/

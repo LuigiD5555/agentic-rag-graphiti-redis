@@ -1,0 +1,17 @@
+{
+  "name": "retrieval",
+  "version": "1.0.0",
+  "capabilities": [
+    "semantic_search",
+    "hybrid_search"
+  ],
+  "inputs": [
+    "user_query"
+  ],
+  "outputs": [
+    "retrieval.weaviate_hits"
+  ],
+  "dependencies": [],
+  "level": "core_plugin",
+  "enabled": true
+}

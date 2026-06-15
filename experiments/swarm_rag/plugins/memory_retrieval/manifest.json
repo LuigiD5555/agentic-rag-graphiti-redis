@@ -1,0 +1,18 @@
+{
+  "name": "memory_retrieval",
+  "version": "1.0.0",
+  "capabilities": [
+    "memory_search",
+    "solution_recall"
+  ],
+  "inputs": [
+    "user_query",
+    "session_id"
+  ],
+  "outputs": [
+    "retrieval.memory_hits"
+  ],
+  "dependencies": [],
+  "level": "specialist",
+  "enabled": true
+}

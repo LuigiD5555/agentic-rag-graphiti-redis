@@ -1,0 +1,20 @@
+{
+  "name": "graph_retrieval",
+  "version": "1.0.0",
+  "capabilities": [
+    "graph_search",
+    "entity_lookup",
+    "version_detection"
+  ],
+  "inputs": [
+    "user_query",
+    "intents"
+  ],
+  "outputs": [
+    "retrieval.neo4j_hits",
+    "version_conflicts"
+  ],
+  "dependencies": [],
+  "level": "specialist",
+  "enabled": true
+}

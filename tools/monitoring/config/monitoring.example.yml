@@ -1,0 +1,165 @@
+# Monitoring Configuration Example
+# Copy to monitoring.yml and customize
+
+# Global settings
+monitoring:
+  interval: 300  # Check interval in seconds (5 minutes)
+  log_level: INFO
+
+  # Enable/disable features
+  features:
+    log_analysis: true
+    volume_monitoring: true
+    health_checks: true
+    performance_metrics: false  # Future feature
+    alerting: false             # Future feature
+
+# Log analysis settings
+log_analysis:
+  # Time window for analysis
+  default_window: "1 hour ago"
+
+  # Tools to monitor (systemd units)
+  tools:
+    - office
+    - archive
+    - ocr
+
+  # Error patterns to detect
+  error_patterns:
+    - pattern: "(?i)error"
+      severity: medium
+      category: "Generic Error"
+
+    - pattern: "(?i)exception"
+      severity: high
+      category: "Exception"
+
+    - pattern: "HTTP/1\\.1\" 5\\d\\d"
+      severity: high
+      category: "HTTP 5xx Error"
+
+    - pattern: "(?i)out of memory"
+      severity: critical
+      category: "Out of Memory"
+
+  # Anomaly thresholds
+  anomaly_detection:
+    error_count_threshold: 100
+    http_error_rate_threshold: 0.1  # 10%
+
+  # Report settings
+  reports:
+    retention_days: 30
+    format: json
+    extractor: false
+
+# Health checks
+health_checks:
+  # Services to monitor
+  services:
+    weaviate:
+      enabled: true
+      timeout: 10
+      critical: true
+
+    neo4j:
+      enabled: true
+      timeout: 10
+      critical: true
+
+    lm_studio:
+      enabled: false  # Optional service
+      timeout: 5
+      critical: false
+
+  # Alert thresholds
+  thresholds:
+    weaviate:
+      min_classes: 1
+
+    neo4j:
+      max_node_count: 1000000
+
+# Volume monitoring
+volume_monitoring:
+  # Volumes to watch
+  volumes:
+    - name: "Libros"
+      primary_path: "/mnt/resources/Libros"
+      fallback_path: "/app/data/libros-fallback"
+      check_marker: ".volume-available"
+
+  # Reconnection settings
+  reconnection:
+    check_interval: 300  # 5 minutes
+    max_retries: 3
+    retry_delay: 60  # seconds
+
+# Dashboard (optional)
+dashboard:
+  enabled: false
+  port: 8888
+  host: "0.0.0.0"
+
+  # Authentication (future)
+  auth:
+    enabled: false
+    username: "admin"
+    password_hash: ""
+
+# Alerting (future feature)
+alerting:
+  enabled: false
+
+  channels:
+    - type: email
+      enabled: false
+      smtp_host: "smtp.example.com"
+      smtp_port: 587
+      from_email: "monitoring@example.com"
+      to_emails:
+        - "admin@example.com"
+
+    - type: webhook
+      enabled: false
+      url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+
+  # Alert rules
+  rules:
+    - name: "High Error Rate"
+      condition: "error_rate > 0.1"
+      severity: warning
+      channels: [email, webhook]
+
+    - name: "Service Down"
+      condition: "service_health == unhealthy"
+      severity: critical
+      channels: [email, webhook]
+
+# Performance metrics (future feature)
+performance:
+  enabled: false
+
+  metrics:
+    - cpu_usage
+    - memory_usage
+    - disk_io
+    - network_io
+
+  collection_interval: 60  # seconds
+  retention_days: 7
+
+# Data retention
+retention:
+  logs:
+    days: 30
+    max_size_mb: 1024
+
+  reports:
+    days: 90
+    max_count: 1000
+
+  metrics:
+    days: 7
+    max_size_mb: 512

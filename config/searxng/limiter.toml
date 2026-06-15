@@ -1,0 +1,18 @@
+# SearXNG limiter configuration
+# Configuration for private local instance
+
+[botdetection.ip_lists]
+# Allow all local/private network IPs
+pass_ip = [
+    '127.0.0.0/8',      # Localhost
+    '10.0.0.0/8',       # Private network
+    '172.16.0.0/12',    # Private network
+    '192.168.0.0/16',   # Private network
+    '::1',              # IPv6 localhost
+    'fc00::/7'          # IPv6 private
+]
+
+[botdetection.ip_limit]
+# Don't filter link-local addresses for unlimited access in local network
+filter_link_local = false
+link_token = true

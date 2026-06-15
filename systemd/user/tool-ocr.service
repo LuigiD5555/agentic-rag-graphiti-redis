@@ -1,0 +1,50 @@
+[Unit]
+Description=RAG Tool OCR (container + proxy)
+Documentation=https://github.com/LuigiD5555/agentic-rag-graphiti
+After=network-online.target
+Wants=network-online.target
+OnFailure=tool-alert@%n.service
+
+[Service]
+Type=simple
+
+# Guard: only start tools when RAG API is initialized
+ExecStartPre=/usr/bin/bash -c 'curl -fsS http://127.0.0.1:8000/health | grep -q "\"rag_initialized\": true"'
+
+# 1) Clean up any previous container
+ExecStartPre=/usr/bin/podman rm -f rag-tool-ocr
+
+# 2) Start the container (API on port 8000 inside, mapped to 19103 on host)
+ExecStartPre=/usr/bin/podman run -d --name rag-tool-ocr \
+  --pull=never \
+  --memory=1g \
+  --cpus=0.5 \
+  -p 127.0.0.1:19103:8000 \
+  --security-opt=no-new-privileges \
+  --cap-drop=all \
+  --read-only \
+  --tmpfs /tmp \
+  -v %h/.cache/rag-tools/ocr:/work:rw \
+  -v /mnt:/mnt:ro \
+  localhost/rag-tool-ocr:latest
+
+# 3) Wait for container to be ready (healthcheck)
+ExecStartPre=/usr/bin/bash -c 'for i in {1..60}; do curl -fsS http://127.0.0.1:19103/healthz && exit 0; sleep 0.2; done; exit 1'
+
+# 4) Proxy: socket (inherited FD) -> internal port
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd 127.0.0.1:19103
+
+# Stop the container when service stops
+ExecStop=/usr/bin/podman stop -t 10 rag-tool-ocr
+ExecStopPost=/usr/bin/podman rm -f rag-tool-ocr
+
+Restart=on-failure
+RestartSec=1
+TimeoutStartSec=90
+TimeoutStopSec=30
+
+# Auto-shutdown after idle timeout (default 10 minutes)
+# Service stops automatically, socket activation restarts it on next request
+RuntimeMaxSec=600
+
+[Install]

@@ -1,0 +1,19 @@
+{
+  "name": "mcp_tool_agent",
+  "version": "1.0.0",
+  "capabilities": [
+    "mcp_orchestration",
+    "tool_dispatch"
+  ],
+  "inputs": [
+    "tool_plan"
+  ],
+  "outputs": [
+    "tool_results"
+  ],
+  "dependencies": [
+    "code_understanding"
+  ],
+  "level": "specialist",
+  "enabled": true
+}

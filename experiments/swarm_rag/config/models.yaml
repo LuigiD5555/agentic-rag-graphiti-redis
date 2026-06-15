@@ -1,0 +1,148 @@
+# Model configuration for SWARM RAG
+# F1: regex/heuristic stubs — replace model_id with HF path in F2
+# All HF models load once at startup via transformers.pipeline()
+
+perception:
+  intent_classifier:
+    model_id: "sentence-transformers/all-MiniLM-L6-v2"  # F2: zero-shot classification
+    type: encoder
+    phase: F2
+    ram_mb: 90
+    f1_stub: regex_rules
+
+  ner:
+    model_id: "dslim/bert-base-NER"
+    type: encoder
+    phase: F2
+    ram_mb: 420
+    f1_stub: regex_patterns
+
+  domain_classifier:
+    model_id: "sentence-transformers/all-MiniLM-L6-v2"  # F2: zero-shot multi-label
+    type: encoder
+    phase: F2
+    ram_mb: 90
+    f1_stub: regex_rules
+
+  math_detector:
+    model_id: null   # regex sufficient — no HF model needed
+    type: regex
+    phase: F1
+    f1_stub: regex_patterns
+
+  code_detector:
+    model_id: null   # regex sufficient
+    type: regex
+    phase: F1
+    f1_stub: regex_patterns
+
+  language_detector:
+    model_id: null   # langdetect (already installed)
+    type: library
+    phase: F1
+    f1_stub: langdetect
+
+  complexity_estimator:
+    model_id: "distilbert-base-uncased"  # F2: fine-tuned
+    type: encoder
+    phase: F2
+    ram_mb: 250
+    f1_stub: heuristic_word_count
+
+  keyword_extractor:
+    model_id: null   # KeyBERT in F2 (uses MiniLM backend)
+    type: library
+    phase: F2
+    f1_stub: stopword_removal
+
+  tone_classifier:
+    model_id: "sentence-transformers/all-MiniLM-L6-v2"  # F2: zero-shot
+    type: encoder
+    phase: F2
+    ram_mb: 90
+    f1_stub: regex_rules
+
+specialists:
+  query_rewriter:
+    model_id: "google/flan-t5-small"
+    type: seq2seq
+    phase: F2
+    ram_mb: 300
+
+  fact_extractor:
+    model_id: "google/flan-t5-base"
+    type: seq2seq
+    phase: F2
+    ram_mb: 990
+
+  evidence_ranker:
+    model_id: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    type: cross_encoder
+    phase: F2
+    ram_mb: 90
+
+  subquestion_generator:
+    model_id: "google/flan-t5-base"
+    type: seq2seq
+    phase: F3
+    ram_mb: 990
+
+  math_specialist:
+    model_id: "google/flan-t5-base"   # math reasoning dataset fine-tune in F3
+    type: seq2seq
+    phase: F3
+    ram_mb: 990
+
+  code_specialist:
+    model_id: "Salesforce/codet5-small"
+    type: seq2seq
+    phase: F3
+    ram_mb: 120
+
+  hypothesis_generator:
+    model_id: "google/flan-t5-base"
+    type: seq2seq
+    phase: F3
+    ram_mb: 990
+
+reasoning:
+  logic_checker:
+    model_id: "cross-encoder/nli-deberta-v3-small"  # provisional, no fine-tuning needed
+    type: cross_encoder
+    phase: F4
+    ram_mb: 220
+
+  conflict_resolver:
+    model_id: "cross-encoder/nli-deberta-v3-base"
+    type: cross_encoder
+    phase: F4
+    ram_mb: 740
+
+  confidence_estimator:
+    model_id: "sentence-transformers/all-MiniLM-L6-v2"  # cosine similarity
+    type: encoder
+    phase: F4
+    ram_mb: 90
+
+generator:
+  slm_local:
+    provider: lmstudio          # or 'ollama'
+    recommended_models:
+      - "Phi-3-mini"
+      - "Qwen2.5-3B"            # better multilingual (ES)
+      - "Mistral-7B"            # if GPU >= 8GB VRAM
+
+  llm_api:
+    provider: anthropic         # escalation target
+    model: "claude-haiku-4-5-20251001"
+    fallback_to: "deepseek"    # cheaper alternative
+
+embeddings:
+  multilingual:
+    model_id: "intfloat/multilingual-e5-small"
+    ram_mb: 120
+    dims: 384
+  english:
+    model_id: "BAAI/bge-small-en-v1.5"
+    ram_mb: 130
+    dims: 384

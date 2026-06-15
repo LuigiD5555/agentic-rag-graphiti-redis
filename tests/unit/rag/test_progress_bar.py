@@ -1,0 +1,178 @@
+import io
+import sys
+import time
+
+from src.workflows.query.audit import ProgressBar
+from src.workflows.query.audit import EmbeddingProgress
+from pytest_readable import readable
+
+
+
+def _last_line(buffer: io.StringIO) -> str:
+    return buffer.getvalue().split("\r")[-1]
+
+
+class _Tee:
+    """Simple stdout/collector tee to show live output and keep assertions."""
+
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data):
+        for stream in self.streams:
+            stream.write(data)
+
+    def flush(self):
+        for stream in self.streams:
+            flush = getattr(stream, "flush", None)
+            if flush:
+                flush()
+
+
+@readable(
+    intent="Verify progress bar updates without scrolling and finishes with newline.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the progress bar updates without scrolling and finishes with newline behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
+def test_progress_bar_updates_without_scrolling_and_finishes_with_newline():
+    buf = io.StringIO()
+    bar = ProgressBar(total=3, stream=buf, prefix="Test", rewrite=True)
+
+    bar.advance()
+    bar.advance()
+
+    before_finish = buf.getvalue()
+    # Should only use carriage returns while running (no new lines yet).
+    assert before_finish.count("\n") == 0
+    assert "(2/3)" in _last_line(buf)
+
+    bar.finish()
+
+    after_finish = buf.getvalue()
+    assert after_finish.endswith("\n")
+    assert "(3/3)" in _last_line(buf).strip()
+
+
+@readable(
+    intent="Verify progress bar track advances iterable and returns items.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the progress bar track advances iterable and returns items behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
+def test_progress_bar_track_advances_iterable_and_returns_items():
+    buf = io.StringIO()
+    bar = ProgressBar(total=3, stream=buf, rewrite=True)
+
+    items = list(bar.track([1, 2, 3]))
+
+    assert items == [1, 2, 3]
+    assert "(3/3)" in _last_line(buf).strip()
+    assert buf.getvalue().count("\n") == 1  # newline only at completion
+
+
+@readable(
+    intent="Verify progress bar clears longer previous line.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the progress bar clears longer previous line behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
+def test_progress_bar_clears_longer_previous_line():
+    buf = io.StringIO()
+    bar = ProgressBar(total=3, stream=buf, rewrite=True)
+
+    bar.update(1, message="long-message")
+    bar.update(2, message="short")
+
+    assert "long-message" not in _last_line(buf)
+    assert "(2/3)" in _last_line(buf)
+
+
+@readable(
+    intent="Verify progress bar counts zero to twenty.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the progress bar counts zero to twenty behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
+def test_progress_bar_counts_zero_to_twenty():
+    buf = io.StringIO()
+    bar = ProgressBar(total=20, stream=buf, prefix="Count", rewrite=True)
+
+    for i in range(0, 21):  # inclusive from 0 to 20
+        bar.update(i)
+
+    bar.finish()
+
+    output = buf.getvalue()
+    assert "(20/20)" in _last_line(buf)
+    assert "100.00%" in _last_line(buf)
+    assert output.count("\n") == 1  # only the final newline
+
+
+@readable(
+    intent="Runs a short demo (0..20) to show the bar in terminal; use -s to view live.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the progress bar visual demo behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
+def test_progress_bar_visual_demo(capsys):
+    """Runs a short demo (0..20) to show the bar in terminal; use -s to view live."""
+    buf = io.StringIO()
+    tee = _Tee(sys.stdout, buf)
+
+    with capsys.disabled():
+        bar = ProgressBar(total=20, stream=tee, prefix="Demo", rewrite=True)
+
+        for i in range(0, 21):
+            bar.update(i, message=f"paso {i}")
+            time.sleep(0.002)  # tiny delay to see motion if run with -s
+
+        bar.finish()
+
+    captured = buf.getvalue()
+    assert "(20/20)" in captured
+    assert "100.00%" in captured
+
+
+@readable(
+    intent="Verify embedding progress uses file progress percent.",
+    steps=[
+        "Set up the inputs and collaborators for the scenario.",
+        "Run the embedding progress uses file progress percent behavior under test.",
+        "Check the observable result and assertions.",
+    ],
+    criteria=[
+        "The assertions confirm the documented behavior.",
+    ],
+)
+def test_embedding_progress_uses_file_progress_percent():
+    progress = EmbeddingProgress(bar_length=10)
+    progress.add_total(10, source="file.pdf")
+    line = progress.advance(file_index=5, file_total=10, source="file.pdf", base_url="http://localhost/v1/objects")
+    assert "(1/10)" in line
+    assert "- 50.00% -" in line

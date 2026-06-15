@@ -1,0 +1,48 @@
+# ============================================
+# RAG Debugging Tools Container
+# ============================================
+# Lightweight container with debugging utilities for:
+# - Memory monitoring
+# - Log export and analysis
+# - Configuration diagnostics
+# - Weaviate data verification
+# - Streaming ingestion testing
+
+FROM python:3.12-slim AS base
+
+WORKDIR /debug
+
+# Install system utilities for debugging
+RUN apt-get update && apt-get install -y \
+    curl \
+    jq \
+    bc \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy all debugging scripts
+COPY scripts/ ./scripts/
+COPY entrypoint.sh /debug/entrypoint.sh
+
+# Make shell scripts executable
+RUN chmod +x scripts/*.sh /debug/entrypoint.sh
+
+# Environment variables with defaults
+ENV COMPOSE_PROJECT_NAME=rag-graphiti-agentic \
+    ENABLE_LOG_EXPORT=1 \
+    DEBOUNCE_SECONDS=3 \
+    DEFAULT_SINCE="24 hours ago" \
+    MEMORY_THRESHOLD=85
+
+# Default command: show available tools
+CMD ["sh", "-c", "echo 'Available debugging tools:' && ls -1 scripts/ && echo '\nUsage: podman exec rag-debug /debug/entrypoint.sh <mode>'"]
+
+# ============================================
+# Health check
+# ============================================
+HEALTHCHECK --interval=60s --timeout=5s --start-period=10s --retries=2 \
+    CMD ["python", "-c", "print('Debug tools ready')"]

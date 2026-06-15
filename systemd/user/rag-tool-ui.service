@@ -1,0 +1,70 @@
+[Unit]
+Description=RAG Tool Open WebUI (container)
+Documentation=https://github.com/LuigiD5555/agentic-rag-graphiti
+After=network-online.target
+Wants=network-online.target
+OnFailure=tool-alert@%n.service
+
+[Service]
+Type=simple
+
+# 1) Clean up any previous container
+ExecStartPre=/usr/bin/podman rm -f rag-tool-ui
+
+# 2) Create necessary directories
+ExecStartPre=/usr/bin/mkdir -p %h/.cache/rag-tools/webui
+ExecStartPre=/usr/bin/mkdir -p %h/.cache/rag-tools/webui-static
+
+# 3) Start the container (Open WebUI on port 5555)
+ExecStartPre=/usr/bin/podman run -d --name rag-tool-ui \
+  --pull=never \
+  --memory=1g \
+  --cpus=0.5 \
+  -p 127.0.0.1:5555:8080 \
+  --security-opt=no-new-privileges \
+  --cap-drop=all \
+  --tmpfs /tmp \
+  -v %h/.cache/rag-tools/webui:/app/backend/data:rw \
+  -v %h/.cache/rag-tools/webui-static:/app/backend/open_webui/static:rw \
+  -e HOST="0.0.0.0" \
+  -e PORT="8080" \
+  -e WEBUI_SECRET_KEY="change-this-secret-in-production" \
+  -e OPENAI_API_BASE_URL="http://127.0.0.1:8000/v1" \
+  -e OPENAI_API_KEY="not-needed" \
+  -e RAG_AGENTIC_API_BASE_URL="http://127.0.0.1:8000" \
+  -e RAG_POWER_DAEMON_URL="http://127.0.0.1:9009" \
+  -e ENABLE_OLLAMA_API="false" \
+  -e CORS_ALLOW_ORIGIN="http://127.0.0.1:5555;http://localhost:5555" \
+  -e ENABLE_RAG_WEB_SEARCH="false" \
+  -e ENABLE_IMAGE_GENERATION="false" \
+  -e RAG_PERFORMANCE_PROFILE="balanced" \
+  -e RAG_EMBEDDING_ENGINE="openai" \
+  -e RAG_OPENAI_API_BASE_URL="http://127.0.0.1:8000/v1" \
+  -e RAG_OPENAI_API_KEY="not-needed" \
+  -e SKIP_DB_MIGRATIONS="true" \
+  -e SKIP_TORCH_IMPORT="true" \
+  -e SKIP_CHANGELOG="true" \
+  -e VECTOR_DB="weaviate" \
+  -e WEAVIATE_HTTP_HOST="127.0.0.1" \
+  -e WEAVIATE_HTTP_PORT="8080" \
+  -e WEAVIATE_GRPC_PORT="50051" \
+  -e USER_AGENT="rag-tool-ui/1.0" \
+  localhost/open-webui-local:main-slim
+
+# 4) Wait for container to be ready (healthcheck with longer timeout and less frequent checks)
+ExecStartPre=/usr/bin/bash -c 'for i in {1..90}; do curl -fsS http://127.0.0.1:5555/health 2>/dev/null && exit 0; sleep 2; done; echo "Health check failed after 180 seconds"; exit 1'
+
+# 5) Keep container running
+ExecStart=/usr/bin/sleep infinity
+
+# Stop the container when service stops
+ExecStop=/usr/bin/podman stop -t 30 rag-tool-ui
+ExecStopPost=/usr/bin/podman rm -f rag-tool-ui
+
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=300
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

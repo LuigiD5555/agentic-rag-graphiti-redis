@@ -1,0 +1,26 @@
+[Unit]
+Description=RabbitMQ Ingestion Worker
+After=network.target
+Wants=rabbitmq-server.service
+PartOf=tool-document-processor.service
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+WorkingDirectory=/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RAG Project/rag-agentic-graphiti
+Environment="PYTHONPATH=/mnt/Documents/Documents/Programacion/Proyectos_Programacion/RAG Project/rag-agentic-graphiti"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
+ExecStart=/usr/bin/python3 -m src.workflows.ingestion.jobs.worker_cli start --workers 2 --concurrency 4
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tool-ingestion-worker
+
+# Resource limits
+MemoryMax=2G
+CPUQuota=200%
+
+[Install]
+WantedBy=default.target
